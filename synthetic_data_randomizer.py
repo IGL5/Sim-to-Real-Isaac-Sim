@@ -23,12 +23,15 @@ simulation_app = SimulationApp(launch_config=CONFIG)
 import carb
 import omni
 import omni.usd
-from omni.isaac.core.utils.nucleus import get_assets_root_path
-from omni.isaac.core.utils.stage import get_current_stage, open_stage
+from isaacsim.core.utils.nucleus import get_assets_root_path
+from isaacsim.core.utils.stage import get_current_stage, open_stage
+from omni.timeline import get_timeline_interface
+from pxr import UsdPhysics, PhysxSchema
 from pxr import Semantics
 import omni.replicator.core as rep
 
-from omni.isaac.core.utils.semantics import get_semantics
+from isaacsim.core.utils.semantics import get_semantics
+from pxr import UsdShade, Sdf, UsdGeom, UsdPhysics
 
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
@@ -36,6 +39,34 @@ rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
 # This is the location of the palletjacks in the simready asset library
 CAR_ASSETS = [ # SUPONEMOS QUE ENCUENTRO .USD DE COCHES
     ]
+
+def find_prims_by_material_name(stage, material_names):
+    """
+    Finds prims that have a material binding matching one of the given names.
+    Returns a dictionary matching material_name -> list of prim paths.
+    """
+    found_paths = {name: [] for name in material_names}
+    
+    for prim in stage.Traverse():
+        if not prim.IsA(UsdGeom.Mesh): # Only check meshes
+            continue
+            
+        # Check direct binding
+        binding_api = UsdShade.MaterialBindingAPI(prim)
+        if binding_api:
+            # We check the direct binding for simplicity
+            direct_binding = binding_api.GetDirectBinding()
+            material = direct_binding.GetMaterial()
+            if material:
+                mat_path = material.GetPath()
+                mat_name = mat_path.name
+                
+                # Check if this material matches any of our targets
+                for target_name in material_names:
+                    if target_name in mat_name:
+                        found_paths[target_name].append(str(prim.GetPath()))
+    
+    return found_paths
 
 def update_semantics(stage, keep_semantics=[]):
     """ Remove semantics from the stage except for keep_semantic classes"""
@@ -126,11 +157,45 @@ def main():
     open_stage(map_path)
     stage = get_current_stage()
 
-    # Run some app updates to make sure things are properly loaded
-    for i in range(100):
-        if i % 10 == 0:
-            print(f"App update {i}..")
-        simulation_app.update()
+    # Ensure a PhysicsScene exists
+    if not stage.GetPrimAtPath("/PhysicsScene"):
+        scene = UsdPhysics.Scene.Define(stage, Sdf.Path("/PhysicsScene"))
+        scene.CreateGravityDirectionAttr().Set((0, 0, -1))
+        scene.CreateGravityMagnitudeAttr().Set(9.81)
+        print("PhysicsScene added")
+
+    timeline = get_timeline_interface()
+    timeline.play()
+
+    # --- Material Assignment for Terrain ---
+    # Create simple colored materials
+    # Green for "Terrain_flat" (Grass/Valley)
+    # Note: using material_omnipbr. diffuse supports color tuples in newer versions or acts as a multiplier.
+    mat_grass = rep.create.material_omnipbr(diffuse=(0.2, 0.5, 0.2), roughness=0.8)
+    # Brown/Grey for "Terrain" (Mountain/Rocky)
+    mat_rock = rep.create.material_omnipbr(diffuse=(0.6, 0.4, 0.25), roughness=0.9)
+    
+    targets = ["Terrain", "Terrain_flat"]
+    found_paths_map = find_prims_by_material_name(stage, targets)
+            
+    # Apply Green to Flat
+    flat_paths = found_paths_map.get("Terrain_flat", [])
+    if flat_paths:
+        print(f"Found {len(flat_paths)} meshes for Terrain_flat. Applying Green.")
+        flat_group = rep.create.group(flat_paths)
+        with flat_group:
+            rep.modify.material(mat_grass)
+            
+    # Apply Rock to the rest (Terrain)
+    terrain_paths = found_paths_map.get("Terrain", [])
+    # Filter duplicates if any
+    terrain_paths = [p for p in terrain_paths if p not in flat_paths]
+    
+    if terrain_paths:
+        print(f"Found {len(terrain_paths)} meshes for Terrain. Applying Rock.")
+        terrain_group = rep.create.group(terrain_paths)
+        with terrain_group:
+            rep.modify.material(mat_rock)
 
     # rep_cars_group = add_cars()
     # rep_distractor_group = add_distractors(distractor_type=args.distractors)
@@ -138,12 +203,18 @@ def main():
     # We only need labels for the palletjack objects
     # update_semantics(stage=stage, keep_semantics=["car"])
 
+    # Run some app updates to make sure things are properly loaded
+    for i in range(100):
+        if i % 10 == 0:
+            print(f"App update {i}..")
+        simulation_app.update()
+
     # Create camera with Replicator API for gathering data
     cam = rep.create.camera(clipping_range=(0.1, 1000000))
 
     # Add a Dome Light for basic illumination
     def add_dome_light():
-        rep.create.light(light_type="Dome", intensity=1000, texture=None)
+        rep.create.light(light_type="Dome", intensity=10, texture=None)
     
     add_dome_light()
 
@@ -156,7 +227,7 @@ def main():
             "weight": 0.2, # 20% chance
             "bounds": ((-10, -10, 15), (0, 0, 25)) 
         },
-        {
+        { 
             "name": "Variable Terrain",
             "weight": 0.6, # 60% chance
             "bounds": ((10, 10, 10), (50, 50, 30))
@@ -173,17 +244,18 @@ def main():
 
     def get_ground_height(x, y):
         """
-        Cast a ray from high up (z=1000) downwards to find the ground.
+        Cast a ray from high up (z=200) downwards to find the ground.
         Returns the Z height of the hit point, or 0 if no hit.
         """
-        origin = carb.Float3(x, y, 1000.0)
+        origin = carb.Float3(x, y, 200.0)
         direction = carb.Float3(0, 0, -1.0)
-        distance = 2000.0 # Sufficient to cover the range
+        distance = 4000.0 # Sufficient to cover the range
         
         # Raycast using PhysX
         hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
         
         if hit["hit"]:
+            print(f"hit {hit['position'][2]}")
             return hit["position"][2] # Return Z component
         return 0.0 # Default if no ground found (e.g. hole or no collider)
 
@@ -235,7 +307,7 @@ def main():
     rep.randomizer.register(randomize_camera)
 
     # trigger replicator pipeline
-    with rep.trigger.on_frame(num_frames=CONFIG["num_frames"]):
+    with rep.trigger.on_frame(max_execs=CONFIG["num_frames"]):
         rep.randomizer.randomize_camera()
 
         # TODO:
