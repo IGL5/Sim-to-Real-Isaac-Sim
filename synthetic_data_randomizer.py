@@ -147,12 +147,32 @@ def run_orchestrator():
     rep.orchestrator.stop()
 
 
+from pxr import Gf
+
+def update_camera_pose(camera_prim, eye, target):
+    """
+    Manually sets the camera pose using USD APIs.
+    eye: (x, y, z) position of camera
+    target: (x, y, z) point to look at
+    """
+    eye_gf = Gf.Vec3d(*eye)
+    target_gf = Gf.Vec3d(*target)
+    up_axis = Gf.Vec3d(0, 0, 1) # Z-up
+
+    # Calculate View Matrix (World -> Camera)
+    view_matrix = Gf.Matrix4d().SetLookAt(eye_gf, target_gf, up_axis)
+    
+    # Camera Transform is Inverse of View (Camera -> World)
+    # We set this transform on the camera prim
+    xform_api = UsdGeom.Xformable(camera_prim)
+    
+    # Clear existing ops to be safe/clean or just set transform
+    xform_api.ClearXformOpOrder()
+    xform_api.AddTransformOp().Set(view_matrix.GetInverse())
+
+
 def main():
     # Open the environment in a new stage
-    # Open the environment in a new stage
-    # Load the specific map USD
-    # NOTE: Ensure this path is correct relative to where you run the script or use absolute path if needed.
-    # We use os.getcwd() to find it relative to the script location.
     map_path = os.path.join(os.getcwd(), "map", "Environment_variable.usd")
     open_stage(map_path)
     stage = get_current_stage()
@@ -162,7 +182,6 @@ def main():
         scene = UsdPhysics.Scene.Define(stage, Sdf.Path("/PhysicsScene"))
         scene.CreateGravityDirectionAttr().Set((0, 0, -1))
         scene.CreateGravityMagnitudeAttr().Set(9.81)
-        print("PhysicsScene added")
 
     timeline = get_timeline_interface()
     timeline.play()
@@ -170,7 +189,6 @@ def main():
     # --- Material Assignment for Terrain ---
     # Create simple colored materials
     # Green for "Terrain_flat" (Grass/Valley)
-    # Note: using material_omnipbr. diffuse supports color tuples in newer versions or acts as a multiplier.
     mat_grass = rep.create.material_omnipbr(diffuse=(0.2, 0.5, 0.2), roughness=0.8)
     # Brown/Grey for "Terrain" (Mountain/Rocky)
     mat_rock = rep.create.material_omnipbr(diffuse=(0.6, 0.4, 0.25), roughness=0.9)
@@ -197,21 +215,15 @@ def main():
         with terrain_group:
             rep.modify.material(mat_rock)
 
-    # rep_cars_group = add_cars()
-    # rep_distractor_group = add_distractors(distractor_type=args.distractors)
-
-    # We only need labels for the palletjack objects
-    # update_semantics(stage=stage, keep_semantics=["car"])
-
-    # Run some app updates to make sure things are properly loaded
-    for i in range(100):
-        if i % 10 == 0:
-            print(f"App update {i}..")
+    # Run physics warmup
+    for i in range(60):
         simulation_app.update()
 
-    # Create camera with Replicator API for gathering data
-    cam = rep.create.camera(clipping_range=(0.1, 1000000))
-
+    # --- Manual Camera Setup ---
+    # We create a specific USD camera so we can control it easily
+    camera_path = "/World/Camera"
+    cam_prim = UsdGeom.Camera.Define(stage, camera_path).GetPrim()
+    
     # Add a Dome Light for basic illumination
     def add_dome_light():
         rep.create.light(light_type="Dome", intensity=10, texture=None)
@@ -219,25 +231,7 @@ def main():
     add_dome_light()
 
     # --- Areas of Interest (AOI) Configuration ---
-    # Define zones with weights and 3D bounds: ((min_x, min_y, min_z), (max_x, max_y, max_z))
-    # TODO: USER MUST UPDATE THESE COORDINATES based on the actual map layout
-    ZONES = [
-        {
-            "name": "Flat Area / City",
-            "weight": 0.2, # 20% chance
-            "bounds": ((-10, -10, 15), (0, 0, 25)) 
-        },
-        { 
-            "name": "Variable Terrain",
-            "weight": 0.6, # 60% chance
-            "bounds": ((10, 10, 10), (50, 50, 30))
-        },
-        {
-            "name": "Boundary / Transition",
-            "weight": 0.2, # 20% chance
-            "bounds": ((0, 0, 15), (10, 10, 25))
-        }
-    ]
+    WORLD_LIMITS = (-2800, 2800, -2800, 2800)
 
     import random
     from omni.physx import get_physx_scene_query_interface
@@ -249,93 +243,73 @@ def main():
         """
         origin = carb.Float3(x, y, 200.0)
         direction = carb.Float3(0, 0, -1.0)
-        distance = 4000.0 # Sufficient to cover the range
+        distance = 400.0 # Sufficient to cover the range
         
         # Raycast using PhysX
         hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
         
         if hit["hit"]:
-            print(f"hit {hit['position'][2]}")
             return hit["position"][2] # Return Z component
         return 0.0 # Default if no ground found (e.g. hole or no collider)
 
-    def get_random_zone_pose():
-        # Select a zone based on weights
-        total_weight = sum(exclude["weight"] for exclude in ZONES)
-        r = random.uniform(0, total_weight)
-        uplimit = 0
-        selected_zone = ZONES[0]
+    def get_random_pose():
+        """
+        Genera una posición totalmente aleatoria dentro de los límites globales del mapa.
+        """
+        # 1. Generar X e Y aleatorios en todo el mapa
+        pos_x = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
+        pos_y = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
         
-        for zone in ZONES:
-            uplimit += zone["weight"]
-            if r <= uplimit:
-                selected_zone = zone
-                break
-        
-        # Generate random position within bounds
-        bounds = selected_zone["bounds"]
-        min_pt, max_pt = bounds[0], bounds[1]
-        
-        pos_x = random.uniform(min_pt[0], max_pt[0])
-        pos_y = random.uniform(min_pt[1], max_pt[1])
-        
-        # --- Raycast Logic ---
-        # Find the actual ground height at this X, Y
+        # 2. Raycast para encontrar la altura (Z) del terreno en ese punto
         ground_z = get_ground_height(pos_x, pos_y)
         
-        # Set camera 10-20m above the detected ground
+        # 3. Configurar altura de cámara (10 a 20 metros sobre el suelo)
         height_offset = random.uniform(10, 20)
-        pos_z = ground_z + height_offset
         
-        # Camera position
+        # Si el raycast devuelve 0 (posible mar profundo o fallo), 
+        # asumimos altura 0 del agua y sumamos el offset.
+        pos_z = ground_z + height_offset
         position = (pos_x, pos_y, pos_z)
         
-        # Look at a point on the ground (roughly)
+        # 4. Mirar a un punto cercano en el suelo
         target_x = pos_x + random.uniform(-5, 5)
         target_y = pos_y + random.uniform(-5, 5)
-        # Look at the ground height found
         look_at = (target_x, target_y, ground_z)
 
         return position, look_at
 
-    # Register the randomizer
-    def randomize_camera():
-        pos, target = get_random_zone_pose()
-        with cam:
-            rep.modify.pose(position=pos, look_at=target)
-
-    rep.randomizer.register(randomize_camera)
-
-    # trigger replicator pipeline
-    with rep.trigger.on_frame(max_execs=CONFIG["num_frames"]):
-        rep.randomizer.randomize_camera()
-
-        # TODO:
-        # Add distractors
-        # Randomize positions and rotations
-        # Randomize textures
-        # Randomize the lighting of the scene
-
-    # Set up the writer
+    # --- Setup Writer ---
     writer = rep.WriterRegistry.get("KittiWriter")
-
-    # output directory of writer
     output_directory = args.data_dir
     print("Outputting data to ", output_directory)
-
-    # use writer for bounding boxes, rgb and segmentation
-    writer.initialize(output_dir=output_directory,
-                      omit_semantic_type=True, )
-
-    # attach camera render products to wrieter so that data is outputted
+    writer.initialize(output_dir=output_directory, omit_semantic_type=True)
+    
+    # Attach render product to our manually created camera
     RESOLUTION = (CONFIG["width"], CONFIG["height"])
-    render_product = rep.create.render_product(cam, RESOLUTION)
+    render_product = rep.create.render_product(camera_path, RESOLUTION)
     writer.attach(render_product)
 
-    # run rep pipeline
-    run_orchestrator()
-    simulation_app.update()
+    # --- Main Loop (Manual Execution) ---
+    print(f"Starting generation of {CONFIG['num_frames']} frames...")
+    
+    # Asegúrate de que no haya restos de ejecuciones anteriores
+    rep.orchestrator.stop() 
+    
+    for i in range(CONFIG["num_frames"]):
+        print(f"Generating Frame {i}...")
+        
+        pos, target = get_random_pose() 
+        
+        print(f"  Pose: {pos} -> Looking at: {target}")
+        
+        update_camera_pose(cam_prim, pos, target)
+        simulation_app.update()
+        rep.orchestrator.step(delta_time=0.0, rt_subframes=20)
 
+    # Wait until writes are done
+    print("Finalizing writes...")
+    rep.BackendDispatch.wait_until_done()
+    simulation_app.update()
 
 if __name__ == "__main__":
     try:
@@ -343,7 +317,6 @@ if __name__ == "__main__":
     except Exception as e:
         carb.log_error(f"Exception: {e}")
         import traceback
-
         traceback.print_exc()
     finally:
         simulation_app.close()
