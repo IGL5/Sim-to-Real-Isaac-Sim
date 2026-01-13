@@ -2,6 +2,18 @@ from omni.isaac.kit import SimulationApp
 import os
 import argparse
 
+import carb
+from isaacsim.core.utils.nucleus import get_assets_root_path
+from isaacsim.core.utils.stage import get_current_stage, open_stage
+from omni.timeline import get_timeline_interface
+from pxr import UsdPhysics, PhysxSchema
+from pxr import Semantics
+import omni.replicator.core as rep
+from pxr import UsdShade, Sdf, UsdGeom, UsdPhysics, Gf
+import random
+from omni.physx import get_physx_scene_query_interface
+
+
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", type=bool, default=False, help="Launch script headless, default is False")
 parser.add_argument("--height", type=int, default=544, help="Height of image")
@@ -20,25 +32,9 @@ CONFIG = {"renderer": "RayTracedLighting", "headless": args.headless,
 
 simulation_app = SimulationApp(launch_config=CONFIG)
 
-import carb
-import omni
-import omni.usd
-from isaacsim.core.utils.nucleus import get_assets_root_path
-from isaacsim.core.utils.stage import get_current_stage, open_stage
-from omni.timeline import get_timeline_interface
-from pxr import UsdPhysics, PhysxSchema
-from pxr import Semantics
-import omni.replicator.core as rep
-
-from isaacsim.core.utils.semantics import get_semantics
-from pxr import UsdShade, Sdf, UsdGeom, UsdPhysics
-
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
 
-# This is the location of the palletjacks in the simready asset library
-CAR_ASSETS = [ # SUPONEMOS QUE ENCUENTRO .USD DE COCHES
-    ]
 
 def find_prims_by_material_name(stage, material_names):
     """
@@ -67,6 +63,7 @@ def find_prims_by_material_name(stage, material_names):
                         found_paths[target_name].append(str(prim.GetPath()))
     
     return found_paths
+
 
 def update_semantics(stage, keep_semantics=[]):
     """ Remove semantics from the stage except for keep_semantic classes"""
@@ -105,32 +102,6 @@ def prefix_with_isaac_asset_server(relative_path):
     return assets_root_path + relative_path
 
 
-def add_cars():
-    rep_obj_list = [
-        rep.create.from_usd(
-            usd=car_path,
-            semantics=[("class", "car")],
-            count=1
-        )
-        for car_path in CAR_ASSETS
-    ]
-
-    rep_car_group = rep.create.group(rep_obj_list)
-
-    return rep_car_group
-
-
-def full_distractors_list(type):
-    return []
-
-
-def add_distractors(distractor_type="warehouse"):
-    full_distractors = full_distractors_list(distractor_type)
-    distractors = [rep.create.from_usd(distractor_path, count=1) for distractor_path in full_distractors]
-    distractor_group = rep.create.group(distractors)
-    return distractor_group
-
-
 # This will handle replicator
 def run_orchestrator():
     rep.orchestrator.run()
@@ -146,8 +117,6 @@ def run_orchestrator():
     rep.BackendDispatch.wait_until_done()
     rep.orchestrator.stop()
 
-
-from pxr import Gf
 
 def update_camera_pose(camera_prim, eye, target):
     """
@@ -233,8 +202,6 @@ def main():
     # --- Areas of Interest (AOI) Configuration ---
     WORLD_LIMITS = (-2800, 2800, -2800, 2800)
 
-    import random
-    from omni.physx import get_physx_scene_query_interface
 
     def get_ground_height(x, y):
         """
@@ -263,8 +230,8 @@ def main():
         # 2. Raycast para encontrar la altura (Z) del terreno en ese punto
         ground_z = get_ground_height(pos_x, pos_y)
         
-        # 3. Configurar altura de cámara (10 a 20 metros sobre el suelo)
-        height_offset = random.uniform(10, 20)
+        # 3. Configurar altura de cámara (10 a 30 metros sobre el suelo)
+        height_offset = random.uniform(10, 30)
         
         # Si el raycast devuelve 0 (posible mar profundo o fallo), 
         # asumimos altura 0 del agua y sumamos el offset.
@@ -298,9 +265,7 @@ def main():
     for i in range(CONFIG["num_frames"]):
         print(f"Generating Frame {i}...")
         
-        pos, target = get_random_pose() 
-        
-        print(f"  Pose: {pos} -> Looking at: {target}")
+        pos, target = get_random_pose()
         
         update_camera_pose(cam_prim, pos, target)
         simulation_app.update()
