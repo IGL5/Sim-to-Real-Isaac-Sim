@@ -181,10 +181,7 @@ def get_drone_camera_pose(focus_target):
     # Distancia al objetivo (hipotenusa)
     distance = random.uniform(15.0, 30.0) 
     
-    # Altura angular (Pitch): 
-    # 0 grados = a ras de suelo (malo)
-    # 90 grados = vista cenital perfecta (top-down)
-    # Dron típico = 30 a 60 grados
+    # Altura angular (Pitch):
     elevation_deg = random.uniform(30.0, 60.0)
     elevation_rad = math.radians(elevation_deg)
     
@@ -193,7 +190,6 @@ def get_drone_camera_pose(focus_target):
     azimuth_rad = math.radians(azimuth_deg)
     
     # --- CÁLCULO DE POSICIÓN (COORDENADAS ESFÉRICAS) ---
-    # Z (Altura) = Target Z + (Distancia * seno de la elevación)
     cam_z = tz + distance * math.sin(elevation_rad)
     
     # Proyección en el plano XY (cuánto nos alejamos horizontalmente)
@@ -203,14 +199,9 @@ def get_drone_camera_pose(focus_target):
     cam_y = ty + dist_xy * math.sin(azimuth_rad)
     
     # --- SEGURIDAD EXTRA ---
-    # Verificamos la altura del suelo justo DEBAJO de la cámara para no estar bajo tierra
-    # (por si hay una montaña justo detrás del dron)
     ground_under_cam = get_ground_height(cam_x, cam_y)
     
     if cam_z < ground_under_cam + 5.0:
-        # Si la órbita nos dejó muy bajos respecto a la montaña de atrás,
-        # forzamos la altura para estar 5 metros sobre el suelo real.
-        print("DEBUG: Camera clipped terrain, adjusting altitude.")
         cam_z = ground_under_cam + 5.0
 
     return (cam_x, cam_y, cam_z)
@@ -231,7 +222,7 @@ def sample_assets_from_pool(asset_pool, num_samples, allow_duplicates=True):
         return random.sample(asset_pool, k)
 
 
-def get_multiple_poses_near_target(target_pos, ground_func, num_objects, min_dist=2.0, max_radius=10.0):
+def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_radius=10.0):
     """
     Genera N posiciones válidas alrededor de un target sin que se superpongan.
     """
@@ -263,9 +254,10 @@ def get_multiple_poses_near_target(target_pos, ground_func, num_objects, min_dis
         
         # 3. Si no choca, calculamos Z y guardamos
         if not collision:
-            cand_z = ground_func(cand_x, cand_y)
-            rot_z = random.uniform(0, 360)
-            valid_poses.append(((cand_x, cand_y, cand_z), (0, 0, rot_z)))
+            cand_z = get_ground_height(cand_x, cand_y)
+            angle = random.uniform(0, 360)
+            rotation_corrected = (90, 0, angle)
+            valid_poses.append(((cand_x, cand_y, cand_z), rotation_corrected))
             
     if len(valid_poses) < num_objects:
         print(f"Warning: Could only place {len(valid_poses)}/{num_objects} objects without overlap.")
@@ -338,13 +330,6 @@ def main():
         )
         cyclist_reps.append(rep_item)
 
-    # --- 4. DEBUG MARKERS (Esferas) ---
-    # Roja = Target (Suelo)
-    target_marker = rep.create.sphere(scale=0.5, visible=True)
-    with target_marker:
-        rep.modify.material(rep.create.material_omnipbr(diffuse=(1, 0, 0))) # Rojo
-        rep.modify.pose(position=(0,0,-1000)) # Ocultar inicialmente
-
     # Run physics warmup
     for i in range(60):
         simulation_app.update()
@@ -405,15 +390,10 @@ def main():
                 look_at=current_target  # <--- ESTO ARREGLA LA ROTACIÓN Y EL CIELO
             )
 
-        # Mover esfera roja al target para confirmar visualmente
-        with target_marker:
-            rep.modify.pose(position=current_target)
-
         # C. POSICIONAR CICLISTAS (Evitando clipping)
         # Aumentamos min_dist a 4.0 metros para que no se fusionen
         poses = get_multiple_poses_near_target(
             target_pos=current_target,
-            ground_func=get_ground_height,
             num_objects=len(cyclist_reps),
             min_dist=2.5,   # Ajustado para bicis de tamaño real
             max_radius=8.0  # Radio más pequeño para asegurar que salgan en plano
