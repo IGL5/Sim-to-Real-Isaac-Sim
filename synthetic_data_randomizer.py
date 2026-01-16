@@ -48,6 +48,7 @@ CYCLIST_ASSET_POOL = [
     # ... puedes añadir más aquí
 ]
 CYCLIST_SCALE_FACTOR = 0.01
+BIKE_Z_OFFSET = 0
 
 
 def find_prims_by_material_name(stage, material_names):
@@ -179,7 +180,7 @@ def get_drone_camera_pose(focus_target):
     
     # --- PARÁMETROS DE VUELO ---
     # Distancia al objetivo (hipotenusa)
-    distance = random.uniform(15.0, 30.0) 
+    distance = random.uniform(5.0, 10.0) 
     
     # Altura angular (Pitch):
     elevation_deg = random.uniform(30.0, 60.0)
@@ -222,15 +223,66 @@ def sample_assets_from_pool(asset_pool, num_samples, allow_duplicates=True):
         return random.sample(asset_pool, k)
 
 
+def calculate_pitch_on_terrain(x, y, yaw_degrees, ground_func, wheelbase=1.1):
+    """
+    Calcula la inclinación (pitch) y la altura Z ajustada para que una bici
+    se apoye correctamente con ambas ruedas en el terreno.
+    
+    Args:
+        x, y: Coordenadas del centro de la bici.
+        yaw_degrees: Orientación de la bici (hacia dónde mira).
+        ground_func: Función get_ground_height.
+        wheelbase: Distancia entre ejes en METROS (aprox 1.1m para una bici real).
+    
+    Returns:
+        (pitch_degrees, z_center_adjusted): Ángulo de inclinación y nueva altura Z.
+        Retorna (None, None) si falla algún raycast.
+    """
+    # 1. Convertir ángulo de dirección (Yaw) a vector unitario
+    yaw_rad = math.radians(yaw_degrees)
+    dir_x = math.cos(yaw_rad)
+    dir_y = math.sin(yaw_rad)
+    
+    # 2. Calcular posiciones de las ruedas (Delantera y Trasera)
+    # Asumimos que (x,y) es el centro, así que desplazamos la mitad del wheelbase
+    half_len = wheelbase / 2.0
+    
+    front_x = x + dir_x * half_len
+    front_y = y + dir_y * half_len
+    
+    back_x = x - dir_x * half_len
+    back_y = y - dir_y * half_len
+    
+    # 3. Raycast en cada rueda
+    z_front = ground_func(front_x, front_y)
+    z_back = ground_func(back_x, back_y)
+    
+    # SAFETY: Si alguno de los raycasts devuelve el valor de error (tu 100.0), abortamos
+    # Asumimos que si Z > 50 (o el límite que consideres "cielo"), es un fallo.
+    if z_front > 50.0 or z_back > 50.0:
+        return None, None
+
+    # 4. Calcular el ángulo de inclinación (Pitch)
+    # Trigonometría: opuesto (diferencia altura) / adyacente (distancia horizontal)
+    delta_z = z_front - z_back
+    pitch_rad = math.atan2(delta_z, wheelbase)
+    pitch_deg = math.degrees(pitch_rad)
+    
+    # 5. Calcular la Z del centro
+    # Es el promedio de las dos ruedas (punto medio de la línea que las une)
+    z_center_adjusted = (z_front + z_back) / 2.0
+    
+    return pitch_deg, z_center_adjusted
+
+
 def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_radius=10.0):
     """
-    Genera N posiciones válidas alrededor de un target sin que se superpongan.
+    Genera N posiciones válidas con ADAPTACIÓN DE PENDIENTE.
     """
     valid_poses = []
     tx, ty, tz = target_pos
     
-    # Límite de intentos para no colgar el programa si no caben
-    max_attempts = num_objects * 50 
+    max_attempts = num_objects * 100 
     attempts = 0
     
     while len(valid_poses) < num_objects and attempts < max_attempts:
@@ -243,7 +295,7 @@ def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_ra
         cand_x = tx + r * math.cos(theta)
         cand_y = ty + r * math.sin(theta)
         
-        # 2. Chequear colisión con los YA aceptados
+        # 2. Chequear colisión 2D con los ya aceptados
         collision = False
         for (exist_pos, _) in valid_poses:
             ex, ey, ez = exist_pos
@@ -252,15 +304,26 @@ def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_ra
                 collision = True
                 break
         
-        # 3. Si no choca, calculamos Z y guardamos
         if not collision:
-            cand_z = get_ground_height(cand_x, cand_y)
-            angle = random.uniform(0, 360)
-            rotation_corrected = (90, 0, angle)
-            valid_poses.append(((cand_x, cand_y, cand_z), rotation_corrected))
+            # 3. Generamos una rotación aleatoria (Yaw)
+            angle_yaw = random.uniform(0, 360)
+            
+            # 4. CALCULAMOS LA PENDIENTE (Pitch)
+            # Usamos wheelbase=1.1 (metros reales, ya que el raycast es en el mundo real)
+            pitch_deg, z_adjusted = calculate_pitch_on_terrain(cand_x, cand_y, angle_yaw, get_ground_height, wheelbase=1.1)
+            
+            # Si el cálculo fue válido (no cayó en un agujero)
+            if pitch_deg is not None:
+                # CONSTRUIMOS LA ROTACIÓN FINAL
+                rotation_corrected = (90, -pitch_deg, angle_yaw)
+                
+                # CAMBIO AQUÍ: Usamos la variable global en lugar del +0.05 hardcodeado
+                z_final = z_adjusted + BIKE_Z_OFFSET
+                
+                valid_poses.append(((cand_x, cand_y, z_final), rotation_corrected))
             
     if len(valid_poses) < num_objects:
-        print(f"Warning: Could only place {len(valid_poses)}/{num_objects} objects without overlap.")
+        print(f"Warning: Could only place {len(valid_poses)}/{num_objects} objects.")
         
     return valid_poses
 
@@ -396,7 +459,7 @@ def main():
             target_pos=current_target,
             num_objects=len(cyclist_reps),
             min_dist=2.5,   # Ajustado para bicis de tamaño real
-            max_radius=8.0  # Radio más pequeño para asegurar que salgan en plano
+            max_radius=4.0  # Radio más pequeño para asegurar que salgan en plano
         )
         
         for rep_item, (pos, rot) in zip(cyclist_reps, poses):
