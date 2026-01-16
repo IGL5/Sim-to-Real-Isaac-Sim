@@ -47,6 +47,7 @@ CYCLIST_ASSET_POOL = [
     os.path.join(os.getcwd(), "assets", "cyclist", "cyclist_road_bike_black.usd"),
     # ... puedes añadir más aquí
 ]
+CYCLIST_SCALE_FACTOR = 0.01
 
 
 def find_prims_by_material_name(stage, material_names):
@@ -351,12 +352,12 @@ def main():
     # --- 5. LUCES Y CÁMARA (SETUP) ---
     
     # Luz Ambiental (Relleno)
-    rep.create.light(light_type="Dome", intensity=15, texture=None)
+    rep.create.light(light_type="Dome", intensity=10, texture=None)
 
     # Sol (Principal) - Ajusta intensidad si se quema
     rep.create.light(
         light_type="Distant", 
-        intensity=50, 
+        intensity=20, 
         rotation=(300, 0, 0)
     )
     
@@ -414,8 +415,8 @@ def main():
             target_pos=current_target,
             ground_func=get_ground_height,
             num_objects=len(cyclist_reps),
-            min_dist=4.0, 
-            max_radius=12.0
+            min_dist=2.5,   # Ajustado para bicis de tamaño real
+            max_radius=8.0  # Radio más pequeño para asegurar que salgan en plano
         )
         
         for rep_item, (pos, rot) in zip(cyclist_reps, poses):
@@ -423,7 +424,7 @@ def main():
                 rep.modify.pose(
                     position=pos,
                     rotation=rot,
-                    scale=1.0 
+                    scale=CYCLIST_SCALE_FACTOR
                 )
 
         # D. DISPARAR
