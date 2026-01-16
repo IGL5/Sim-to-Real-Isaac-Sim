@@ -39,7 +39,7 @@ rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
 
 
 # --- Areas of Interest (AOI) Configuration ---
-WORLD_LIMITS = (-1400, 1400, -1400, 1400)
+WORLD_LIMITS = (-1300, 1300, -1300, 1300)
 
 # Lista maestra de tus modelos (rutas relativas o absolutas)
 # Imagina que tienes varias carpetas o archivos
@@ -273,15 +273,19 @@ def get_multiple_poses_near_target(target_pos, ground_func, num_objects, min_dis
 
 
 def main():
-    # Open the environment in a new stage
+    # --- 1. CARGA DEL MAPA (Escalado y Centrado) ---
     map_path = os.path.join(os.getcwd(), "map", "Environment_variable.usd")
     open_stage(map_path)
     stage = get_current_stage()
+    
+    # Aplicamos escala 0.5 al mapa
     root_prim = stage.GetDefaultPrim()
     xform = UsdGeom.Xformable(root_prim)
-    xform.AddScaleOp().Set(Gf.Vec3d(0.5, 0.5, 0.5))
+    xform.ClearXformOpOrder()
+    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0)) # Aseguramos centro
+    xform.AddScaleOp().Set(Gf.Vec3d(0.5, 0.5, 0.5))     # Reducimos tamaño
 
-    # Ensure a PhysicsScene exists
+    # Physics Scene
     if not stage.GetPrimAtPath("/PhysicsScene"):
         scene = UsdPhysics.Scene.Define(stage, Sdf.Path("/PhysicsScene"))
         scene.CreateGravityDirectionAttr().Set((0, 0, -1))
@@ -290,7 +294,7 @@ def main():
     timeline = get_timeline_interface()
     timeline.play()
 
-    # --- Material Assignment for Terrain ---
+    # --- 2. ASIGNACIÓN DE MATERIALES ---
     # Create simple colored materials
     # Green for "Terrain_flat" (Grass/Valley)
     mat_grass = rep.create.material_omnipbr(diffuse=(0.2, 0.5, 0.2), roughness=0.8)
@@ -320,15 +324,12 @@ def main():
             rep.modify.material(mat_rock)
 
 
-    # --- Carga de Ciclistas ---
+    # --- 3. CARGA DE CICLISTAS ---
     NUM_CYCLISTS = 2 
     selected_paths = sample_assets_from_pool(CYCLIST_ASSET_POOL, NUM_CYCLISTS, allow_duplicates=True)
     cyclist_reps = []
     
-    print(f"--- DEBUG: Loading {len(selected_paths)} cyclists ---") # DEBUG
     for i, path in enumerate(selected_paths):
-        # DEBUG: Imprimir qué estamos cargando para asegurar que la ruta es buena
-        print(f"--- DEBUG: Loading Asset: {path}") 
         rep_item = rep.create.from_usd(
             path, 
             semantics=[('class', 'cyclist')],
@@ -336,124 +337,96 @@ def main():
         )
         cyclist_reps.append(rep_item)
 
-    # --- DEBUG EXTRA: ESFERA CHIVATA (CORREGIDO) ---
-    mat_debug_red = rep.create.material_omnipbr(diffuse=(1, 0, 0))
-    target_marker = rep.create.sphere(scale=1.0, position=(0, 0, -100), visible=True)
+    # --- 4. DEBUG MARKERS (Esferas) ---
+    # Roja = Target (Suelo)
+    target_marker = rep.create.sphere(scale=0.5, visible=True)
     with target_marker:
-        rep.modify.material(mat_debug_red)
-
-    mat_debug_blue = rep.create.material_omnipbr(diffuse=(0, 0, 1))
-    raycast_marker = rep.create.sphere(scale=0.5, position=(0,0,-100), visible=True)
-    with raycast_marker:
-        rep.modify.material(mat_debug_blue)
+        rep.modify.material(rep.create.material_omnipbr(diffuse=(1, 0, 0))) # Rojo
+        rep.modify.pose(position=(0,0,-1000)) # Ocultar inicialmente
 
     # Run physics warmup
     for i in range(60):
         simulation_app.update()
     
-    # 1. LUZ AMBIENTAL
+    # --- 5. LUCES Y CÁMARA (SETUP) ---
+    
+    # Luz Ambiental (Relleno)
     rep.create.light(light_type="Dome", intensity=15, texture=None)
 
-    # 2. EL SOL (Distant Light): Imprescindible para generar sombras y volumen
+    # Sol (Principal) - Ajusta intensidad si se quema
     rep.create.light(
         light_type="Distant", 
         intensity=50, 
-        rotation=(300, 0, 0) # Inclinado para simular medio día
+        rotation=(300, 0, 0)
     )
     
-    # --- CAMERA SETUP ROBUSTO ---
-    # 1. Creamos la cámara usando Replicator (Elimina el warning "Unknown projection type")
-    # Esto crea una cámara física perfectamente configurada.
+    # CÁMARA REPLICATOR (La clave para arreglar la rotación)
     cam_rep = rep.create.camera(
-        position=(0, 0, 100), 
-        rotation=(0, -90, 0),
         focal_length=18.0,
         name="DroneCam" 
     )
     
-    # 2. Render Product vinculado a la cámara de Replicator
-    RESOLUTION = (CONFIG["width"], CONFIG["height"])
-    render_product = rep.create.render_product(cam_rep, RESOLUTION)
-    
-    # 3. Inicializamos el Writer y adjuntamos
+    # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
-    print("Outputting data to ", args.data_dir)
     writer.initialize(output_dir=args.data_dir, omit_semantic_type=True)
+    
+    render_product = rep.create.render_product(cam_rep, (CONFIG["width"], CONFIG["height"]))
     writer.attach(render_product)
 
-    # 4. TRUCO: Obtener el Prim USD de esa cámara para moverla manualmente
-    camera_path = "/Replicator/DroneCam/Camera"
-    # Verificamos si existe, si no, buscamos
-    if not stage.GetPrimAtPath(camera_path):
-         # Fallback: buscamos cualquier cámara creada
-         for prim in stage.Traverse():
-             if prim.IsA(UsdGeom.Camera):
-                 camera_path = str(prim.GetPath())
-                 break
-    
-    print(f"--- DEBUG: Using Camera at path: {camera_path}")
-    cam_prim = stage.GetPrimAtPath(camera_path)
-
-    # --- Main Loop (Manual Execution) ---
+    # --- 6. BUCLE PRINCIPAL ---
     print(f"Starting generation of {CONFIG['num_frames']} frames...")
-    rep.orchestrator.stop() 
+    rep.orchestrator.stop()
     
     # --- Main Loop ---
     for i in range(CONFIG["num_frames"]):
         print(f"\n--- GENERATING FRAME {i} ---")
         
-        # 1. ELEGIR EL CENTRO DE LA ACCIÓN (TARGET)
-        # Elegimos un punto aleatorio en el mapa que será el centro de la foto
+        # A. ELEGIR TARGET (Dentro de los nuevos límites -600 a 600)
         tx = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
         ty = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
-        # Usamos tu raycast mejorado (el que empieza en Z=500 o 1000)
         tz = get_ground_height(tx, ty)
         
-        # Si el raycast falló (dio -100 o 0 en un agujero), reintentamos en el siguiente frame
-        if tz < -50.0: 
-            print("Skipping frame, bad target ground detected.")
+        # Si no encontramos suelo (valor por defecto 100.0 o hueco), saltamos
+        # Nota: Ajusta esto según lo que devuelva tu get_ground_height cuando falla
+        if tz > 500.0 or tz < -200.0: 
+            print(f"Skipping target ({tx:.1f}, {ty:.1f}, {tz:.1f}) - Invalid Ground")
             continue
             
         current_target = (tx, ty, tz)
         
-        # 2. COLOCAR CÁMARA TIPO DRON MIRANDO AL TARGET
-        cam_pos = get_drone_camera_pose(current_target)
-        update_camera_pose(cam_prim, cam_pos, current_target)
+        # B. POSICIONAR CÁMARA (Usando LookAt de Replicator)
+        # Calculamos dónde debe estar el dron
+        cam_x, cam_y, cam_z = get_drone_camera_pose(current_target) # Tu función modificada antes
+        
+        with cam_rep:
+            rep.modify.pose(
+                position=(cam_x, cam_y, cam_z),
+                look_at=current_target  # <--- ESTO ARREGLA LA ROTACIÓN Y EL CIELO
+            )
 
-        # DEBUG: Esfera roja en el centro de acción
+        # Mover esfera roja al target para confirmar visualmente
         with target_marker:
             rep.modify.pose(position=current_target)
 
-        with raycast_marker:
-            rep.modify.pose(position=(tx, ty, tz))
-
-        print(f"DEBUG FRAME {i}: Target Ground Z detected at: {tz}")
-
-        # 3. COLOCAR CICLISTAS ALREDEDOR DEL TARGET
-        # Ahora las bicis se generan cerca de donde miramos
+        # C. POSICIONAR CICLISTAS (Evitando clipping)
+        # Aumentamos min_dist a 4.0 metros para que no se fusionen
         poses = get_multiple_poses_near_target(
             target_pos=current_target,
             ground_func=get_ground_height,
             num_objects=len(cyclist_reps),
-            min_dist=2.0, 
-            max_radius=8.0 # Radio más pequeño para asegurar que salgan en plano
+            min_dist=4.0, 
+            max_radius=12.0
         )
         
-        # 4. APLICAR POSES A LAS BICIS
-        for idx, (rep_item, (pos, rot)) in enumerate(zip(cyclist_reps, poses)):
-            # Escala normal para probar primero
-            test_scale = 1.0 
-            # Si quieres seguir probando escalas raras, descomenta esto:
-            # if idx == 1: test_scale = 0.01 
-            
+        for rep_item, (pos, rot) in zip(cyclist_reps, poses):
             with rep_item:
                 rep.modify.pose(
                     position=pos,
                     rotation=rot,
-                    scale=test_scale
+                    scale=1.0 
                 )
 
-        # 5. ACTUALIZAR
+        # D. DISPARAR
         simulation_app.update()
         rep.orchestrator.step(delta_time=0.0, rt_subframes=20)
 
