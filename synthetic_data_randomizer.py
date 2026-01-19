@@ -60,13 +60,16 @@ ENVIRONMENT_LOOKUP_KEYS = [
 
 def find_prims_by_material_name(stage, material_names):
     """
-    Finds prims that have a material binding matching one of the given names.
-    Returns a dictionary matching material_name -> list of prim paths.
+    Finds prims matching material names. 
+    Ensures a prim is assigned to ONLY ONE group (the most specific one)
+    to avoid Replicator conflicts.
     """
     found_paths = {name: [] for name in material_names}
     
+    sorted_keys = sorted(material_names, key=len, reverse=True)
+    
     for prim in stage.Traverse():
-        if not prim.IsA(UsdGeom.Mesh): # Only check meshes
+        if not prim.IsA(UsdGeom.Mesh): 
             continue
             
         binding_api = UsdShade.MaterialBindingAPI(prim)
@@ -77,9 +80,10 @@ def find_prims_by_material_name(stage, material_names):
                 mat_path = material.GetPath()
                 mat_name = mat_path.name
                 
-                for target_name in material_names:
+                for target_name in sorted_keys:
                     if target_name in mat_name:
                         found_paths[target_name].append(str(prim.GetPath()))
+                        break 
     
     return found_paths
 
@@ -219,19 +223,24 @@ def load_pbr_materials():
 
 def randomize_environment_materials(stage, lookup_keys, available_materials):
     """
-    Assigns a random material from the 'available_materials' list to each found group.
-    Also randomizes the UV scale to vary the texture size.
+    Applies different scales according to the type of terrain (flat vs mountain)
+    and ensures the application of tinting and rotation.
     """
-    # 1. Find geometries
     found_paths_map = find_prims_by_material_name(stage, lookup_keys)
     
-    # 2. Iterate through each group (Terrain, Terrain_flat...)
+    scale_range_flat = ((0.2, 0.2), (1.0, 1.0))
+    scale_range_mountain = ((0.00002, 0.00002), (0.0002, 0.0002))
+    
     with rep.trigger.on_frame(interval=1):
-
         for key, paths in found_paths_map.items():
             if not paths:
                 continue
-                
+            
+            if "flat" in key.lower():
+                current_scale_range = scale_range_flat
+            else:
+                current_scale_range = scale_range_mountain
+
             env_group = rep.create.group(paths)
             
             with env_group:
@@ -239,7 +248,7 @@ def randomize_environment_materials(stage, lookup_keys, available_materials):
                 
                 rep.modify.attribute(
                     "inputs:texture_scale", 
-                    rep.distribution.uniform((0.02, 0.02), (0.08, 0.08)),
+                    rep.distribution.uniform(current_scale_range[0], current_scale_range[1]),
                     attribute_type="float2"
                 )
 
@@ -247,6 +256,23 @@ def randomize_environment_materials(stage, lookup_keys, available_materials):
                     "inputs:texture_rotate",
                     rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
                     attribute_type="float3"
+                )
+
+                rep.modify.attribute(
+                    "inputs:diffuse_tint",
+                    rep.distribution.uniform((0.4, 0.4, 0.4), (1.0, 1.0, 1.0)),
+                    attribute_type="color3f"
+                )
+                
+                rep.modify.attribute(
+                    "inputs:roughness",
+                    rep.distribution.uniform(0.3, 1.0),
+                    attribute_type="float"
+                )
+                rep.modify.attribute(
+                    "inputs:specular",
+                    rep.distribution.uniform(0.1, 0.6),
+                    attribute_type="float"
                 )
 
 
