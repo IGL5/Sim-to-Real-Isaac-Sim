@@ -1,17 +1,7 @@
-from omni.isaac.kit import SimulationApp
 import os
 import argparse
-
-import carb
-from isaacsim.core.utils.nucleus import get_assets_root_path
-from isaacsim.core.utils.stage import get_current_stage, open_stage
-from omni.timeline import get_timeline_interface
-from pxr import UsdPhysics, PhysxSchema
-from pxr import Semantics
-import omni.replicator.core as rep
-from pxr import UsdShade, Sdf, UsdGeom, UsdPhysics, Gf
 import random
-from omni.physx import get_physx_scene_query_interface
+import math
 
 
 parser = argparse.ArgumentParser("Dataset generator")
@@ -26,14 +16,35 @@ parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data
 
 args, unknown_args = parser.parse_known_args()
 
-# This is the config used to launch simulation.
 CONFIG = {"renderer": "RayTracedLighting", "headless": args.headless,
           "width": args.width, "height": args.height, "num_frames": args.num_frames}
 
+
+from omni.isaac.kit import SimulationApp
 simulation_app = SimulationApp(launch_config=CONFIG)
+
+
+import carb
+from isaacsim.core.utils.nucleus import get_assets_root_path
+from isaacsim.core.utils.stage import get_current_stage, open_stage
+from omni.timeline import get_timeline_interface
+from pxr import UsdPhysics, PhysxSchema, Semantics, UsdShade, Sdf, UsdGeom, Gf
+import omni.replicator.core as rep
+from omni.physx import get_physx_scene_query_interface
+
 
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
+
+# CONSTANTS
+WORLD_LIMITS = (-1300, 1300, -1300, 1300)
+
+# ASSET POOLS
+CYCLIST_ASSET_POOL = [
+    os.path.join(os.getcwd(), "assets", "cyclist", "cyclist_road_bike_black.usd"),
+]
+CYCLIST_SCALE_FACTOR = 0.01
+BIKE_Z_OFFSET = 0
 
 
 def find_prims_by_material_name(stage, material_names):
@@ -47,17 +58,14 @@ def find_prims_by_material_name(stage, material_names):
         if not prim.IsA(UsdGeom.Mesh): # Only check meshes
             continue
             
-        # Check direct binding
         binding_api = UsdShade.MaterialBindingAPI(prim)
         if binding_api:
-            # We check the direct binding for simplicity
             direct_binding = binding_api.GetDirectBinding()
             material = direct_binding.GetMaterial()
             if material:
                 mat_path = material.GetPath()
                 mat_name = mat_path.name
                 
-                # Check if this material matches any of our targets
                 for target_name in material_names:
                     if target_name in mat_name:
                         found_paths[target_name].append(str(prim.GetPath()))
@@ -75,7 +83,6 @@ def update_semantics(stage, keep_semantics=[]):
                 if is_semantic:
                     instance_name = property.SplitName()[1]
                     if instance_name in processed_instances:
-                        # Skip repeated instance, instances are iterated twice due to their two semantic properties (class, data)
                         continue
 
                     processed_instances.add(instance_name)
@@ -94,7 +101,6 @@ def update_semantics(stage, keep_semantics=[]):
                             prim.RemoveAPI(Semantics.SemanticsAPI, instance_name)
 
 
-# needed for loading textures correctly
 def prefix_with_isaac_asset_server(relative_path):
     assets_root_path = get_assets_root_path()
     if assets_root_path is None:
@@ -102,15 +108,11 @@ def prefix_with_isaac_asset_server(relative_path):
     return assets_root_path + relative_path
 
 
-# This will handle replicator
 def run_orchestrator():
     rep.orchestrator.run()
 
-    # Wait until started
     while not rep.orchestrator.get_is_started():
         simulation_app.update()
-
-    # Wait until stopped
     while rep.orchestrator.get_is_started():
         simulation_app.update()
 
@@ -135,18 +137,191 @@ def update_camera_pose(camera_prim, eye, target):
     # We set this transform on the camera prim
     xform_api = UsdGeom.Xformable(camera_prim)
     
-    # Clear existing ops to be safe/clean or just set transform
     xform_api.ClearXformOpOrder()
     xform_api.AddTransformOp().Set(view_matrix.GetInverse())
 
 
+def get_ground_height(x, y):
+    """
+    Cast a ray from high up (z=500) downwards to find the ground.
+    Returns the Z height of the hit point, or 0 if no hit.
+    """
+    origin = carb.Float3(x, y, 500.0)
+    direction = carb.Float3(0, 0, -1.0)
+    distance = 700.0 # Sufficient to cover the range
+    
+    hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
+    
+    if hit["hit"]:
+        return hit["position"][2] # Return Z component
+    return 100.0 # Default if no ground found (e.g. hole or no collider)
+
+def get_drone_camera_pose(focus_target):
+    """
+    Calculates the position of the camera orbiting around a point of interest (focus_target).
+    Simulates a drone flight.
+    """
+    tx, ty, tz = focus_target
+    
+    # --- FLIGHT PARAMETERS ---
+    # Distance to target (hypotenuse)
+    distance = random.uniform(5.0, 10.0) 
+    
+    # Angular height (Pitch):
+    elevation_deg = random.uniform(30.0, 60.0)
+    elevation_rad = math.radians(elevation_deg)
+    
+    # Angle around the target (Azimuth)
+    azimuth_deg = random.uniform(0, 360)
+    azimuth_rad = math.radians(azimuth_deg)
+    
+    # --- POSITION CALCULATION (SPHERICAL COORDINATES) ---
+    cam_z = tz + distance * math.sin(elevation_rad)
+    
+    # Projection on the XY plane (how far we move horizontally)
+    dist_xy = distance * math.cos(elevation_rad)
+    
+    cam_x = tx + dist_xy * math.cos(azimuth_rad)
+    cam_y = ty + dist_xy * math.sin(azimuth_rad)
+    
+    # --- EXTRA SAFETY ---
+    ground_under_cam = get_ground_height(cam_x, cam_y)
+    
+    if cam_z < ground_under_cam + 5.0:
+        cam_z = ground_under_cam + 5.0
+
+    return (cam_x, cam_y, cam_z)
+
+
+def sample_assets_from_pool(asset_pool, num_samples, allow_duplicates=True):
+    """
+    Selects random assets from a list.
+    """
+    if not asset_pool:
+        return []
+    
+    if allow_duplicates:
+        return random.choices(asset_pool, k=num_samples)
+    else:
+        # Ensure we don't ask for more than available if duplicates are not allowed
+        k = min(num_samples, len(asset_pool))
+        return random.sample(asset_pool, k)
+
+
+def calculate_pitch_on_terrain(x, y, yaw_degrees, wheelbase):
+    """
+    Calculates the pitch and adjusted Z height so that an object
+    rests correctly on the terrain.
+    
+    Args:
+        x, y: Center coordinates of the object.
+        yaw_degrees: Object orientation (where it faces).
+        wheelbase: Distance between axles in METERS.
+    
+    Returns:
+        (pitch_degrees, z_center_adjusted): Pitch angle and new Z height.
+        Returns (None, None) if any raycast fails.
+    """
+    # 1. Convert direction angle (Yaw) to unit vector
+    yaw_rad = math.radians(yaw_degrees)
+    dir_x = math.cos(yaw_rad)
+    dir_y = math.sin(yaw_rad)
+    
+    # 2. Calculate wheel positions (Front and Rear)
+    # Assume (x,y) is the center, so displace half the wheelbase
+    half_len = wheelbase / 2.0
+    
+    front_x = x + dir_x * half_len
+    front_y = y + dir_y * half_len
+    
+    back_x = x - dir_x * half_len
+    back_y = y - dir_y * half_len
+    
+    # 3. Raycast at each wheel
+    z_front = get_ground_height(front_x, front_y)
+    z_back = get_ground_height(back_x, back_y)
+    
+    # SAFETY: If any raycast returns the error value (your 100.0), abort
+    # Assume that if Z > 80 (or the limit you consider "sky"), it's a failure.
+    if z_front > 80.0 or z_back > 80.0:
+        return None, None
+
+    # 4. Calculate pitch angle
+    delta_z = z_front - z_back
+    pitch_rad = math.atan2(delta_z, wheelbase)
+    pitch_deg = math.degrees(pitch_rad)
+    
+    # 5. Calculate center Z
+    z_center_adjusted = (z_front + z_back) / 2.0
+    
+    return pitch_deg, z_center_adjusted
+
+
+def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_radius=10.0):
+    """
+    Generates N valid positions with slope adaptation.
+    """
+    valid_poses = []
+    tx, ty, tz = target_pos
+    
+    max_attempts = num_objects * 100 
+    attempts = 0
+    
+    while len(valid_poses) < num_objects and attempts < max_attempts:
+        attempts += 1
+        
+        # 1. Generate random candidate
+        r = random.uniform(1.0, max_radius) 
+        theta = random.uniform(0, 2 * math.pi)
+        
+        cand_x = tx + r * math.cos(theta)
+        cand_y = ty + r * math.sin(theta)
+        
+        # 2. Check 2D collision with already accepted ones
+        collision = False
+        for (exist_pos, _) in valid_poses:
+            ex, ey, ez = exist_pos
+            dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
+            if dist < min_dist:
+                collision = True
+                break
+        
+        if not collision:
+            # 3. Generate a random rotation (Yaw)
+            angle_yaw = random.uniform(0, 360)
+            
+            # 4. CALCULATE SLOPE (Pitch)
+            pitch_deg, z_adjusted = calculate_pitch_on_terrain(cand_x, cand_y, angle_yaw, wheelbase=1.1)
+            
+            # If calculation was valid (didn't fall in a hole)
+            if pitch_deg is not None:
+                # CONSTRUCT FINAL ROTATION
+                rotation_corrected = (90, -pitch_deg, angle_yaw)
+                
+                z_final = z_adjusted + BIKE_Z_OFFSET # Adjust final Z
+                
+                valid_poses.append(((cand_x, cand_y, z_final), rotation_corrected))
+            
+    if len(valid_poses) < num_objects:
+        print(f"Warning: Could only place {len(valid_poses)}/{num_objects} objects.")
+        
+    return valid_poses
+
+
 def main():
-    # Open the environment in a new stage
+    # --- 1. LOAD MAP (Scaled and Centered) ---
     map_path = os.path.join(os.getcwd(), "map", "Environment_variable.usd")
     open_stage(map_path)
     stage = get_current_stage()
+    
+    # Apply 0.5 scale to map
+    root_prim = stage.GetDefaultPrim()
+    xform = UsdGeom.Xformable(root_prim)
+    xform.ClearXformOpOrder()
+    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0)) # Ensure center
+    xform.AddScaleOp().Set(Gf.Vec3d(0.5, 0.5, 0.5))     # Reduce size
 
-    # Ensure a PhysicsScene exists
+    # Physics Scene
     if not stage.GetPrimAtPath("/PhysicsScene"):
         scene = UsdPhysics.Scene.Define(stage, Sdf.Path("/PhysicsScene"))
         scene.CreateGravityDirectionAttr().Set((0, 0, -1))
@@ -155,7 +330,7 @@ def main():
     timeline = get_timeline_interface()
     timeline.play()
 
-    # --- Material Assignment for Terrain ---
+    # --- 2. MATERIAL ASSIGNMENT ---
     # Create simple colored materials
     # Green for "Terrain_flat" (Grass/Valley)
     mat_grass = rep.create.material_omnipbr(diffuse=(0.2, 0.5, 0.2), roughness=0.8)
@@ -184,90 +359,95 @@ def main():
         with terrain_group:
             rep.modify.material(mat_rock)
 
+
+    # --- 3. LOAD CYCLISTS ---
+    NUM_CYCLISTS = 2 
+    selected_paths = sample_assets_from_pool(CYCLIST_ASSET_POOL, NUM_CYCLISTS, allow_duplicates=True)
+    cyclist_reps = []
+    
+    for i, path in enumerate(selected_paths):
+        rep_item = rep.create.from_usd(
+            path, 
+            semantics=[('class', 'cyclist')],
+            name=f"cyclist_{i}" 
+        )
+        cyclist_reps.append(rep_item)
+
     # Run physics warmup
     for i in range(60):
         simulation_app.update()
-
-    # --- Manual Camera Setup ---
-    # We create a specific USD camera so we can control it easily
-    camera_path = "/World/Camera"
-    cam_prim = UsdGeom.Camera.Define(stage, camera_path).GetPrim()
     
-    # Add a Dome Light for basic illumination
-    def add_dome_light():
-        rep.create.light(light_type="Dome", intensity=10, texture=None)
+    # --- 5. LIGHTS AND CAMERA (SETUP) ---
     
-    add_dome_light()
+    # Ambient Light (Fill)
+    rep.create.light(light_type="Dome", intensity=10, texture=None)
 
-    # --- Areas of Interest (AOI) Configuration ---
-    WORLD_LIMITS = (-2800, 2800, -2800, 2800)
-
-
-    def get_ground_height(x, y):
-        """
-        Cast a ray from high up (z=200) downwards to find the ground.
-        Returns the Z height of the hit point, or 0 if no hit.
-        """
-        origin = carb.Float3(x, y, 200.0)
-        direction = carb.Float3(0, 0, -1.0)
-        distance = 400.0 # Sufficient to cover the range
-        
-        # Raycast using PhysX
-        hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
-        
-        if hit["hit"]:
-            return hit["position"][2] # Return Z component
-        return 0.0 # Default if no ground found (e.g. hole or no collider)
-
-    def get_random_pose():
-        """
-        Genera una posición totalmente aleatoria dentro de los límites globales del mapa.
-        """
-        # 1. Generar X e Y aleatorios en todo el mapa
-        pos_x = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
-        pos_y = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
-        
-        # 2. Raycast para encontrar la altura (Z) del terreno en ese punto
-        ground_z = get_ground_height(pos_x, pos_y)
-        
-        # 3. Configurar altura de cámara (10 a 30 metros sobre el suelo)
-        height_offset = random.uniform(10, 30)
-        
-        # Si el raycast devuelve 0 (posible mar profundo o fallo), 
-        # asumimos altura 0 del agua y sumamos el offset.
-        pos_z = ground_z + height_offset
-        position = (pos_x, pos_y, pos_z)
-        
-        # 4. Mirar a un punto cercano en el suelo
-        target_x = pos_x + random.uniform(-5, 5)
-        target_y = pos_y + random.uniform(-5, 5)
-        look_at = (target_x, target_y, ground_z)
-
-        return position, look_at
-
-    # --- Setup Writer ---
+    # Sun (Main)
+    rep.create.light(
+        light_type="Distant", 
+        intensity=20, 
+        rotation=(300, 0, 0)
+    )
+    
+    # REPLICATOR CAMERA
+    cam_rep = rep.create.camera(
+        focal_length=18.0,
+        name="DroneCam" 
+    )
+    
+    # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
-    output_directory = args.data_dir
-    print("Outputting data to ", output_directory)
-    writer.initialize(output_dir=output_directory, omit_semantic_type=True)
+    writer.initialize(output_dir=args.data_dir, omit_semantic_type=True)
     
-    # Attach render product to our manually created camera
-    RESOLUTION = (CONFIG["width"], CONFIG["height"])
-    render_product = rep.create.render_product(camera_path, RESOLUTION)
+    render_product = rep.create.render_product(cam_rep, (CONFIG["width"], CONFIG["height"]))
     writer.attach(render_product)
 
-    # --- Main Loop (Manual Execution) ---
+    # --- 6. MAIN LOOP ---
     print(f"Starting generation of {CONFIG['num_frames']} frames...")
+    rep.orchestrator.stop()
     
-    # Asegúrate de que no haya restos de ejecuciones anteriores
-    rep.orchestrator.stop() 
-    
+    # --- Main Loop ---
     for i in range(CONFIG["num_frames"]):
-        print(f"Generating Frame {i}...")
+        print(f"\n--- GENERATING FRAME {i} ---")
         
-        pos, target = get_random_pose()
+        # A. CHOOSE TARGET
+        tx = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
+        ty = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
+        tz = get_ground_height(tx, ty)
         
-        update_camera_pose(cam_prim, pos, target)
+        # If ground not found (default value 100.0 or hole), skip
+        if tz > 500.0 or tz < -200.0: 
+            print(f"Skipping target ({tx:.1f}, {ty:.1f}, {tz:.1f}) - Invalid Ground")
+            continue
+            
+        current_target = (tx, ty, tz)
+        
+        # B. POSITION CAMERA (Using Replicator LookAt)
+        cam_x, cam_y, cam_z = get_drone_camera_pose(current_target)
+        
+        with cam_rep:
+            rep.modify.pose(
+                position=(cam_x, cam_y, cam_z),
+                look_at=current_target
+            )
+
+        # C. POSITION CYCLISTS (Avoiding clipping)
+        poses = get_multiple_poses_near_target(
+            target_pos=current_target,
+            num_objects=len(cyclist_reps),
+            min_dist=2.5,
+            max_radius=4.0
+        )
+        
+        for rep_item, (pos, rot) in zip(cyclist_reps, poses):
+            with rep_item:
+                rep.modify.pose(
+                    position=pos,
+                    rotation=rot,
+                    scale=CYCLIST_SCALE_FACTOR
+                )
+
+        # D. SHOOT
         simulation_app.update()
         rep.orchestrator.step(delta_time=0.0, rt_subframes=20)
 
