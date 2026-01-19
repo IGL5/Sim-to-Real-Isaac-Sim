@@ -1,4 +1,5 @@
 import os
+import glob
 import argparse
 import random
 import math
@@ -38,6 +39,7 @@ rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
 
 # CONSTANTS
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
+TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 
 # ASSET POOLS
 CYCLIST_ASSET_POOL = [
@@ -45,6 +47,15 @@ CYCLIST_ASSET_POOL = [
 ]
 CYCLIST_SCALE_FACTOR = 0.01
 BIKE_Z_OFFSET = 0
+
+# --- CONFIGURATION: ENVIRONMENT TARGETS ---
+ENVIRONMENT_LOOKUP_KEYS = [
+    "Terrain",
+    "Terrain_flat",
+    # "Road",
+    # "Path",
+    # "Lake"
+]
 
 
 def find_prims_by_material_name(stage, material_names):
@@ -139,6 +150,104 @@ def update_camera_pose(camera_prim, eye, target):
     
     xform_api.ClearXformOpOrder()
     xform_api.AddTransformOp().Set(view_matrix.GetInverse())
+
+
+def load_pbr_materials():
+    """
+    Scans the textures directory and loads PBR materials from subfolders.
+    """
+    loaded_mats = []
+    
+    if not os.path.exists(TEXTURES_ROOT_DIR):
+        print(f"[ERROR] Texture directory not found: {TEXTURES_ROOT_DIR}")
+        return []
+        
+    material_folders = [f.path for f in os.scandir(TEXTURES_ROOT_DIR) if f.is_dir()]
+    print(f"--- Found {len(material_folders)} texture folders in {TEXTURES_ROOT_DIR} ---")
+    
+    for folder_path in material_folders:
+        try:
+            files = glob.glob(os.path.join(folder_path, "*.*"))
+            
+            found_maps = {
+                "diffuse": None, "normal": None, "roughness": None, "ao": None
+            }
+            normal_gl, normal_dx = None, None
+            
+            for f_path in files:
+                name = os.path.basename(f_path).lower()
+                if any(x in name for x in ["color", "diff", "alb", "albedo"]):
+                    found_maps["diffuse"] = f_path
+                elif "rough" in name:
+                    found_maps["roughness"] = f_path
+                elif "norm" in name:
+                    if "gl" in name: normal_gl = f_path
+                    elif "dx" in name: normal_dx = f_path
+                    else: normal_gl = f_path
+                elif any(x in name for x in ["ao", "ambient", "occlusion"]):
+                    found_maps["ao"] = f_path
+
+            found_maps["normal"] = normal_gl if normal_gl else normal_dx
+
+            if not found_maps["diffuse"]:
+                print(f"[SKIP] No color map found in {os.path.basename(folder_path)}")
+                continue
+            
+            mat = rep.create.material_omnipbr(
+                diffuse_texture=found_maps["diffuse"],
+                roughness=0.5,
+                specular=0.5
+            )
+            
+            with mat:
+                if found_maps["normal"]:
+                    rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
+                
+                if found_maps["roughness"]:
+                    rep.modify.attribute("inputs:reflectionroughness_texture", found_maps["roughness"])
+                
+                if found_maps["ao"]:
+                    rep.modify.attribute("inputs:ao_texture", found_maps["ao"])
+
+            loaded_mats.append(mat)
+            
+        except Exception as e:
+            print(f"Error loading material from {folder_path}: {e}")
+            
+    return loaded_mats
+
+
+def randomize_environment_materials(stage, lookup_keys, available_materials):
+    """
+    Assigns a random material from the 'available_materials' list to each found group.
+    Also randomizes the UV scale to vary the texture size.
+    """
+    # 1. Find geometries
+    found_paths_map = find_prims_by_material_name(stage, lookup_keys)
+    
+    # 2. Iterate through each group (Terrain, Terrain_flat...)
+    with rep.trigger.on_frame(interval=1):
+
+        for key, paths in found_paths_map.items():
+            if not paths:
+                continue
+                
+            env_group = rep.create.group(paths)
+            
+            with env_group:
+                rep.randomizer.materials(available_materials)
+                
+                rep.modify.attribute(
+                    "inputs:texture_scale", 
+                    rep.distribution.uniform((0.02, 0.02), (0.08, 0.08)),
+                    attribute_type="float2"
+                )
+
+                rep.modify.attribute(
+                    "inputs:texture_rotate",
+                    rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
+                    attribute_type="float3"
+                )
 
 
 def get_ground_height(x, y):
@@ -318,8 +427,8 @@ def main():
     root_prim = stage.GetDefaultPrim()
     xform = UsdGeom.Xformable(root_prim)
     xform.ClearXformOpOrder()
-    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0)) # Ensure center
-    xform.AddScaleOp().Set(Gf.Vec3d(0.5, 0.5, 0.5))     # Reduce size
+    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0))
+    xform.AddScaleOp().Set(Gf.Vec3d(0.5, 0.5, 0.5))
 
     # Physics Scene
     if not stage.GetPrimAtPath("/PhysicsScene"):
@@ -330,35 +439,8 @@ def main():
     timeline = get_timeline_interface()
     timeline.play()
 
-    # --- 2. MATERIAL ASSIGNMENT ---
-    # Create simple colored materials
-    # Green for "Terrain_flat" (Grass/Valley)
-    mat_grass = rep.create.material_omnipbr(diffuse=(0.2, 0.5, 0.2), roughness=0.8)
-    # Brown/Grey for "Terrain" (Mountain/Rocky)
-    mat_rock = rep.create.material_omnipbr(diffuse=(0.6, 0.4, 0.25), roughness=0.9)
-    
-    targets = ["Terrain", "Terrain_flat"]
-    found_paths_map = find_prims_by_material_name(stage, targets)
-            
-    # Apply Green to Flat
-    flat_paths = found_paths_map.get("Terrain_flat", [])
-    if flat_paths:
-        print(f"Found {len(flat_paths)} meshes for Terrain_flat. Applying Green.")
-        flat_group = rep.create.group(flat_paths)
-        with flat_group:
-            rep.modify.material(mat_grass)
-            
-    # Apply Rock to the rest (Terrain)
-    terrain_paths = found_paths_map.get("Terrain", [])
-    # Filter duplicates if any
-    terrain_paths = [p for p in terrain_paths if p not in flat_paths]
-    
-    if terrain_paths:
-        print(f"Found {len(terrain_paths)} meshes for Terrain. Applying Rock.")
-        terrain_group = rep.create.group(terrain_paths)
-        with terrain_group:
-            rep.modify.material(mat_rock)
-
+    # --- 2. MATERIAL SETUP ---
+    chaos_materials = load_pbr_materials()
 
     # --- 3. LOAD CYCLISTS ---
     NUM_CYCLISTS = 2 
@@ -401,6 +483,9 @@ def main():
     
     render_product = rep.create.render_product(cam_rep, (CONFIG["width"], CONFIG["height"]))
     writer.attach(render_product)
+
+    print("--- Registering Randomization Graph ---")
+    randomize_environment_materials(stage, ENVIRONMENT_LOOKUP_KEYS, chaos_materials)
 
     # --- 6. MAIN LOOP ---
     print(f"Starting generation of {CONFIG['num_frames']} frames...")
