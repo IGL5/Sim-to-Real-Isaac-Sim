@@ -29,13 +29,17 @@ import carb
 from isaacsim.core.utils.nucleus import get_assets_root_path
 from isaacsim.core.utils.stage import get_current_stage, open_stage
 from omni.timeline import get_timeline_interface
-from pxr import UsdPhysics, PhysxSchema, Semantics, UsdShade, Sdf, UsdGeom, Gf
+from pxr import UsdPhysics, PhysxSchema, Semantics, UsdShade, Sdf, UsdGeom, Gf, Usd
 import omni.replicator.core as rep
 from omni.physx import get_physx_scene_query_interface
+import omni.kit.commands
 
 
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
+
+# Increase max asset loading time
+# rep.settings.carb_settings("/exts/omni.replicator.core/maxAssetLoadingTime", 120.0)
 
 # CONSTANTS
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
@@ -45,7 +49,7 @@ TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 CYCLIST_ASSET_POOL = [
     os.path.join(os.getcwd(), "assets", "cyclist", "cyclist_road_bike_black.usd"),
 ]
-CYCLIST_SCALE_FACTOR = 0.01
+UNIT_SCALE_FACTOR = 0.01
 BIKE_Z_OFFSET = 0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
@@ -221,59 +225,106 @@ def load_pbr_materials():
     return loaded_mats
 
 
-def randomize_environment_materials(stage, lookup_keys, available_materials):
+def apply_material_randomization(stage, found_paths_map):
     """
-    Applies different scales according to the type of terrain (flat vs mountain)
-    and ensures the application of tinting and rotation.
+    Creates unique copies of materials for each terrain patch to allow 
+    independent randomization of scale, rotation, and color.
     """
-    found_paths_map = find_prims_by_material_name(stage, lookup_keys)
+    # 1. SETUP TEMPORARY FOLDERS
+    SOURCE_SCOPE_PATH = "/Replicator/Looks"
+    TEMP_SCOPE_PATH = "/Replicator/Looks/Temp_Generated"
     
-    scale_range_flat = ((0.2, 0.2), (1.0, 1.0))
-    scale_range_mountain = ((0.00002, 0.00002), (0.0002, 0.0002))
+    # Cleanup
+    temp_scope = stage.GetPrimAtPath(TEMP_SCOPE_PATH)
+    if temp_scope and temp_scope.IsValid():
+        omni.kit.commands.execute("DeletePrims", paths=[TEMP_SCOPE_PATH])
+
+    # Create the new folder
+    omni.kit.commands.execute("CreatePrim", prim_path=TEMP_SCOPE_PATH, prim_type="Scope")
+
+    # 2. COLLECT BASE MATERIALS
+    base_materials = []
+    source_scope = stage.GetPrimAtPath(SOURCE_SCOPE_PATH)
     
-    with rep.trigger.on_frame(interval=1):
-        for key, paths in found_paths_map.items():
-            if not paths:
-                continue
+    if source_scope and source_scope.IsValid():
+        for child in source_scope.GetChildren():
+            if child.IsA(UsdShade.Material) and "Temp" not in child.GetName():
+                base_materials.append(child)
+    
+    if not base_materials:
+        print(f"[ERROR] No base materials found in {SOURCE_SCOPE_PATH}")
+        return
+
+    # Define ranges
+    scale_flat = (10.0, 50.0)      
+    scale_mountain = (0.001, 0.005)
+
+    mat_counter = 0
+
+    # 3. ASSIGNMENT LOOP
+    for key, paths in found_paths_map.items():
+        if not paths: continue
+
+        # Decide logic according to terrain type
+        if "flat" in key.lower():
+            s_min, s_max = scale_flat
+        else:
+            s_min, s_max = scale_mountain
+        
+        # A. CALCULATE RANDOM VALUES
+        scale_val = random.uniform(s_min, s_max)
+        rot_val = random.uniform(0, 360)
+        
+        # Random color (Soft tinting to avoid extreme colors)
+        r = random.uniform(0.6, 1.0)
+        g = random.uniform(0.6, 1.0)
+        b = random.uniform(0.6, 1.0)
+        color_val = Gf.Vec3f(r, g, b)
+        
+        # B. COPY BASE MATERIAL
+        base_mat = random.choice(base_materials)
+        mat_counter += 1
+        
+        new_mat_name = f"Mat_{mat_counter}_{base_mat.GetName()}"
+        new_mat_path = f"{TEMP_SCOPE_PATH}/{new_mat_name}"
+        
+        # Use CopyPrim to clone the complete material
+        omni.kit.commands.execute("CopyPrim", 
+            path_from=base_mat.GetPath().pathString, 
+            path_to=new_mat_path
+        )
+        
+        new_mat_prim = stage.GetPrimAtPath(new_mat_path)
+        if not new_mat_prim.IsValid(): continue
+
+        # C. MODIFY THE SHADER
+        shader_api = None
+        for node in new_mat_prim.GetChildren():
+            if node.IsA(UsdShade.Shader):
+                shader_api = UsdShade.Shader(node)
+                break
+        
+        if shader_api:
+            # 1. Scale
+            shader_api.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             
-            if "flat" in key.lower():
-                current_scale_range = scale_range_flat
-            else:
-                current_scale_range = scale_range_mountain
-
-            env_group = rep.create.group(paths)
+            # 2. Rotation
+            shader_api.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
             
-            with env_group:
-                rep.randomizer.materials(available_materials)
-                
-                rep.modify.attribute(
-                    "inputs:texture_scale", 
-                    rep.distribution.uniform(current_scale_range[0], current_scale_range[1]),
-                    attribute_type="float2"
-                )
+            # 3. Color
+            shader_api.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
+            
+            # 4. Roughness
+            roughness = random.uniform(0.4, 0.9)
+            shader_api.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(roughness)
 
-                rep.modify.attribute(
-                    "inputs:texture_rotate",
-                    rep.distribution.uniform((0, 0, 0), (0, 0, 360)),
-                    attribute_type="float3"
-                )
-
-                rep.modify.attribute(
-                    "inputs:diffuse_tint",
-                    rep.distribution.uniform((0.4, 0.4, 0.4), (1.0, 1.0, 1.0)),
-                    attribute_type="color3f"
-                )
-                
-                rep.modify.attribute(
-                    "inputs:roughness",
-                    rep.distribution.uniform(0.3, 1.0),
-                    attribute_type="float"
-                )
-                rep.modify.attribute(
-                    "inputs:specular",
-                    rep.distribution.uniform(0.1, 0.6),
-                    attribute_type="float"
-                )
+        # D. ASSIGN (BIND)
+        mat_api = UsdShade.Material(new_mat_prim)
+        for path in paths:
+            obj_prim = stage.GetPrimAtPath(path)
+            if obj_prim and obj_prim.IsValid():
+                UsdShade.MaterialBindingAPI(obj_prim).UnbindDirectBinding()
+                UsdShade.MaterialBindingAPI(obj_prim).Bind(mat_api)
 
 
 def get_ground_height(x, y):
@@ -281,15 +332,15 @@ def get_ground_height(x, y):
     Cast a ray from high up (z=500) downwards to find the ground.
     Returns the Z height of the hit point, or 0 if no hit.
     """
-    origin = carb.Float3(x, y, 500.0)
+    origin = carb.Float3(x, y, 2000.0)
     direction = carb.Float3(0, 0, -1.0)
-    distance = 700.0 # Sufficient to cover the range
+    distance = 5000.0 # Sufficient to cover the range
     
     hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
     
     if hit["hit"]:
         return hit["position"][2] # Return Z component
-    return 100.0 # Default if no ground found (e.g. hole or no collider)
+    return -9999.0
 
 def get_drone_camera_pose(focus_target):
     """
@@ -445,16 +496,9 @@ def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_ra
 
 def main():
     # --- 1. LOAD MAP (Scaled and Centered) ---
-    map_path = os.path.join(os.getcwd(), "map", "Environment_variable.usd")
+    map_path = os.path.join(os.getcwd(), "map", "Environment_variable_scaled.usd")
     open_stage(map_path)
     stage = get_current_stage()
-    
-    # Apply 0.5 scale to map
-    root_prim = stage.GetDefaultPrim()
-    xform = UsdGeom.Xformable(root_prim)
-    xform.ClearXformOpOrder()
-    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0))
-    xform.AddScaleOp().Set(Gf.Vec3d(0.5, 0.5, 0.5))
 
     # Physics Scene
     if not stage.GetPrimAtPath("/PhysicsScene"):
@@ -466,7 +510,8 @@ def main():
     timeline.play()
 
     # --- 2. MATERIAL SETUP ---
-    chaos_materials = load_pbr_materials()
+    load_pbr_materials()
+    terrain_paths_map = find_prims_by_material_name(stage, ENVIRONMENT_LOOKUP_KEYS)
 
     # --- 3. LOAD CYCLISTS ---
     NUM_CYCLISTS = 2 
@@ -488,12 +533,12 @@ def main():
     # --- 5. LIGHTS AND CAMERA (SETUP) ---
     
     # Ambient Light (Fill)
-    rep.create.light(light_type="Dome", intensity=10, texture=None)
+    rep.create.light(light_type="Dome", intensity=20, texture=None)
 
     # Sun (Main)
     rep.create.light(
         light_type="Distant", 
-        intensity=20, 
+        intensity=30, 
         rotation=(300, 0, 0)
     )
     
@@ -510,30 +555,37 @@ def main():
     render_product = rep.create.render_product(cam_rep, (CONFIG["width"], CONFIG["height"]))
     writer.attach(render_product)
 
-    print("--- Registering Randomization Graph ---")
-    randomize_environment_materials(stage, ENVIRONMENT_LOOKUP_KEYS, chaos_materials)
-
     # --- 6. MAIN LOOP ---
     print(f"Starting generation of {CONFIG['num_frames']} frames...")
     rep.orchestrator.stop()
+
+    frames_generated = 0
+    max_attempts = CONFIG["num_frames"] * 5 # Evitar bucles infinitos
+    attempts = 0
     
     # --- Main Loop ---
-    for i in range(CONFIG["num_frames"]):
-        print(f"\n--- GENERATING FRAME {i} ---")
+    while frames_generated < CONFIG["num_frames"] and attempts < max_attempts:
+        attempts += 1
+        print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
+
+        # A. APPLY MATERIAL RANDOMIZATION
+        apply_material_randomization(stage, terrain_paths_map)
+
+        simulation_app.update()
         
-        # A. CHOOSE TARGET
+        # B. CHOOSE TARGET
         tx = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
         ty = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
         tz = get_ground_height(tx, ty)
         
-        # If ground not found (default value 100.0 or hole), skip
-        if tz > 500.0 or tz < -200.0: 
-            print(f"Skipping target ({tx:.1f}, {ty:.1f}, {tz:.1f}) - Invalid Ground")
+        # If it returns the error value (-9999) or is out of logical limits
+        if tz == -9999.0 or tz < -200.0: 
+            print(f"[RETRY] Invalid Ground at ({tx:.1f}, {ty:.1f}). Raycast failed: {tz}.")
             continue
             
         current_target = (tx, ty, tz)
         
-        # B. POSITION CAMERA (Using Replicator LookAt)
+        # C. POSITION CAMERA (Using Replicator LookAt)
         cam_x, cam_y, cam_z = get_drone_camera_pose(current_target)
         
         with cam_rep:
@@ -542,25 +594,35 @@ def main():
                 look_at=current_target
             )
 
-        # C. POSITION CYCLISTS (Avoiding clipping)
+        # D. POSITION CYCLISTS (Avoiding clipping)
         poses = get_multiple_poses_near_target(
             target_pos=current_target,
             num_objects=len(cyclist_reps),
             min_dist=2.5,
             max_radius=4.0
         )
+
+        # If no space was found for the bikes, we abort this frame as well
+        if len(poses) < len(cyclist_reps):
+             print("[RETRY] Could not place cyclists safely.")
+             continue
         
         for rep_item, (pos, rot) in zip(cyclist_reps, poses):
             with rep_item:
                 rep.modify.pose(
                     position=pos,
                     rotation=rot,
-                    scale=CYCLIST_SCALE_FACTOR
+                    scale=UNIT_SCALE_FACTOR 
                 )
 
-        # D. SHOOT
+        # E. SHOOT
         simulation_app.update()
+        simulation_app.update()
+
         rep.orchestrator.step(delta_time=0.0, rt_subframes=20)
+        rep.BackendDispatch.wait_until_done()
+
+        frames_generated += 1
 
     # Wait until writes are done
     print("Finalizing writes...")
