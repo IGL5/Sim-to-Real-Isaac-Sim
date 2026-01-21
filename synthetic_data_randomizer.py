@@ -332,9 +332,9 @@ def get_ground_height(x, y):
     Cast a ray from high up (z=500) downwards to find the ground.
     Returns the Z height of the hit point, or 0 if no hit.
     """
-    origin = carb.Float3(x, y, 200.0)
+    origin = carb.Float3(x, y, 5000.0)
     direction = carb.Float3(0, 0, -1.0)
-    distance = 400.0 # Sufficient to cover the range
+    distance = 10000.0 # Sufficient to cover the range
     
     hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
     
@@ -496,7 +496,7 @@ def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_ra
 
 def main():
     # --- 1. LOAD MAP (Scaled and Centered) ---
-    map_path = os.path.join(os.getcwd(), "map", "Environment_variable_scaled.usd")
+    map_path = os.path.join(os.getcwd(), "map", "Environment_variable.usd")
     open_stage(map_path)
     stage = get_current_stage()
 
@@ -576,6 +576,26 @@ def main():
         # B. CHOOSE TARGET
         tx = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
         ty = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
+        # --- DEBUG CUBE SÓLIDO ---
+        # Creamos un cubo usando USD directo para tener control total
+        cube_path = f"/World/DebugCube_{frames_generated}_{attempts}"
+        cube_geom = UsdGeom.Cube.Define(stage, cube_path)
+        
+        # Lo hacemos ENORME (500m) y lo ponemos en Z=0
+        cube_geom.AddTranslateOp().Set(Gf.Vec3d(tx, ty, 100.0))
+        cube_geom.AddScaleOp().Set(Gf.Vec3d(250.0, 250.0, 1.0)) # Plano como una tortita gigante
+        
+        # ¡LA CLAVE! Le añadimos API de Colisión para que el Raycast lo "vea"
+        UsdPhysics.CollisionAPI.Apply(cube_geom.GetPrim())
+        
+        # Un color rojo para verlo bien
+        cube_geom.GetPrim().CreateAttribute("displayColor", Sdf.ValueTypeNames.Color3fArray).Set([(1, 0, 0)])
+
+        # Update crítico para que PhysX registre el nuevo colisionador
+        simulation_app.update()
+        simulation_app.update()
+        simulation_app.update()
+
         tz = get_ground_height(tx, ty)
         
         # If it returns the error value (-9999) or is out of logical limits
