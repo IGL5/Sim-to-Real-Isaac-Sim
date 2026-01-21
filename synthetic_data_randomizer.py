@@ -225,106 +225,86 @@ def load_pbr_materials():
     return loaded_mats
 
 
-def apply_material_randomization(stage, found_paths_map):
+def setup_scene_materials_initial(stage, terrain_paths_map, loaded_rep_materials):
     """
-    Creates unique copies of materials for each terrain patch to allow 
-    independent randomization of scale, rotation, and color.
+    Asigna materiales aleatorios INICIALES a las mallas.
+    Lo más importante: Guarda referencia a qué material está asignado a qué grupo
+    para poder modificar sus parámetros luego sin borrar/crear nada.
     """
-    # 1. SETUP TEMPORARY FOLDERS
-    SOURCE_SCOPE_PATH = "/Replicator/Looks"
-    TEMP_SCOPE_PATH = "/Replicator/Looks/Temp_Generated"
-    
-    # Cleanup
-    temp_scope = stage.GetPrimAtPath(TEMP_SCOPE_PATH)
-    if temp_scope and temp_scope.IsValid():
-        omni.kit.commands.execute("DeletePrims", paths=[TEMP_SCOPE_PATH])
+    if not loaded_rep_materials:
+        print("[WARN] No textures loaded. Skipping material assignment.")
+        return {}
 
-    # Create the new folder
-    omni.kit.commands.execute("CreatePrim", prim_path=TEMP_SCOPE_PATH, prim_type="Scope")
+    active_materials_map = {} # { "Terrain": UsdShade.Material, "Terrain_flat": UsdShade.Material }
 
-    # 2. COLLECT BASE MATERIALS
-    base_materials = []
-    source_scope = stage.GetPrimAtPath(SOURCE_SCOPE_PATH)
+    # 1. Asignar material base a Terrain
+    if terrain_paths_map.get("Terrain"):
+        mat_rock = random.choice(loaded_rep_materials)
+        with rep.create.group(terrain_paths_map["Terrain"]):
+            rep.modify.material(mat_rock)
+        # Hack para obtener el prim del material que Replicator usó (se suele llamar OmniPBR)
+        # Para simplificar la aleatorización después, buscaremos los shaders en el loop
     
-    if source_scope and source_scope.IsValid():
-        for child in source_scope.GetChildren():
-            if child.IsA(UsdShade.Material) and "Temp" not in child.GetName():
-                base_materials.append(child)
-    
-    if not base_materials:
-        print(f"[ERROR] No base materials found in {SOURCE_SCOPE_PATH}")
-        return
+    # 2. Asignar material base a Flat
+    if terrain_paths_map.get("Terrain_flat"):
+        mat_grass = random.choice(loaded_rep_materials)
+        with rep.create.group(terrain_paths_map["Terrain_flat"]):
+            rep.modify.material(mat_grass)
+            
+    return True
 
-    # Define ranges
+
+def randomize_existing_materials(stage, terrain_paths_map):
+    """
+    Esta es la función ARREGLADA.
+    En lugar de borrar y crear materiales, busca los materiales que YA están asignados
+    a las mallas y simplemente les cambia los números.
+    Esto es seguro para las físicas.
+    """
     scale_flat = (10.0, 50.0)      
-    scale_mountain = (0.001, 0.005)
+    scale_mountain = (0.001, 0.005) # Ajustado para mapa grande
 
-    mat_counter = 0
-
-    # 3. ASSIGNMENT LOOP
-    for key, paths in found_paths_map.items():
+    # Recorremos los grupos (Terrain y Flat)
+    for key, paths in terrain_paths_map.items():
         if not paths: continue
+        
+        # Cogemos la primera malla del grupo para ver qué material tiene
+        sample_prim = stage.GetPrimAtPath(paths[0])
+        binding_api = UsdShade.MaterialBindingAPI(sample_prim)
+        direct_binding = binding_api.GetDirectBinding()
+        material = direct_binding.GetMaterial()
+        
+        if not material: continue
 
-        # Decide logic according to terrain type
-        if "flat" in key.lower():
-            s_min, s_max = scale_flat
-        else:
-            s_min, s_max = scale_mountain
-        
-        # A. CALCULATE RANDOM VALUES
-        scale_val = random.uniform(s_min, s_max)
-        rot_val = random.uniform(0, 360)
-        
-        # Random color (Soft tinting to avoid extreme colors)
-        r = random.uniform(0.6, 1.0)
-        g = random.uniform(0.6, 1.0)
-        b = random.uniform(0.6, 1.0)
-        color_val = Gf.Vec3f(r, g, b)
-        
-        # B. COPY BASE MATERIAL
-        base_mat = random.choice(base_materials)
-        mat_counter += 1
-        
-        new_mat_name = f"Mat_{mat_counter}_{base_mat.GetName()}"
-        new_mat_path = f"{TEMP_SCOPE_PATH}/{new_mat_name}"
-        
-        # Use CopyPrim to clone the complete material
-        omni.kit.commands.execute("CopyPrim", 
-            path_from=base_mat.GetPath().pathString, 
-            path_to=new_mat_path
-        )
-        
-        new_mat_prim = stage.GetPrimAtPath(new_mat_path)
-        if not new_mat_prim.IsValid(): continue
-
-        # C. MODIFY THE SHADER
-        shader_api = None
-        for node in new_mat_prim.GetChildren():
-            if node.IsA(UsdShade.Shader):
-                shader_api = UsdShade.Shader(node)
+        # Encontramos el Shader dentro del material
+        shader = None
+        for child in material.GetPrim().GetChildren():
+            if child.IsA(UsdShade.Shader):
+                shader = UsdShade.Shader(child)
                 break
         
-        if shader_api:
-            # 1. Scale
-            shader_api.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
-            
-            # 2. Rotation
-            shader_api.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
-            
-            # 3. Color
-            shader_api.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
-            
-            # 4. Roughness
-            roughness = random.uniform(0.4, 0.9)
-            shader_api.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(roughness)
+        if shader:
+            # CALCULAMOS VALORES
+            if "flat" in key.lower():
+                s_min, s_max = scale_flat
+            else:
+                s_min, s_max = scale_mountain
 
-        # D. ASSIGN (BIND)
-        mat_api = UsdShade.Material(new_mat_prim)
-        for path in paths:
-            obj_prim = stage.GetPrimAtPath(path)
-            if obj_prim and obj_prim.IsValid():
-                UsdShade.MaterialBindingAPI(obj_prim).UnbindDirectBinding()
-                UsdShade.MaterialBindingAPI(obj_prim).Bind(mat_api)
+            scale_val = random.uniform(s_min, s_max)
+            rot_val = random.uniform(0, 360)
+            
+            # Color sutil
+            color_val = Gf.Vec3f(random.uniform(0.6, 1.0), random.uniform(0.6, 1.0), random.uniform(0.6, 1.0))
+
+            # APLICAMOS VALORES (UPDATE)
+            # Input: texture_scale
+            shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
+            # Input: texture_rotate (OmniPBR usa Float para grados)
+            shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
+            # Input: diffuse_tint
+            shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
+            # Input: roughness
+            shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
 
 
 def get_ground_height(x, y):
@@ -332,9 +312,9 @@ def get_ground_height(x, y):
     Cast a ray from high up (z=500) downwards to find the ground.
     Returns the Z height of the hit point, or 0 if no hit.
     """
-    origin = carb.Float3(x, y, 5000.0)
+    origin = carb.Float3(x, y, 500.0)
     direction = carb.Float3(0, 0, -1.0)
-    distance = 10000.0 # Sufficient to cover the range
+    distance = 1000.0 # Sufficient to cover the range
     
     hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
     
@@ -510,8 +490,9 @@ def main():
     timeline.play()
 
     # --- 2. MATERIAL SETUP ---
-    load_pbr_materials()
+    loaded_materials = load_pbr_materials()
     terrain_paths_map = find_prims_by_material_name(stage, ENVIRONMENT_LOOKUP_KEYS)
+    setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
     # --- 3. LOAD CYCLISTS ---
     NUM_CYCLISTS = 2 
@@ -569,33 +550,12 @@ def main():
         print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
 
         # A. APPLY MATERIAL RANDOMIZATION
-        apply_material_randomization(stage, terrain_paths_map)
+        # apply_material_randomization(stage, terrain_paths_map)
+        randomize_existing_materials(stage, terrain_paths_map)
 
-        simulation_app.update()
-        
         # B. CHOOSE TARGET
         tx = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
         ty = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
-        # --- DEBUG CUBE SÓLIDO ---
-        # Creamos un cubo usando USD directo para tener control total
-        cube_path = f"/World/DebugCube_{frames_generated}_{attempts}"
-        cube_geom = UsdGeom.Cube.Define(stage, cube_path)
-        
-        # Lo hacemos ENORME (500m) y lo ponemos en Z=0
-        cube_geom.AddTranslateOp().Set(Gf.Vec3d(tx, ty, 100.0))
-        cube_geom.AddScaleOp().Set(Gf.Vec3d(250.0, 250.0, 1.0)) # Plano como una tortita gigante
-        
-        # ¡LA CLAVE! Le añadimos API de Colisión para que el Raycast lo "vea"
-        UsdPhysics.CollisionAPI.Apply(cube_geom.GetPrim())
-        
-        # Un color rojo para verlo bien
-        cube_geom.GetPrim().CreateAttribute("displayColor", Sdf.ValueTypeNames.Color3fArray).Set([(1, 0, 0)])
-
-        # Update crítico para que PhysX registre el nuevo colisionador
-        simulation_app.update()
-        simulation_app.update()
-        simulation_app.update()
-
         tz = get_ground_height(tx, ty)
         
         # If it returns the error value (-9999) or is out of logical limits
