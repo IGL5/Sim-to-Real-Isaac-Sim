@@ -332,9 +332,9 @@ def get_ground_height(x, y):
     Cast a ray from high up (z=500) downwards to find the ground.
     Returns the Z height of the hit point, or 0 if no hit.
     """
-    origin = carb.Float3(x, y, 2000.0)
+    origin = carb.Float3(x, y, 200.0)
     direction = carb.Float3(0, 0, -1.0)
-    distance = 5000.0 # Sufficient to cover the range
+    distance = 400.0 # Sufficient to cover the range
     
     hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
     
