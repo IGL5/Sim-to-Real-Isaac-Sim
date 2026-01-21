@@ -162,8 +162,8 @@ def update_camera_pose(camera_prim, eye, target):
 
 def load_pbr_materials(stage):
     """
-    Carga materiales PBR y asigna texturas manualmente para evitar errores de API.
-    Devuelve lista de UsdShade.Material.
+    Loads PBR materials and manually assigns textures to avoid API errors.
+    Returns a list of UsdShade.Material.
     """
     if not os.path.exists(TEXTURES_ROOT_DIR):
         print(f"[ERROR] Texture directory not found: {TEXTURES_ROOT_DIR}")
@@ -172,7 +172,7 @@ def load_pbr_materials(stage):
     material_folders = [f.path for f in os.scandir(TEXTURES_ROOT_DIR) if f.is_dir()]
     print(f"--- Found {len(material_folders)} texture folders ---")
     
-    # 1. CREACIÓN ROBUSTA
+    # 1. ROBUST CREATION
     for i, folder_path in enumerate(material_folders):
         try:
             files = glob.glob(os.path.join(folder_path, "*.*"))
@@ -187,7 +187,7 @@ def load_pbr_materials(stage):
 
             if not found_maps["diffuse"]: continue
             
-            # A. Creamos el material SOLO con la textura difusa (que siempre funciona)
+            # Create material ONLY with diffuse texture
             rep_mat = rep.create.material_omnipbr(
                 diffuse_texture=found_maps["diffuse"],
                 roughness=0.5,
@@ -195,8 +195,7 @@ def load_pbr_materials(stage):
                 count=1
             )
             
-            # B. Inyectamos el resto de mapas manualmente usando los nombres internos del Shader.
-            # Esto evita el error "unexpected keyword argument" porque atacamos al atributo directo.
+            # Manually inject the rest of the maps using internal Shader names.
             with rep_mat:
                 if found_maps["roughness"]:
                     rep.modify.attribute("inputs:reflectionroughness_texture", found_maps["roughness"])
@@ -208,7 +207,7 @@ def load_pbr_materials(stage):
         except Exception as e:
             print(f"Error creating material from {folder_path}: {e}")
             
-    # 2. RECOLECCIÓN (Igual que antes)
+    # 2. COLLECTION
     loaded_materials_prims = []
     looks_scope = stage.GetPrimAtPath("/Replicator/Looks")
     
@@ -222,37 +221,35 @@ def load_pbr_materials(stage):
 
 def setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials):
     """
-    Asigna materiales aleatorios INICIALES a las mallas usando la API de USD directamente.
-    Esto evita conflictos entre objetos Replicator y objetos USD.
+    Assigns random materials to meshes dynamically.
+    Iterates through all detected keys in terrain_paths_map
+    and assigns a random material to each group.
     """
     if not loaded_materials:
         print("[WARN] No textures loaded. Skipping initial assignment.")
         return
 
-    # 1. Asignar material base a Terrain
-    if terrain_paths_map.get("Terrain"):
-        mat_rock = random.choice(loaded_materials)
-        # Recorremos los paths y hacemos Bind manual
-        for path in terrain_paths_map["Terrain"]:
+    print(f"--- Assigning initial materials for found groups ---")
+
+    for key, paths in terrain_paths_map.items():
+        if not paths:
+            continue
+            
+        chosen_mat = random.choice(loaded_materials)
+        print(f"   -> Group '{key}': Assigning material to {len(paths)} objects.")
+
+        for path in paths:
             prim = stage.GetPrimAtPath(path)
             if prim.IsValid():
-                UsdShade.MaterialBindingAPI(prim).Bind(mat_rock)
-    
-    # 2. Asignar material base a Flat
-    if terrain_paths_map.get("Terrain_flat"):
-        mat_grass = random.choice(loaded_materials)
-        for path in terrain_paths_map["Terrain_flat"]:
-            prim = stage.GetPrimAtPath(path)
-            if prim.IsValid():
-                UsdShade.MaterialBindingAPI(prim).Bind(mat_grass)
+                UsdShade.MaterialBindingAPI(prim).Bind(chosen_mat)
             
     print("--- Initial materials assigned successfully ---")
 
 
 def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials):
     """
-    Elige un material aleatorio de la lista y lo asigna a los terrenos.
-    Modifica sus parámetros sin romper la geometría física.
+    Picks a random material from the list and assigns it to the terrains.
+    Modifies its parameters without breaking physical geometry.
     """
     if not loaded_materials:
         return
@@ -263,19 +260,13 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
     for key, paths in terrain_paths_map.items():
         if not paths: continue
 
-        # A. ELEGIR
-        # Ahora 'loaded_materials' contiene objetos UsdShade.Material reales
         chosen_material = random.choice(loaded_materials)
         
-        # B. ENCONTRAR SHADER
         shader = None
-        # Usamos .GetPrim() porque chosen_material es un UsdShade.Material
         for child in chosen_material.GetPrim().GetChildren():
             if child.IsA(UsdShade.Shader):
                 shader = UsdShade.Shader(child)
                 break
-        
-        # C. MODIFICAR
         if shader:
             if "flat" in key.lower():
                 s_min, s_max = scale_flat
@@ -291,19 +282,17 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
                 random.uniform(0.6, 1.0)
             )
             
-            # Configuramos los inputs del shader
+            # Configure shader inputs
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
             shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
             shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
 
-        # D. VINCULAR (BIND)
         for path in paths:
             prim = stage.GetPrimAtPath(path)
             if prim.IsValid():
                 binding_api = UsdShade.MaterialBindingAPI(prim)
                 binding_api.UnbindDirectBinding()
-                # chosen_material ya es un UsdShade.Material, se puede vincular directo
                 binding_api.Bind(chosen_material)
 
 
@@ -407,9 +396,8 @@ def calculate_pitch_on_terrain(x, y, yaw_degrees, wheelbase):
     z_front = get_ground_height(front_x, front_y)
     z_back = get_ground_height(back_x, back_y)
     
-    # SAFETY: If any raycast returns the error value (your 100.0), abort
-    # Assume that if Z > 80 (or the limit you consider "sky"), it's a failure.
-    if z_front > 80.0 or z_back > 80.0:
+    # If any raycast returns the error value, abort
+    if z_front == -9999.0 or z_back == -9999.0: 
         return None, None
 
     # 4. Calculate pitch angle
@@ -541,7 +529,7 @@ def main():
     rep.orchestrator.stop()
 
     frames_generated = 0
-    max_attempts = CONFIG["num_frames"] * 5 # Evitar bucles infinitos
+    max_attempts = CONFIG["num_frames"] * 5 # Avoid infinite loops
     attempts = 0
     
     # --- Main Loop ---
