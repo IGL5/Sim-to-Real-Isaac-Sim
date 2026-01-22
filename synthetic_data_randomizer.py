@@ -172,7 +172,7 @@ def load_pbr_materials(stage):
     for i, folder_path in enumerate(material_folders):
         try:
             files = glob.glob(os.path.join(folder_path, "*.*"))
-            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None}
+            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "displacement": None}
             
             for f_path in files:
                 name = os.path.basename(f_path).lower()
@@ -180,6 +180,7 @@ def load_pbr_materials(stage):
                 elif "rough" in name: found_maps["roughness"] = f_path
                 elif "norm" in name: found_maps["normal"] = f_path
                 elif "ao" in name: found_maps["ao"] = f_path
+                elif "disp" in name: found_maps["displacement"] = f_path
 
             if not found_maps["diffuse"]: continue
             
@@ -199,6 +200,8 @@ def load_pbr_materials(stage):
                     rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
                 if found_maps["ao"]:
                     rep.modify.attribute("inputs:ao_texture", found_maps["ao"])
+                if found_maps["displacement"]:
+                    rep.modify.attribute("inputs:displacement_texture", found_maps["displacement"])
 
         except Exception as e:
             print(f"Error creating material from {folder_path}: {e}")
@@ -295,6 +298,9 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
             # shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
             shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
+
+            normal_strength = random.uniform(1.5, 2.5) 
+            shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
 
         # --- BIND ---
         for path in paths:
