@@ -17,7 +17,7 @@ parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data
 
 args, unknown_args = parser.parse_known_args()
 
-# "renderer": "RayTracedLighting" is worst but faster
+# "renderer": "RayTracedLighting" is another option to consider
 CONFIG = {"renderer": "PathTracing", "headless": args.headless,
           "width": args.width, "height": args.height, "num_frames": args.num_frames}
 
@@ -36,7 +36,7 @@ from omni.physx import get_physx_scene_query_interface
 
 
 # Increase subframes if shadows/ghosting appears of moving objects
-rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
+rep.settings.carb_settings("/omni/replicator/RTSubframes", 128)
 
 # CONSTANTS
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
@@ -46,8 +46,7 @@ TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 CYCLIST_ASSET_POOL = [
     os.path.join(os.getcwd(), "assets", "cyclist", "cyclist_road_bike_black.usd"),
 ]
-UNIT_SCALE_FACTOR = 0.01
-BIKE_Z_OFFSET = 0
+# UNIT_SCALE_FACTOR = 0.01
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
@@ -57,6 +56,9 @@ ENVIRONMENT_LOOKUP_KEYS = [
     # "Path",
     # "Lake"
 ]
+
+# --- DEBUGGING ---
+DEBUG_WHEEL_CONTACT = False
 
 
 def find_prims_by_material_name(stage, material_names):
@@ -375,7 +377,7 @@ def sample_assets_from_pool(asset_pool, num_samples, allow_duplicates=True):
         return random.sample(asset_pool, k)
 
 
-def calculate_pitch_on_terrain(x, y, yaw_degrees, wheelbase):
+def calculate_pitch_on_terrain(stage, x, y, yaw_degrees, wheelbase):
     """
     Calculates the pitch and adjusted Z height so that an object
     rests correctly on the terrain.
@@ -412,6 +414,11 @@ def calculate_pitch_on_terrain(x, y, yaw_degrees, wheelbase):
     if z_front == -9999.0 or z_back == -9999.0: 
         return None, None
 
+    # --- VISUAL DEBUG ---
+    if DEBUG_WHEEL_CONTACT:
+        draw_debug_cube(stage, (front_x, front_y, z_front))
+        draw_debug_cube(stage, (back_x, back_y, z_back))
+
     # 4. Calculate pitch angle
     delta_z = z_front - z_back
     pitch_rad = math.atan2(delta_z, wheelbase)
@@ -423,7 +430,23 @@ def calculate_pitch_on_terrain(x, y, yaw_degrees, wheelbase):
     return pitch_deg, z_center_adjusted
 
 
-def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_radius=10.0):
+def draw_debug_cube(stage, position):
+    """ 
+    Draws a red cube at the given position.
+    Generates its own random name to avoid depending on external logic.
+    """
+    rand_id = random.randint(0, 20)
+    path = f"/World/Debug/DebugCube_{rand_id}"
+    
+    cube_geom = UsdGeom.Cube.Define(stage, path)
+    cube_geom.ClearXformOpOrder() # Clear previous transformations to avoid errors
+    
+    cube_geom.AddTranslateOp().Set(Gf.Vec3d(*position))
+    cube_geom.AddScaleOp().Set(Gf.Vec3d(0.1, 0.1, 0.1)) 
+    cube_geom.GetDisplayColorAttr().Set([(1, 0, 0)])
+
+
+def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0, max_radius=10.0):
     """
     Generates N valid positions with slope adaptation.
     """
@@ -457,16 +480,15 @@ def get_multiple_poses_near_target(target_pos, num_objects, min_dist=2.0, max_ra
             angle_yaw = random.uniform(0, 360)
             
             # 4. CALCULATE SLOPE (Pitch)
-            pitch_deg, z_adjusted = calculate_pitch_on_terrain(cand_x, cand_y, angle_yaw, wheelbase=1.1)
+            wheelbase = 0.6
+            pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, wheelbase)
             
             # If calculation was valid (didn't fall in a hole)
             if pitch_deg is not None:
                 # CONSTRUCT FINAL ROTATION
                 rotation_corrected = (90, -pitch_deg, angle_yaw)
                 
-                z_final = z_adjusted + BIKE_Z_OFFSET # Adjust final Z
-                
-                valid_poses.append(((cand_x, cand_y, z_final), rotation_corrected))
+                valid_poses.append(((cand_x, cand_y, z_adjusted), rotation_corrected))
             
     if len(valid_poses) < num_objects:
         print(f"Warning: Could only place {len(valid_poses)}/{num_objects} objects.")
@@ -491,30 +513,6 @@ def main():
 
     # --- 2. MATERIAL SETUP ---
     loaded_materials = load_pbr_materials(stage) 
-    if loaded_materials:
-        print("\n\n" + "="*50)
-        print("🕵️‍♂️ INSPECCIONANDO MATERIAL OMNIPBR")
-        print("="*50)
-        
-        # Cogemos el primer material
-        mat_prim = loaded_materials[0].GetPrim()
-        
-        # Buscamos el Shader dentro (suele ser un hijo)
-        shader_prim = None
-        for child in mat_prim.GetChildren():
-            if child.IsA(UsdShade.Shader):
-                shader_prim = child
-                break
-        
-        if shader_prim:
-            print(f"Shader encontrado: {shader_prim.GetPath()}")
-            print("--- Lista de atributos candidatos para Desplazamiento ---")
-            for attr in shader_prim.GetAttributes():
-                name = attr.GetName()
-                # Filtramos para no imprimir 200 lineas, solo lo que nos interesa
-                if "displace" in name or "height" in name or "geo" in name:
-                    print(f"👉 {name}")
-        print("="*50 + "\n\n")
     terrain_paths_map = find_prims_by_material_name(stage, ENVIRONMENT_LOOKUP_KEYS)
     setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
@@ -601,6 +599,7 @@ def main():
 
         # D. POSITION CYCLISTS (Avoiding clipping)
         poses = get_multiple_poses_near_target(
+            stage,
             target_pos=current_target,
             num_objects=len(cyclist_reps),
             min_dist=2.5,
@@ -617,7 +616,7 @@ def main():
                 rep.modify.pose(
                     position=pos,
                     rotation=rot,
-                    scale=UNIT_SCALE_FACTOR 
+                    # scale=UNIT_SCALE_FACTOR 
                 )
 
         # E. SHOOT
@@ -625,7 +624,7 @@ def main():
         simulation_app.update()
         simulation_app.update()
 
-        rep.orchestrator.step(delta_time=0.0, rt_subframes=20)
+        rep.orchestrator.step(delta_time=0.0, rt_subframes=128)
         rep.BackendDispatch.wait_until_done()
 
         frames_generated += 1
