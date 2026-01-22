@@ -32,14 +32,10 @@ from omni.timeline import get_timeline_interface
 from pxr import UsdPhysics, PhysxSchema, Semantics, UsdShade, Sdf, UsdGeom, Gf, Usd
 import omni.replicator.core as rep
 from omni.physx import get_physx_scene_query_interface
-import omni.kit.commands
 
 
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
-
-# Increase max asset loading time
-# rep.settings.carb_settings("/exts/omni.replicator.core/maxAssetLoadingTime", 120.0)
 
 # CONSTANTS
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
@@ -254,8 +250,8 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
     if not loaded_materials:
         return
 
-    scale_flat = (10.0, 50.0)      
-    scale_mountain = (0.001, 0.005) 
+    scale_flat = (1.0, 2.0)      
+    scale_mountain = (0.03, 0.05)
 
     for key, paths in terrain_paths_map.items():
         if not paths: continue
@@ -276,16 +272,16 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             scale_val = random.uniform(s_min, s_max)
             rot_val = random.uniform(0, 360)
             
-            color_val = Gf.Vec3f(
-                random.uniform(0.6, 1.0), 
-                random.uniform(0.6, 1.0), 
-                random.uniform(0.6, 1.0)
-            )
+            # color_val = Gf.Vec3f(
+            #     random.uniform(0.2, 1.0), 
+            #     random.uniform(0.2, 1.0), 
+            #     random.uniform(0.2, 1.0)
+            # )
             
             # Configure shader inputs
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
-            shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
+            # shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
             shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
 
         for path in paths:
@@ -583,6 +579,7 @@ def main():
                 )
 
         # E. SHOOT
+        simulation_app.update()
         simulation_app.update()
         simulation_app.update()
 
