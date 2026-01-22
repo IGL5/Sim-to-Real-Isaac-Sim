@@ -244,26 +244,38 @@ def setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials):
 
 def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials):
     """
-    Picks a random material from the list and assigns it to the terrains.
-    Modifies its parameters without breaking physical geometry.
+    Choose UNIQUE materials for each terrain section in this frame.
     """
     if not loaded_materials:
         return
 
+    # Adjusted scales
     scale_flat = (1.0, 2.0)      
     scale_mountain = (0.03, 0.05)
 
-    for key, paths in terrain_paths_map.items():
-        if not paths: continue
+    # 1. FILTER ACTIVE GROUPS
+    active_keys = [k for k, v in terrain_paths_map.items() if v]
+    num_needed = len(active_keys)
 
-        chosen_material = random.choice(loaded_materials)
-        
+    # 2. SELECTION OF MATERIALS WITHOUT REPETITION
+    if len(loaded_materials) >= num_needed:
+        selected_materials = random.sample(loaded_materials, k=num_needed)
+    else:
+        print(f"[WARN] Not enough unique materials ({len(loaded_materials)}) for groups ({num_needed}). Collisions may occur.")
+        selected_materials = random.choices(loaded_materials, k=num_needed)
+
+    # 3. ASSIGNMENT
+    for key, chosen_material in zip(active_keys, selected_materials):
+        paths = terrain_paths_map[key]
+
         shader = None
         for child in chosen_material.GetPrim().GetChildren():
             if child.IsA(UsdShade.Shader):
                 shader = UsdShade.Shader(child)
                 break
+        
         if shader:
+            # Scale logic based on terrain type
             if "flat" in key.lower():
                 s_min, s_max = scale_flat
             else:
@@ -271,24 +283,24 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
 
             scale_val = random.uniform(s_min, s_max)
             rot_val = random.uniform(0, 360)
-            
+
             # color_val = Gf.Vec3f(
-            #     random.uniform(0.2, 1.0), 
-            #     random.uniform(0.2, 1.0), 
-            #     random.uniform(0.2, 1.0)
+            #     random.uniform(0.4, 1.0), 
+            #     random.uniform(0.4, 1.0), 
+            #     random.uniform(0.4, 1.0)
             # )
             
-            # Configure shader inputs
+            # Apply changes to the shader attributes
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
             # shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
             shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
 
+        # --- BIND ---
         for path in paths:
             prim = stage.GetPrimAtPath(path)
             if prim.IsValid():
                 binding_api = UsdShade.MaterialBindingAPI(prim)
-                binding_api.UnbindDirectBinding()
                 binding_api.Bind(chosen_material)
 
 
