@@ -17,7 +17,8 @@ parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data
 
 args, unknown_args = parser.parse_known_args()
 
-CONFIG = {"renderer": "RayTracedLighting", "headless": args.headless,
+# "renderer": "RayTracedLighting" is worst but faster
+CONFIG = {"renderer": "PathTracing", "headless": args.headless,
           "width": args.width, "height": args.height, "num_frames": args.num_frames}
 
 
@@ -35,7 +36,7 @@ from omni.physx import get_physx_scene_query_interface
 
 
 # Increase subframes if shadows/ghosting appears of moving objects
-rep.settings.carb_settings("/omni/replicator/RTSubframes", 4)
+rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
 
 # CONSTANTS
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
@@ -172,7 +173,7 @@ def load_pbr_materials(stage):
     for i, folder_path in enumerate(material_folders):
         try:
             files = glob.glob(os.path.join(folder_path, "*.*"))
-            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "displacement": None}
+            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None}
             
             for f_path in files:
                 name = os.path.basename(f_path).lower()
@@ -180,7 +181,6 @@ def load_pbr_materials(stage):
                 elif "rough" in name: found_maps["roughness"] = f_path
                 elif "norm" in name: found_maps["normal"] = f_path
                 elif "ao" in name: found_maps["ao"] = f_path
-                elif "disp" in name: found_maps["displacement"] = f_path
 
             if not found_maps["diffuse"]: continue
             
@@ -200,8 +200,6 @@ def load_pbr_materials(stage):
                     rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
                 if found_maps["ao"]:
                     rep.modify.attribute("inputs:ao_texture", found_maps["ao"])
-                if found_maps["displacement"]:
-                    rep.modify.attribute("inputs:displacement_texture", found_maps["displacement"])
 
         except Exception as e:
             print(f"Error creating material from {folder_path}: {e}")
@@ -493,6 +491,30 @@ def main():
 
     # --- 2. MATERIAL SETUP ---
     loaded_materials = load_pbr_materials(stage) 
+    if loaded_materials:
+        print("\n\n" + "="*50)
+        print("🕵️‍♂️ INSPECCIONANDO MATERIAL OMNIPBR")
+        print("="*50)
+        
+        # Cogemos el primer material
+        mat_prim = loaded_materials[0].GetPrim()
+        
+        # Buscamos el Shader dentro (suele ser un hijo)
+        shader_prim = None
+        for child in mat_prim.GetChildren():
+            if child.IsA(UsdShade.Shader):
+                shader_prim = child
+                break
+        
+        if shader_prim:
+            print(f"Shader encontrado: {shader_prim.GetPath()}")
+            print("--- Lista de atributos candidatos para Desplazamiento ---")
+            for attr in shader_prim.GetAttributes():
+                name = attr.GetName()
+                # Filtramos para no imprimir 200 lineas, solo lo que nos interesa
+                if "displace" in name or "height" in name or "geo" in name:
+                    print(f"👉 {name}")
+        print("="*50 + "\n\n")
     terrain_paths_map = find_prims_by_material_name(stage, ENVIRONMENT_LOOKUP_KEYS)
     setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
@@ -516,14 +538,16 @@ def main():
     # --- 5. LIGHTS AND CAMERA (SETUP) ---
     
     # Ambient Light (Fill)
-    rep.create.light(light_type="Dome", intensity=20, texture=None)
+    rep.create.light(light_type="Dome", intensity=5, texture=None)
 
     # Sun (Main)
-    rep.create.light(
+    distant_light = rep.create.light(
         light_type="Distant", 
-        intensity=30, 
+        intensity=50, 
         rotation=(300, 0, 0)
     )
+    with distant_light:
+        rep.modify.attribute("inputs:angle", 0.5)
     
     # REPLICATOR CAMERA
     cam_rep = rep.create.camera(
