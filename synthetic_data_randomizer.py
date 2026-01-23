@@ -11,7 +11,7 @@ parser.add_argument("--height", type=int, default=544, help="Height of image")
 parser.add_argument("--width", type=int, default=960, help="Width of image")
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
 parser.add_argument("--distractors", type=str, default="None",
-                    help="Options are 'warehouse', 'additional' or None (default)")
+                    help="Options are ")
 parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data",
                     help="Location where data will be output")
 
@@ -43,10 +43,14 @@ WORLD_LIMITS = (-1300, 1300, -1300, 1300)
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 
 # ASSET POOLS
-CYCLIST_ASSET_POOL = [
-    os.path.join(os.getcwd(), "assets", "cyclist", "cyclist_road_bike_black.usd"),
-]
-# UNIT_SCALE_FACTOR = 0.01
+ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
+OBJECTS_CONFIG = {
+    "cyclist": {
+        "count": 2,           # How many objects we want
+        "wheelbase": 0.6,     # Physics: For incline calculation (None if not applicable)
+        "scale": 1.0
+    },
+}
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
@@ -136,6 +140,47 @@ def run_orchestrator():
 
     rep.BackendDispatch.wait_until_done()
     rep.orchestrator.stop()
+
+
+def discover_objective_assets(base_dir, obj_dir):
+    """
+    Scans automatically the assets folder to find objective models.
+    Expected structure: base_dir/obj_dir/[model_name]/[model_name].usd
+    """
+    objective_root = os.path.join(base_dir, obj_dir)
+    if not os.path.exists(objective_root):
+         print(f"[WARN] Objective root directory not found: {objective_root}")
+         return []
+
+    print(f"--- Scanning for objective assets in: {objective_root} ---")
+    discovered_paths = []
+    
+    try:
+        folder_names = [d for d in os.listdir(objective_root) if os.path.isdir(os.path.join(objective_root, d))]
+    except Exception as e:
+        print(f"[ERROR] Could not list directories: {e}")
+        return []
+
+    for folder_name in folder_names:
+        folder_path = os.path.join(objective_root, folder_name)
+        
+        # STRONG STRATEGY:
+        expected_usd = os.path.join(folder_path, f"{folder_name}.usd")
+        
+        if os.path.exists(expected_usd):
+            discovered_paths.append(expected_usd)
+            print(f"   -> Found asset (exact match): {folder_name}")
+        else:
+            # If the exact file doesn't exist, we search for any .usd inside the folder.
+            fallback_search = glob.glob(os.path.join(folder_path, "*.usd*"))
+            if fallback_search:
+                discovered_paths.append(fallback_search[0])
+                print(f"   -> Found asset (fallback): {os.path.basename(fallback_search[0])} in {folder_name}")
+            else:
+                print(f"[WARN] Skipping folder '{folder_name}': No USD file found inside.")
+
+    print(f"--- Total discovered objectives: {len(discovered_paths)} ({obj_dir}) ---")
+    return discovered_paths
 
 
 def update_camera_pose(camera_prim, eye, target):
@@ -457,12 +502,17 @@ def draw_debug_cube(stage, position):
     cube_geom.GetDisplayColorAttr().Set([(1, 0, 0)])
 
 
-def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0, max_radius=10.0):
+def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0, max_radius=10.0, existing_obstacles=[], wheelbase= None):
     """
     Generates N valid positions with slope adaptation.
+    Avoids collisions with 'existing_obstacles' and with itself.
+    
+    If wheelbase is not None, it will calculate the pitch angle based on the two wheels.
     """
     valid_poses = []
     tx, ty, tz = target_pos
+
+    obstacles_xy = [(p[0], p[1]) for p in existing_obstacles]
     
     max_attempts = num_objects * 100 
     attempts = 0
@@ -477,32 +527,55 @@ def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0,
         cand_x = tx + r * math.cos(theta)
         cand_y = ty + r * math.sin(theta)
         
-        # 2. Check 2D collision with already accepted ones
+        # 2. Check 2D collision
         collision = False
-        for (exist_pos, _) in valid_poses:
-            ex, ey, ez = exist_pos
+        # A) Check against previous obstacles
+        for (ex, ey) in obstacles_xy:
             dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
             if dist < min_dist:
                 collision = True
                 break
         
+        # B) Check against the ones we just generated in this same loop
         if not collision:
-            # 3. Generate a random rotation (Yaw)
+            for (exist_pos, _) in valid_poses:
+                ex, ey, _ = exist_pos
+                dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
+                if dist < min_dist:
+                    collision = True
+                    break
+        
+        if not collision:
             angle_yaw = random.uniform(0, 360)
             
-            # 4. CALCULATE SLOPE (Pitch)
-            wheelbase = 0.6
-            pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, wheelbase)
-            
-            # If calculation was valid (didn't fall in a hole)
-            if pitch_deg is not None:
-                # CONSTRUCT FINAL ROTATION
-                rotation_corrected = (90, -pitch_deg, angle_yaw)
+            # 3. DIFFERENT LOGIC: Is it a vehicle or static?
+            if wheelbase is not None:
+                # --- VEHICLE MODE ---
+                # Calculate pitch based on the two wheels
+                pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, wheelbase)
                 
-                valid_poses.append(((cand_x, cand_y, z_adjusted), rotation_corrected))
+                if pitch_deg is None: 
+                    continue
+                
+                rotation_corrected = (90, -pitch_deg, angle_yaw)
+                z_final = z_adjusted
+                
+            else:
+                # --- STATIC MODE ---
+                # Only need the ground height at the center
+                z_ground = get_ground_height(cand_x, cand_y)
+                
+                if z_ground == -9999.0: 
+                    continue
+                
+                rotation_corrected = (90, 0, angle_yaw)
+                z_final = z_ground
+
+            # 4. Save valid candidate
+            valid_poses.append(((cand_x, cand_y, z_final), rotation_corrected))
             
     if len(valid_poses) < num_objects:
-        print(f"Warning: Could only place {len(valid_poses)}/{num_objects} objects.")
+        print(f"[WARN] Could only place {len(valid_poses)}/{num_objects} objects safely.")
         
     return valid_poses
 
@@ -527,18 +600,34 @@ def main():
     terrain_paths_map = find_prims_by_material_name(stage, ENVIRONMENT_LOOKUP_KEYS)
     setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
-    # --- 3. LOAD CYCLISTS ---
-    NUM_CYCLISTS = 2 
-    selected_paths = sample_assets_from_pool(CYCLIST_ASSET_POOL, NUM_CYCLISTS, allow_duplicates=True)
-    cyclist_reps = []
+    # --- 3. LOAD OBJECTS ---
+    assets_library = {}
+    for obj_class in OBJECTS_CONFIG.keys():
+        found_paths = discover_objective_assets(ASSETS_ROOT_DIR, obj_class)
+        if found_paths:
+            assets_library[obj_class] = found_paths
+        else:
+            print(f"[WARN] No assets found for class '{obj_class}'. It will be skipped.")
     
-    for i, path in enumerate(selected_paths):
-        rep_item = rep.create.from_usd(
-            path, 
-            semantics=[('class', 'cyclist')],
-            name=f"cyclist_{i}" 
-        )
-        cyclist_reps.append(rep_item)
+    scene_reps = {} 
+    
+    for obj_class, config in OBJECTS_CONFIG.items():
+        if obj_class not in assets_library: continue
+        
+        # Select randomly which models to use
+        paths_to_use = sample_assets_from_pool(assets_library[obj_class], config["count"], allow_duplicates=True)
+        
+        items_list = []
+        for i, path in enumerate(paths_to_use):
+            rep_item = rep.create.from_usd(
+                path, 
+                semantics=[('class', obj_class)],
+                name=f"{obj_class}_{i}" 
+            )
+            items_list.append(rep_item)
+            
+        scene_reps[obj_class] = items_list
+        print(f"--- Instantiated {len(items_list)} objects of class '{obj_class}' ---")
 
     # Run physics warmup
     for i in range(60):
@@ -608,27 +697,41 @@ def main():
                 look_at=current_target
             )
 
-        # D. POSITION CYCLISTS (Avoiding clipping)
-        poses = get_multiple_poses_near_target(
-            stage,
-            target_pos=current_target,
-            num_objects=len(cyclist_reps),
-            min_dist=2.5,
-            max_radius=4.0
-        )
+        # D. POSITION OBJECTS
+        all_poses_occupied = [] 
+        frame_failed = False
+        for obj_class, rep_items in scene_reps.items():
+            if not rep_items: continue
+            
+            config = OBJECTS_CONFIG[obj_class]
+            
+            poses = get_multiple_poses_near_target(
+                stage,
+                target_pos=current_target,
+                num_objects=len(rep_items),
+                min_dist=0.5,
+                max_radius=4.0,
+                existing_obstacles=all_poses_occupied,
+                wheelbase=config["wheelbase"]
+            )
 
-        # If no space was found for the bikes, we abort this frame as well
-        if len(poses) < len(cyclist_reps):
-             print("[RETRY] Could not place cyclists safely.")
-             continue
+            if len(poses) < len(rep_items):
+                 print(f"[RETRY] Could not place {obj_class} safely.")
+                 frame_failed = True
+                 break
+            
+            for rep_item, (pos, rot) in zip(rep_items, poses):
+                with rep_item:
+                    rep.modify.pose(
+                        position=pos,
+                        rotation=rot,
+                        scale=config["scale"]
+                    )
+                
+                all_poses_occupied.append(pos)
         
-        for rep_item, (pos, rot) in zip(cyclist_reps, poses):
-            with rep_item:
-                rep.modify.pose(
-                    position=pos,
-                    rotation=rot,
-                    # scale=UNIT_SCALE_FACTOR 
-                )
+        if frame_failed:
+            continue
 
         # E. SHOOT
         simulation_app.update()
