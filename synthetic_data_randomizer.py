@@ -175,16 +175,23 @@ def load_pbr_materials(stage):
     for i, folder_path in enumerate(material_folders):
         try:
             files = glob.glob(os.path.join(folder_path, "*.*"))
-            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None}
+            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "emission": None}
+            normal_gl = None
+            normal = None
             
             for f_path in files:
                 name = os.path.basename(f_path).lower()
                 if any(x in name for x in ["color", "diff", "alb"]): found_maps["diffuse"] = f_path
                 elif "rough" in name: found_maps["roughness"] = f_path
-                elif "norm" in name: found_maps["normal"] = f_path
+                elif "norm" in name:
+                    if "gl" in name:
+                        normal_gl = f_path
+                    else: normal = f_path
                 elif "ao" in name: found_maps["ao"] = f_path
+                elif any(x in name for x in ["emiss", "emit"]): found_maps["emission"] = f_path
 
             if not found_maps["diffuse"]: continue
+            found_maps["normal"] = normal_gl if normal_gl else normal
             
             # Create material ONLY with diffuse texture
             rep_mat = rep.create.material_omnipbr(
@@ -202,6 +209,10 @@ def load_pbr_materials(stage):
                     rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
                 if found_maps["ao"]:
                     rep.modify.attribute("inputs:ao_texture", found_maps["ao"])
+                if found_maps["emission"]:
+                    rep.modify.attribute("inputs:enable_emission", True)
+                    rep.modify.attribute("inputs:emissive_color_texture", found_maps["emission"])
+                    rep.modify.attribute("inputs:emissive_intensity", 50.0)
 
         except Exception as e:
             print(f"Error creating material from {folder_path}: {e}")
