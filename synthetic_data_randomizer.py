@@ -36,7 +36,7 @@ from omni.physx import get_physx_scene_query_interface
 
 
 # Increase subframes if shadows/ghosting appears of moving objects
-rep.settings.carb_settings("/omni/replicator/RTSubframes", 128)
+rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
 
 # CONSTANTS
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
@@ -46,9 +46,10 @@ TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "cyclist": {
-        "count": 2,           # How many objects we want
-        "wheelbase": 0.6,     # Physics: For incline calculation (None if not applicable)
-        "scale": 1.0
+        "pool_size": 20,                # Memory pool size
+        "num_visible_range": (2, 5),    # Number of visible objects per frame
+        "wheelbase": 0.6,               # Physics: For incline calculation (None if not applicable)
+        "scale": 1.0                    # Scale factor
     },
 }
 
@@ -169,13 +170,11 @@ def discover_objective_assets(base_dir, obj_dir):
         
         if os.path.exists(expected_usd):
             discovered_paths.append(expected_usd)
-            print(f"   -> Found asset (exact match): {folder_name}")
         else:
             # If the exact file doesn't exist, we search for any .usd inside the folder.
             fallback_search = glob.glob(os.path.join(folder_path, "*.usd*"))
             if fallback_search:
                 discovered_paths.append(fallback_search[0])
-                print(f"   -> Found asset (fallback): {os.path.basename(fallback_search[0])} in {folder_name}")
             else:
                 print(f"[WARN] Skipping folder '{folder_name}': No USD file found inside.")
 
@@ -607,16 +606,33 @@ def main():
         if found_paths:
             assets_library[obj_class] = found_paths
         else:
-            print(f"[WARN] No assets found for class '{obj_class}'. It will be skipped.")
+            print(f"[WARN] No assets found for class '{obj_class}'.")
     
     scene_reps = {} 
     
     for obj_class, config in OBJECTS_CONFIG.items():
         if obj_class not in assets_library: continue
         
-        # Select randomly which models to use
-        paths_to_use = sample_assets_from_pool(assets_library[obj_class], config["count"], allow_duplicates=True)
+        available_models = assets_library[obj_class]
+        num_unique = len(available_models)
+        target_pool_size = config["pool_size"]
         
+        paths_to_use = []
+        
+        # Ensure complete copies
+        full_copies = target_pool_size // num_unique
+        for _ in range(full_copies):
+            paths_to_use.extend(available_models)
+            
+        # Fill the remainder
+        remainder = target_pool_size - len(paths_to_use)
+        if remainder > 0:
+            paths_to_use.extend(random.sample(available_models, remainder))
+            
+        # Shuffle to avoid ordered patterns
+        random.shuffle(paths_to_use)
+        
+        # Instantiation
         items_list = []
         for i, path in enumerate(paths_to_use):
             rep_item = rep.create.from_usd(
@@ -627,7 +643,7 @@ def main():
             items_list.append(rep_item)
             
         scene_reps[obj_class] = items_list
-        print(f"--- Instantiated {len(items_list)} objects of class '{obj_class}' ---")
+        print(f"--- Pool Created: {len(items_list)} objects for '{obj_class}' (Balanced Mix) ---")
 
     # Run physics warmup
     for i in range(60):
@@ -697,38 +713,55 @@ def main():
                 look_at=current_target
             )
 
-        # D. POSITION OBJECTS
+        # D. POSITION OBJECTS (Visibility Toggling)
         all_poses_occupied = [] 
         frame_failed = False
+
         for obj_class, rep_items in scene_reps.items():
             if not rep_items: continue
             
             config = OBJECTS_CONFIG[obj_class]
             
+            # Select how many will be visible
+            min_v, max_v = config.get("num_visible_range", (1, 1))
+            count_visible = random.randint(min_v, max_v)
+            
+            # Select a random subset from the pool
+            candidates = rep_items[:]
+            random.shuffle(candidates)
+            
+            active_items = candidates[:count_visible]
+            inactive_items = candidates[count_visible:]
+            
+            # Calculate positions (Only for the active items)
             poses = get_multiple_poses_near_target(
                 stage,
                 target_pos=current_target,
-                num_objects=len(rep_items),
-                min_dist=0.5,
-                max_radius=4.0,
+                num_objects=len(active_items),
+                min_dist=1.5,
+                max_radius=6.0,
                 existing_obstacles=all_poses_occupied,
                 wheelbase=config["wheelbase"]
             )
 
-            if len(poses) < len(rep_items):
-                 print(f"[RETRY] Could not place {obj_class} safely.")
+            if len(poses) < len(active_items):
+                 print(f"[RETRY] Could not place {len(active_items)} {obj_class} safely.")
                  frame_failed = True
                  break
             
-            for rep_item, (pos, rot) in zip(rep_items, poses):
+            for rep_item, (pos, rot) in zip(active_items, poses):
                 with rep_item:
                     rep.modify.pose(
                         position=pos,
                         rotation=rot,
                         scale=config["scale"]
                     )
-                
+                    rep.modify.visibility(True)
                 all_poses_occupied.append(pos)
+
+            for rep_item in inactive_items:
+                with rep_item:
+                    rep.modify.visibility(False)
         
         if frame_failed:
             continue
@@ -738,7 +771,7 @@ def main():
         simulation_app.update()
         simulation_app.update()
 
-        rep.orchestrator.step(delta_time=0.0, rt_subframes=128)
+        rep.orchestrator.step(delta_time=0.0, rt_subframes=64)
         rep.BackendDispatch.wait_until_done()
 
         frames_generated += 1
