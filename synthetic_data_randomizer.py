@@ -46,7 +46,7 @@ TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "cyclist": {
-        "pool_size": 20,                # Memory pool size
+        "pool_size": 10,                # Memory pool size
         "num_visible_range": (2, 5),    # Number of visible objects per frame
         "wheelbase": 0.6,               # Physics: For incline calculation (None if not applicable)
         "scale": 1.0                    # Scale factor
@@ -579,6 +579,34 @@ def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0,
     return valid_poses
 
 
+def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visible=True):
+    """
+    Modifies the pose and visibility of a prim.
+    """
+    prim = stage.GetPrimAtPath(path)
+    if not prim.IsValid():
+        return
+
+    # Visibility
+    imageable = UsdGeom.Imageable(prim)
+    if visible:
+        imageable.MakeVisible()
+
+        # Pose
+        xform = UsdGeom.Xformable(prim)
+        xform.ClearXformOpOrder()
+        
+        # Add operations
+        try:
+            xform.AddTranslateOp().Set(Gf.Vec3d(float(position[0]), float(position[1]), float(position[2])))
+            xform.AddRotateXYZOp().Set(Gf.Vec3f(float(rotation[0]), float(rotation[1]), float(rotation[2])))
+            xform.AddScaleOp().Set(Gf.Vec3f(float(scale), float(scale), float(scale)))
+        except Exception as e:
+            print(f"[ERROR] Failed to set pose for {path}: {e}")
+    else:
+        imageable.MakeInvisible()
+
+
 def main():
     # --- 1. LOAD MAP (Scaled and Centered) ---
     map_path = os.path.join(os.getcwd(), "map", "Environment_variable.usd")
@@ -722,46 +750,74 @@ def main():
             
             config = OBJECTS_CONFIG[obj_class]
             
-            # Select how many will be visible
+            # 1. Select how many will be visible
             min_v, max_v = config.get("num_visible_range", (1, 1))
             count_visible = random.randint(min_v, max_v)
             
-            # Select a random subset from the pool
-            candidates = rep_items[:]
-            random.shuffle(candidates)
+            # 2. Select a random subset from the pool
+            indices = list(range(len(rep_items)))
+            random.shuffle(indices)
             
-            active_items = candidates[:count_visible]
-            inactive_items = candidates[count_visible:]
+            active_indices = indices[:count_visible]
+            inactive_indices = indices[count_visible:]
             
-            # Calculate positions (Only for the active items)
+            # 3. Calculate positions (Only for the active items)
             poses = get_multiple_poses_near_target(
                 stage,
                 target_pos=current_target,
-                num_objects=len(active_items),
+                num_objects=len(active_indices),
                 min_dist=1.5,
                 max_radius=6.0,
                 existing_obstacles=all_poses_occupied,
                 wheelbase=config["wheelbase"]
             )
 
-            if len(poses) < len(active_items):
-                 print(f"[RETRY] Could not place {len(active_items)} {obj_class} safely.")
+            if len(poses) < len(active_indices):
+                 print(f"[RETRY] Could not place {len(active_indices)} {obj_class} safely.")
                  frame_failed = True
                  break
             
-            for rep_item, (pos, rot) in zip(active_items, poses):
-                with rep_item:
-                    rep.modify.pose(
-                        position=pos,
-                        rotation=rot,
-                        scale=config["scale"]
+            # 4. Move and activate the VISIBLE ones
+            for idx, (pos, rot) in zip(active_indices, poses):
+                
+                item = rep_items[idx]
+                prim_name = f"{obj_class}_{idx}"
+                
+                found_prim = None
+                for p in stage.Traverse():
+                    if p.GetName() == prim_name:
+                        found_prim = p
+                        break
+                
+                if found_prim:
+                    update_prim_pose_and_visibility(
+                        stage, 
+                        found_prim.GetPath(), 
+                        pos, 
+                        rot, 
+                        config["scale"], 
+                        visible=True
                     )
-                    rep.modify.visibility(True)
-                all_poses_occupied.append(pos)
+                    all_poses_occupied.append(pos)
 
-            for rep_item in inactive_items:
-                with rep_item:
-                    rep.modify.visibility(False)
+            # 5. Hide the INVISIBLE ones
+            for idx in inactive_indices:
+                prim_name = f"{obj_class}_{idx}"
+                found_prim = None
+                for p in stage.Traverse():
+                    if p.GetName() == prim_name:
+                        found_prim = p
+                        break
+                
+                if found_prim:
+                     update_prim_pose_and_visibility(
+                        stage, 
+                        found_prim.GetPath(), 
+                        None, 
+                        None, 
+                        None, 
+                        visible=False
+                    )
         
         if frame_failed:
             continue
