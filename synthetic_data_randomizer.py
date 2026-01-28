@@ -7,8 +7,8 @@ import math
 
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", type=bool, default=False, help="Launch script headless, default is False")
-parser.add_argument("--height", type=int, default=544, help="Height of image")
-parser.add_argument("--width", type=int, default=960, help="Width of image")
+parser.add_argument("--height", type=int, default=816, help="Height of image") # 544
+parser.add_argument("--width", type=int, default=1440, help="Width of image") # 960
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
 parser.add_argument("--distractors", type=str, default="None",
                     help="Options are ")
@@ -38,16 +38,21 @@ from omni.physx import get_physx_scene_query_interface
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
 
-# CONSTANTS
+# GENERAL CONSTANTS
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
+
+# CAMERA CONSTANTS
+CAMERA_HEIGHT_RANGE = (30.0, 80.0)
+CAMERA_DISTANCE_RANGE = (10.0, 20.0)
+LOOKAT_JITTER_RADIUS = 2.5
 
 # ASSET POOLS
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "cyclist": {
         "pool_size": 10,                # Memory pool size
-        "num_visible_range": (2, 5),    # Number of visible objects per frame
+        "num_visible_range": (1, 7),    # Number of visible objects per frame
         "wheelbase": 0.6,               # Physics: For incline calculation (None if not applicable)
         "scale": 1.0                    # Scale factor
     },
@@ -342,16 +347,16 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             scale_val = random.uniform(s_min, s_max)
             rot_val = random.uniform(0, 360)
 
-            # color_val = Gf.Vec3f(
-            #     random.uniform(0.4, 1.0), 
-            #     random.uniform(0.4, 1.0), 
-            #     random.uniform(0.4, 1.0)
-            # )
+            color_val = Gf.Vec3f(
+                random.uniform(0.4, 1.0), 
+                random.uniform(0.4, 1.0), 
+                random.uniform(0.4, 1.0)
+            )
             
             # Apply changes to the shader attributes
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
-            # shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
+            shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
             shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
 
             normal_strength = random.uniform(1.5, 2.5) 
@@ -389,10 +394,10 @@ def get_drone_camera_pose(focus_target):
     
     # --- FLIGHT PARAMETERS ---
     # Distance to target (hypotenuse)
-    distance = random.uniform(5.0, 10.0) 
+    distance = random.uniform(CAMERA_DISTANCE_RANGE[0], CAMERA_DISTANCE_RANGE[1]) 
     
     # Angular height (Pitch):
-    elevation_deg = random.uniform(30.0, 60.0)
+    elevation_deg = random.uniform(CAMERA_HEIGHT_RANGE[0], CAMERA_HEIGHT_RANGE[1])
     elevation_rad = math.radians(elevation_deg)
     
     # Angle around the target (Azimuth)
@@ -733,12 +738,18 @@ def main():
         current_target = (tx, ty, tz)
         
         # C. POSITION CAMERA (Using Replicator LookAt)
+        jitter_angle = random.uniform(0, 2 * math.pi)
+        jitter_dist = random.uniform(0, LOOKAT_JITTER_RADIUS)
+        jx = tx + jitter_dist * math.cos(jitter_angle)
+        jy = ty + jitter_dist * math.sin(jitter_angle)
+        camera_look_at_target = (jx, jy, tz)
+
         cam_x, cam_y, cam_z = get_drone_camera_pose(current_target)
         
         with cam_rep:
             rep.modify.pose(
                 position=(cam_x, cam_y, cam_z),
-                look_at=current_target
+                look_at=camera_look_at_target
             )
 
         # D. POSITION OBJECTS (Visibility Toggling)
@@ -766,8 +777,8 @@ def main():
                 stage,
                 target_pos=current_target,
                 num_objects=len(active_indices),
-                min_dist=1.5,
-                max_radius=6.0,
+                min_dist=0.5,
+                max_radius=10.0,
                 existing_obstacles=all_poses_occupied,
                 wheelbase=config["wheelbase"]
             )
