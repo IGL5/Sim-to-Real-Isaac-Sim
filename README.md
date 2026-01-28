@@ -61,7 +61,3 @@ Run the script using the Isaac Sim Python interpreter (typically found in your I
 | `--height` | Image height | `816` |
 | `--headless` | Run in headless mode (no UI) | `False` |
 | `--data_dir` | Directory to save output data | `./_output_data` |
-
-## 🤝 Contributing
-
-Feel free to open issues or submit pull requests to improve the randomization logic or add new features.
