@@ -1,0 +1,230 @@
+import os
+import glob
+import random
+from isaacsim.core.utils.nucleus import get_assets_root_path
+from pxr import UsdShade, Gf, Sdf, Usd
+import omni.replicator.core as rep
+from modules import config
+
+def prefix_with_isaac_asset_server(relative_path):
+    assets_root_path = get_assets_root_path()
+    if assets_root_path is None:
+        raise Exception("Nucleus server not found, could not access Isaac Sim assets folder")
+    return assets_root_path + relative_path
+
+
+def discover_objective_assets(base_dir, obj_dir):
+    """
+    Scans automatically the assets folder to find objective models.
+    Expected structure: base_dir/obj_dir/[model_name]/[model_name].usd
+    """
+    objective_root = os.path.join(base_dir, obj_dir)
+    if not os.path.exists(objective_root):
+         print(f"[WARN] Objective root directory not found: {objective_root}")
+         return []
+
+    print(f"--- Scanning for objective assets in: {objective_root} ---")
+    discovered_paths = []
+    
+    try:
+        folder_names = [d for d in os.listdir(objective_root) if os.path.isdir(os.path.join(objective_root, d))]
+    except Exception as e:
+        print(f"[ERROR] Could not list directories: {e}")
+        return []
+
+    for folder_name in folder_names:
+        folder_path = os.path.join(objective_root, folder_name)
+        
+        # STRONG STRATEGY:
+        expected_usd = os.path.join(folder_path, f"{folder_name}.usd")
+        
+        if os.path.exists(expected_usd):
+            discovered_paths.append(expected_usd)
+        else:
+            # If the exact file doesn't exist, we search for any .usd inside the folder.
+            fallback_search = glob.glob(os.path.join(folder_path, "*.usd*"))
+            if fallback_search:
+                discovered_paths.append(fallback_search[0])
+            else:
+                print(f"[WARN] Skipping folder '{folder_name}': No USD file found inside.")
+
+    print(f"--- Total discovered objectives: {len(discovered_paths)} ({obj_dir}) ---")
+    return discovered_paths
+
+
+def load_pbr_materials(stage):
+    """
+    Loads PBR materials and manually assigns textures to avoid API errors.
+    Returns a list of UsdShade.Material.
+    """
+    if not os.path.exists(config.TEXTURES_ROOT_DIR):
+        print(f"[ERROR] Texture directory not found: {config.TEXTURES_ROOT_DIR}")
+        return []
+
+    material_folders = [f.path for f in os.scandir(config.TEXTURES_ROOT_DIR) if f.is_dir()]
+    print(f"--- Found {len(material_folders)} texture folders ---")
+    
+    # 1. ROBUST CREATION
+    for i, folder_path in enumerate(material_folders):
+        try:
+            files = glob.glob(os.path.join(folder_path, "*.*"))
+            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "emission": None}
+            normal_gl = None
+            normal = None
+            
+            for f_path in files:
+                name = os.path.basename(f_path).lower()
+                if any(x in name for x in ["color", "diff", "alb"]): found_maps["diffuse"] = f_path
+                elif "rough" in name: found_maps["roughness"] = f_path
+                elif "norm" in name:
+                    if "gl" in name:
+                        normal_gl = f_path
+                    else: normal = f_path
+                elif "ao" in name: found_maps["ao"] = f_path
+                elif any(x in name for x in ["emiss", "emit"]): found_maps["emission"] = f_path
+
+            if not found_maps["diffuse"]: continue
+            found_maps["normal"] = normal_gl if normal_gl else normal
+            
+            # Create material ONLY with diffuse texture
+            rep_mat = rep.create.material_omnipbr(
+                diffuse_texture=found_maps["diffuse"],
+                roughness=0.5,
+                specular=0.5,
+                count=1
+            )
+            
+            # Manually inject the rest of the maps using internal Shader names.
+            with rep_mat:
+                if found_maps["roughness"]:
+                    rep.modify.attribute("inputs:reflectionroughness_texture", found_maps["roughness"])
+                if found_maps["normal"]:
+                    rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
+                if found_maps["ao"]:
+                    rep.modify.attribute("inputs:ao_texture", found_maps["ao"])
+                if found_maps["emission"]:
+                    rep.modify.attribute("inputs:enable_emission", True)
+                    rep.modify.attribute("inputs:emissive_color_texture", found_maps["emission"])
+                    rep.modify.attribute("inputs:emissive_intensity", 50.0)
+
+        except Exception as e:
+            print(f"Error creating material from {folder_path}: {e}")
+            
+    # 2. COLLECTION
+    loaded_materials_prims = []
+    looks_scope = stage.GetPrimAtPath("/Replicator/Looks")
+    
+    if looks_scope and looks_scope.IsValid():
+        for child in looks_scope.GetChildren():
+            if child.IsA(UsdShade.Material):
+                loaded_materials_prims.append(UsdShade.Material(child))
+    
+    print(f"--- Successfully loaded {len(loaded_materials_prims)} USD materials ---")
+    return loaded_materials_prims
+
+
+def setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials):
+    """
+    Assigns random materials to meshes dynamically.
+    Iterates through all detected keys in terrain_paths_map
+    and assigns a random material to each group.
+    """
+    if not loaded_materials:
+        print("[WARN] No textures loaded. Skipping initial assignment.")
+        return
+
+    print(f"--- Assigning initial materials for found groups ---")
+
+    for key, paths in terrain_paths_map.items():
+        if not paths:
+            continue
+            
+        chosen_mat = random.choice(loaded_materials)
+        print(f"   -> Group '{key}': Assigning material to {len(paths)} objects.")
+
+        for path in paths:
+            prim = stage.GetPrimAtPath(path)
+            if prim.IsValid():
+                UsdShade.MaterialBindingAPI(prim).Bind(chosen_mat)
+            
+    print("--- Initial materials assigned successfully ---")
+
+
+def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials):
+    """
+    Choose UNIQUE materials for each terrain section in this frame.
+    """
+    if not loaded_materials:
+        return
+
+    # Adjusted scales
+    scale_flat = (1.0, 2.0)      
+    scale_mountain = (0.03, 0.05)
+
+    # 1. FILTER ACTIVE GROUPS
+    active_keys = [k for k, v in terrain_paths_map.items() if v]
+    num_needed = len(active_keys)
+
+    # 2. SELECTION OF MATERIALS WITHOUT REPETITION
+    if len(loaded_materials) >= num_needed:
+        selected_materials = random.sample(loaded_materials, k=num_needed)
+    else:
+        print(f"[WARN] Not enough unique materials ({len(loaded_materials)}) for groups ({num_needed}). Collisions may occur.")
+        selected_materials = random.choices(loaded_materials, k=num_needed)
+
+    # 3. ASSIGNMENT
+    for key, chosen_material in zip(active_keys, selected_materials):
+        paths = terrain_paths_map[key]
+
+        shader = None
+        for child in chosen_material.GetPrim().GetChildren():
+            if child.IsA(UsdShade.Shader):
+                shader = UsdShade.Shader(child)
+                break
+        
+        if shader:
+            # Scale logic based on terrain type
+            if "flat" in key.lower():
+                s_min, s_max = scale_flat
+            else:
+                s_min, s_max = scale_mountain
+
+            scale_val = random.uniform(s_min, s_max)
+            rot_val = random.uniform(0, 360)
+
+            color_val = Gf.Vec3f(
+                random.uniform(0.4, 1.0), 
+                random.uniform(0.4, 1.0), 
+                random.uniform(0.4, 1.0)
+            )
+            
+            # Apply changes to the shader attributes
+            shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
+            shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
+            shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
+            shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
+
+            normal_strength = random.uniform(1.5, 2.5) 
+            shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
+
+        # --- BIND ---
+        for path in paths:
+            prim = stage.GetPrimAtPath(path)
+            if prim.IsValid():
+                binding_api = UsdShade.MaterialBindingAPI(prim)
+                binding_api.Bind(chosen_material)
+
+
+def sample_assets_from_pool(asset_pool, num_samples, allow_duplicates=True):
+    """
+    Selects random assets from a list.
+    """
+    if not asset_pool:
+        return []
+    
+    if allow_duplicates:
+        return random.choices(asset_pool, k=num_samples)
+    else:
+        # Ensure we don't ask for more than available if duplicates are not allowed
+        k = min(num_samples, len(asset_pool))
+        return random.sample(asset_pool, k)
