@@ -8,7 +8,7 @@ import traceback
 from modules import config
 
 # --- ISAAC SIMULATION APP ---
-from omni.isaac.kit import SimulationApp
+from isaacsim.simulation_app import SimulationApp
 simulation_app = SimulationApp(launch_config=config.CONFIG)
 
 # --- ISAAC / USD / REP IMPORTS ---
@@ -77,17 +77,30 @@ def main():
         random.shuffle(paths_to_use)
         
         # Instantiation
-        items_list = []
+        items_paths = []
         for i, path in enumerate(paths_to_use):
+            prim_name = f"{obj_class}_{i}"
+
             rep_item = rep.create.from_usd(
                 path, 
                 semantics=[('class', obj_class)],
-                name=f"{obj_class}_{i}" 
+                name=prim_name
             )
-            items_list.append(rep_item)
             
-        scene_reps[obj_class] = items_list
-        print(f"--- Pool Created: {len(items_list)} objects for '{obj_class}' (Balanced Mix) ---")
+            # Look for path quickly knowing the name
+            found_path = None
+            for p in stage.Traverse():
+                if p.GetName() == prim_name:
+                    found_path = str(p.GetPath())
+                    break
+
+            if found_path:
+                items_paths.append(found_path)
+            else:
+                print(f"[ERROR] Could not find path for generated object: {prim_name}")
+            
+        scene_reps[obj_class] = items_paths
+        print(f"--- Pool Created: {len(items_paths)} objects for '{obj_class}' (Balanced Mix) ---")
 
     # Run physics warmup
     for i in range(60):
@@ -167,8 +180,8 @@ def main():
         all_poses_occupied = [] 
         frame_failed = False
 
-        for obj_class, rep_items in scene_reps.items():
-            if not rep_items: continue
+        for obj_class, object_paths in scene_reps.items():
+            if not object_paths: continue
             
             obj_config = config.OBJECTS_CONFIG[obj_class]
             
@@ -177,69 +190,50 @@ def main():
             count_visible = random.randint(min_v, max_v)
             
             # 2. Select a random subset from the pool
-            indices = list(range(len(rep_items)))
-            random.shuffle(indices)
+            current_paths = object_paths[:]
+            random.shuffle(current_paths)
             
-            active_indices = indices[:count_visible]
-            inactive_indices = indices[count_visible:]
+            active_paths = current_paths[:count_visible]
+            inactive_paths = current_paths[count_visible:]
             
             # 3. Calculate positions (Only for the active items)
             poses = scene_utils.get_multiple_poses_near_target(
                 stage,
                 target_pos=current_target,
-                num_objects=len(active_indices),
+                num_objects=len(active_paths),
                 min_dist=0.5,
                 max_radius=10.0,
                 existing_obstacles=all_poses_occupied,
                 wheelbase=obj_config["wheelbase"]
             )
 
-            if len(poses) < len(active_indices):
-                 print(f"[RETRY] Could not place {len(active_indices)} {obj_class} safely.")
+            if len(poses) < len(active_paths):
+                 print(f"[RETRY] Could not place {len(active_paths)} {obj_class} safely.")
                  frame_failed = True
                  break
             
             # 4. Move and activate the VISIBLE ones
-            for idx, (pos, rot) in zip(active_indices, poses):
-                
-                # item = rep_items[idx] # Not used visibly, but good to know
-                prim_name = f"{obj_class}_{idx}"
-                
-                found_prim = None
-                for p in stage.Traverse():
-                    if p.GetName() == prim_name:
-                        found_prim = p
-                        break
-                
-                if found_prim:
-                    scene_utils.update_prim_pose_and_visibility(
-                        stage, 
-                        found_prim.GetPath(), 
-                        pos, 
-                        rot, 
-                        obj_config["scale"], 
-                        visible=True
-                    )
-                    all_poses_occupied.append(pos)
+            for path_str, (pos, rot) in zip(active_paths, poses):
+                scene_utils.update_prim_pose_and_visibility(
+                    stage, 
+                    path_str,
+                    pos, 
+                    rot, 
+                    obj_config["scale"], 
+                    visible=True
+                )
+                all_poses_occupied.append(pos)
 
             # 5. Hide the INVISIBLE ones
-            for idx in inactive_indices:
-                prim_name = f"{obj_class}_{idx}"
-                found_prim = None
-                for p in stage.Traverse():
-                    if p.GetName() == prim_name:
-                        found_prim = p
-                        break
-                
-                if found_prim:
-                     scene_utils.update_prim_pose_and_visibility(
-                        stage, 
-                        found_prim.GetPath(), 
-                        None, 
-                        None, 
-                        None, 
-                        visible=False
-                    )
+            for path_str in inactive_paths:
+                scene_utils.update_prim_pose_and_visibility(
+                    stage, 
+                    path_str,
+                    None,
+                    None,
+                    None,
+                    visible=False
+                )
         
         if frame_failed:
             continue

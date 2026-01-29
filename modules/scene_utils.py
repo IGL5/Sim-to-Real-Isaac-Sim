@@ -76,35 +76,14 @@ def run_orchestrator(simulation_app):
     rep.orchestrator.stop()
 
 
-def update_camera_pose(camera_prim, eye, target):
-    """
-    Manually sets the camera pose using USD APIs.
-    eye: (x, y, z) position of camera
-    target: (x, y, z) point to look at
-    """
-    eye_gf = Gf.Vec3d(*eye)
-    target_gf = Gf.Vec3d(*target)
-    up_axis = Gf.Vec3d(0, 0, 1) # Z-up
-
-    # Calculate View Matrix (World -> Camera)
-    view_matrix = Gf.Matrix4d().SetLookAt(eye_gf, target_gf, up_axis)
-    
-    # Camera Transform is Inverse of View (Camera -> World)
-    # We set this transform on the camera prim
-    xform_api = UsdGeom.Xformable(camera_prim)
-    
-    xform_api.ClearXformOpOrder()
-    xform_api.AddTransformOp().Set(view_matrix.GetInverse())
-
-
 def get_ground_height(x, y):
     """
     Cast a ray from high up (z=500) downwards to find the ground.
     Returns the Z height of the hit point, or 0 if no hit.
     """
-    origin = carb.Float3(x, y, 500.0)
+    origin = carb.Float3(x, y, config.RAYCAST_START_HEIGHT)
     direction = carb.Float3(0, 0, -1.0)
-    distance = 1000.0 # Sufficient to cover the range
+    distance = config.RAYCAST_DISTANCE
     
     hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
     
