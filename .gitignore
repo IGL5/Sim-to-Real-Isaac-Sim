@@ -209,3 +209,10 @@ __marimo__/
 map/
 _output_data/
 assets/
+
+# YOLO trainig ingnore files
+YOLO/*.pt
+YOLO/runs/
+YOLO/dataset_yolo_output/
+YOLO/cyclist_detector/
+YOLO/audit_report/

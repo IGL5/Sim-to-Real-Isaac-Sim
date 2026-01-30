@@ -123,7 +123,7 @@ def main():
     # REPLICATOR CAMERA
     cam_rep = rep.create.camera(
         focal_length=18.0,
-        name="DroneCam" 
+        name="DroneCamera"
     )
     
     # Writer
