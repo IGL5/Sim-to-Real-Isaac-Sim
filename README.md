@@ -61,3 +61,16 @@ Run the script using the Isaac Sim Python interpreter (typically found in your I
 | `--height` | Image height | `816` |
 | `--headless` | Run in headless mode (no UI) | `False` |
 | `--data_dir` | Directory to save output data | `./_output_data` |
+
+
+## 🧠 Model Training (YOLOv8)
+
+This repository includes a complete pipeline to train a YOLOv8 object detector using the generated synthetic data. The training tools are located in the YOLO/ directory (or whatever you named the folder).
+
+The pipeline includes:
+
+- Automatic ETL: Converts Isaac Sim data to YOLO format.
+- Incremental Updates: Add new synthetic batches to your training set without overwriting.
+- Audit Tools: Generate HTML reports with Confusion Matrices and Heatmaps to validate sim-to-real performance.
+
+👉 [Go to Training Documentation](YOLO/README.md)
