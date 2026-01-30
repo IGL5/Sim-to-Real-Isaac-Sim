@@ -50,5 +50,31 @@ ENVIRONMENT_LOOKUP_KEYS = [
     # "Lake"
 ]
 
+# DISTRACTOR CONFIGURATION (Scatter)
+# Keys must match folder names in assets/objects/distractors/
+DISTRACTOR_CONFIG = {
+    "vegetation": {
+        "active": True,
+        "pool_size": 20,         # Variedad de modelos
+        "density_range": (5, 15), # Entre 5 y 15 árboles por frame
+        "scale_range": (0.8, 1.5),
+        "spawn_radius": (5.0, 25.0) # Distancia desde el centro (min, max)
+    },
+    "debris": {
+        "active": True,
+        "pool_size": 10,
+        "density_range": (10, 30), # Muchas piedras pequeñas
+        "scale_range": (0.1, 0.4),
+        "spawn_radius": (2.0, 15.0) # Más cerca de la cámara
+    }
+    "manmade": {
+        "active": True, # Podemos desactivarlo si el mapa es muy "salvaje"
+        "pool_size": 5,
+        "density_range": (0, 5),    # Menos cantidad, son más raros
+        "scale_range": (0.8, 1.2),
+        "spawn_radius": (10.0, 50.0)
+    }
+}
+
 # --- DEBUGGING ---
 DEBUG_WHEEL_CONTACT = False

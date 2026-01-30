@@ -19,6 +19,7 @@ import omni.replicator.core as rep
 
 from modules import scene_utils
 from modules import content
+from modules import scatter
 
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
@@ -102,6 +103,25 @@ def main():
         scene_reps[obj_class] = items_paths
         print(f"--- Pool Created: {len(items_paths)} objects for '{obj_class}' (Balanced Mix) ---")
 
+
+    # 4. SCATTER SETUP
+    distractor_pools = scatter.load_distractor_pools(config.ASSETS_ROOT_DIR, config.DISTRACTOR_CONFIG)
+    # This returns the list of Replicator objects already created but hidden
+    scene_distractors_reps = scatter.create_distractor_instances(distractor_pools, config.DISTRACTOR_CONFIG)
+    
+    # Pre-fetch paths to optimize
+    scene_distractors_paths = {}
+    for cat, items in scene_distractors_reps.items():
+        path_list = []
+        for i, item in enumerate(items):
+            # We assume name by convention or search
+            name = f"distractor_{cat}_{i}"
+            for p in stage.Traverse():
+                if p.GetName() == name:
+                    path_list.append(str(p.GetPath()))
+                    break
+        scene_distractors_paths[cat] = path_list
+
     # Run physics warmup
     for i in range(60):
         simulation_app.update()
@@ -141,7 +161,6 @@ def main():
     max_attempts = config.CONFIG["num_frames"] * 5 # Avoid infinite loops
     attempts = 0
     
-    # --- Main Loop ---
     while frames_generated < config.CONFIG["num_frames"] and attempts < max_attempts:
         attempts += 1
         print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
@@ -201,7 +220,7 @@ def main():
                 stage,
                 target_pos=current_target,
                 num_objects=len(active_paths),
-                min_dist=0.5,
+                min_dist=1.0,
                 max_radius=10.0,
                 existing_obstacles=all_poses_occupied,
                 wheelbase=obj_config["wheelbase"]
@@ -238,7 +257,56 @@ def main():
         if frame_failed:
             continue
 
-        # E. SHOOT
+        # E. POSITION DISTRACTORS (Manual Local Cloud)
+        distractor_poses_occupied = [] # To avoid them colliding with each other (optional)
+        
+        for category, paths in scene_distractors_paths.items():
+            settings = config.DISTRACTOR_CONFIG[category]
+            
+            # 1. How many do we want today? (Temporal Variability)
+            min_d, max_d = settings.get("density_range", (0, 0))
+            count_active = random.randint(min_d, max_d)
+            
+            # 2. Selection of active items
+            random.shuffle(paths) # Shuffle to use different models
+            active_paths = paths[:count_active]
+            inactive_paths = paths[count_active:]
+            
+            # 3. Calculate positions AROUND THE TARGET (Spatial Variability)
+            # We use a similar logic to get_multiple_poses... but simplified
+            min_r, max_r = settings.get("spawn_radius", (5.0, 20.0))
+            
+            # Generate poses quickly
+            dist_lax = 0.5
+
+            poses = scene_utils.get_multiple_poses_near_target(
+                stage,
+                target_pos=current_target, # Camera center
+                num_objects=len(active_paths),
+                min_dist=dist_lax, # Don't get too close
+                max_radius=max_r,
+                # Optional: pass all_poses_occupied (cyclists) if we don't want them to collide with bikes
+                existing_obstacles=all_poses_occupied, 
+                wheelbase=None # Static mode (only Z, no pitch)
+            )
+            
+            # 4. Move Active Items
+            for path_str, (pos, rot) in zip(active_paths, poses):
+                # Random scale variation per frame
+                s_min, s_max = settings.get("scale_range", (1.0, 1.0))
+                scale_rnd = random.uniform(s_min, s_max)
+                
+                scene_utils.update_prim_pose_and_visibility(
+                    stage, path_str, pos, rot, scale_rnd, visible=True
+                )
+                
+            # 5. Hide Inactive Items
+            for path_str in inactive_paths:
+                scene_utils.update_prim_pose_and_visibility(
+                    stage, path_str, None, None, None, visible=False
+                )
+
+        # F. SHOOT
         simulation_app.update()
         simulation_app.update()
         simulation_app.update()
