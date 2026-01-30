@@ -26,7 +26,8 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
 │   └── __init__.py
 ├── assets/                       # Objects and Textures
 ├── map/                          # Environment USD files
-└── _output_data/                 # Generated dataset output (created automatically)
+├── _output_data/                 # Generated dataset output (created automatically)
+└── YOLO/                         # YOLOv8 training and validation pipeline
 ```
 
 ## 🛠️ Prerequisites
@@ -61,3 +62,16 @@ Run the script using the Isaac Sim Python interpreter (typically found in your I
 | `--height` | Image height | `816` |
 | `--headless` | Run in headless mode (no UI) | `False` |
 | `--data_dir` | Directory to save output data | `./_output_data` |
+
+
+## 🧠 Model Training (YOLOv8)
+
+This repository includes a complete pipeline to train a YOLOv8 object detector using the generated synthetic data. The training tools are located in the YOLO/ directory.
+
+The pipeline includes:
+
+- Automatic ETL: Converts Isaac Sim data to YOLO format.
+- Training Management: Gets the best model based on validation metrics.
+- Audit Tools: Generate HTML reports with Confusion Matrices and Heatmaps to validate sim-to-real performance.
+
+👉 [Go to Training Documentation](YOLO/README.md)
