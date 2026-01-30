@@ -4,7 +4,7 @@ from ultralytics import YOLO
 import torch
 import argparse
 
-# CONFIG
+# DEFAULT CONFIGURATION
 DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
 
 TRAIN_IMGS = "images/train" 
@@ -14,19 +14,18 @@ TEST_REL  = "images/test"
 TRAIN_LABELS = "labels"
 
 PROJECT_NAME = "cyclist_detector"
-EXPERIMENT_NAME = "v1_yolov8_small"
+DEFAULT_EXP_NAME = "yolov8_s_default"
 
 # Model type
 # 'yolov8n.pt' -> Nano (Very fast, ideal for drones/Jetson Nano)
 # 'yolov8s.pt' -> Small (Balanced)
 # 'yolov8m.pt' -> Medium (More precise, requires good GPU)
-MODEL_TYPE = 'yolov8s.pt'
+DEFAULT_MODEL = 'yolov8s.pt'
 
 # Training params
-EPOCHS = 50
+DEFAULT_EPOCHS = 50
 IMG_SIZE = 640
 BATCH_SIZE = 16
-
 WORKERS = 4
 
 
@@ -73,31 +72,94 @@ def create_yaml_config():
     return yaml_path
 
 
+def interactive_selection():
+    """
+    Interactive flow to select version, size and name.
+    """
+    print("\n--- 🎛️ INTERACTIVE CONFIGURATION ---")
+    
+    # 1. Select YOLO version
+    version_input = input("Use YOLOv8 or YOLO11? [8/11] (default 8): ").strip()
+    if version_input == "11":
+        ver_prefix = "yolo11"
+        print("   -> Selected: YOLO11")
+    else:
+        ver_prefix = "yolov8"
+        print("   -> Selected: YOLOv8 (Default)")
+
+    # 2. Select model size
+    size_input = input("Model Size? [n/s/m] (default s): ").strip().lower()
+    if size_input == 'n':
+        size_suffix = 'n'
+        print("   -> Selected: Nano")
+    elif size_input == 'm':
+        size_suffix = 'm'
+        print("   -> Selected: Medium")
+    else:
+        size_suffix = 's'
+        print("   -> Selected: Small (Default)")
+
+    model_to_use = f"{ver_prefix}{size_suffix}.pt"
+
+    # 3. Select experiment name
+    default_name = f"{ver_prefix}_{size_suffix}_custom"
+    name_input = input(f"Experiment Name? (default '{default_name}'): ").strip()
+    
+    if name_input:
+        exp_name = name_input
+        print(f"   -> Name: {exp_name}")
+    else:
+        exp_name = default_name
+        print(f"   -> Name: {default_name} (Default)")
+
+    print("--------------------------------------\n")
+    return model_to_use, exp_name
+
+
 def main():
     parser = argparse.ArgumentParser(description="YOLO Training Tool")
     
     # Options
-    parser.add_argument('--epochs', type=int, default=None, help="Number of epochs")
+    parser.add_argument('--epochs', type=int, default=None, help="Override number of epochs")
+    parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
     device = check_gpu()
-    print(f"--- Starting training with {MODEL_TYPE} ---")
+
+    # Model selection logic
+    model_type = None
+    experiment_name = None
+    if args.select:
+        model_type, experiment_name = interactive_selection()
+    else:
+        model_type = DEFAULT_MODEL
+        experiment_name = DEFAULT_EXP_NAME
+
+    # Define epochs
+    epochs_to_run = args.epochs if args.epochs else DEFAULT_EPOCHS
+
+    print(f"🚀 Starting training: {model_type} | Epochs: {epochs_to_run} | Exp: {experiment_name}")
 
     # 1. Create the treasure map (YAML)
     yaml_file = create_yaml_config()
 
     # 2. Load the model
-    model = YOLO(MODEL_TYPE)
+    try:
+        model = YOLO(model_type)
+    except Exception as e:
+        print(f"❌ Error loading model {model_type}. Make sure ultralytics is updated.")
+        print(e)
+        return
 
     # 3. Train
-    results = model.train(
+    model.train(
         data=yaml_file,
-        epochs=args.epochs if args.epochs else EPOCHS, 
+        epochs=epochs_to_run, 
         imgsz=IMG_SIZE,
         batch=BATCH_SIZE,
         workers=WORKERS,
         project=PROJECT_NAME,
-        name=EXPERIMENT_NAME,
+        name=experiment_name,
         device=device,
         patience=15,   # If it doesn't improve in 15 epochs, stop.
         save=True,     # Save the best model
@@ -106,7 +168,7 @@ def main():
     )
 
     print("\n--- Training completed ---")
-    best_weight = os.path.join(PROJECT_NAME, EXPERIMENT_NAME, 'weights', 'best.pt')
+    best_weight = os.path.join(PROJECT_NAME, experiment_name, 'weights', 'best.pt')
     print(f"💾 Best model saved at: {best_weight}")
 
     # 4. Validation (TEST SET)

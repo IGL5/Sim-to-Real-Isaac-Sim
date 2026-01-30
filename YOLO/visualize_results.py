@@ -14,9 +14,10 @@ except ImportError:
     print("   Make sure both files are in the same folder.")
     sys.exit(1)
 
-# --- CONFIG ---
-# Adjust paths if necessary
-MODEL_PATH = os.path.join(os.getcwd(), "cyclist_detector", "v1_yolov8_small", "weights", "best.pt")
+# --- CONFIGURATION ---
+# Base directory where experiments are saved
+PROJECT_DIR = os.path.join(os.getcwd(), "cyclist_detector")
+DEFAULT_EXP_NAME = "yolov8_s_default"
 
 # Default paths (Test Dataset)
 DEFAULT_TEST_IMAGES = os.path.join(os.getcwd(), "dataset_yolo_output", "images", "test")
@@ -31,16 +32,40 @@ IOU_THRESHOLD = 0.5
 LIMIT_IMAGES = 100 
 
 
+# --- MODEL SELECTION ---
+
+def select_model_path():
+    """
+    Interactively selects the model path.
+    """
+    print("\n--- 🤖 MODEL SELECTION ---")
+    
+    # Check if project dir exists
+    if not os.path.exists(PROJECT_DIR):
+        print(f"⚠️ Warning: Project directory '{PROJECT_DIR}' not found.")
+        print("   (Maybe you haven't trained any model yet?)")
+    
+    user_input = input(f"Enter experiment name (default: '{DEFAULT_EXP_NAME}'): ").strip()
+    
+    exp_name = user_input if user_input else DEFAULT_EXP_NAME
+    
+    # Construct path: project/exp_name/weights/best.pt
+    path = os.path.join(PROJECT_DIR, exp_name, "weights", "best.pt")
+    
+    print(f"-> Selected model: {path}\n")
+    return path
+
+
 # --- UTILITIES ---
 
-def check_system_integrity(check_dataset=False):
+def check_system_integrity(model_path, check_dataset=False):
     """
     Checks that everything necessary exists before starting.
     """
     # 1. Check Model
-    if not os.path.exists(MODEL_PATH):
+    if not os.path.exists(model_path):
         print(f"❌ ERROR: Not finding the model file in:")
-        print(f"   -> {MODEL_PATH}")
+        print(f"   -> {model_path}")
         print("   Did you run the training script (train_YOLO.py)?")
         return False
 
@@ -96,9 +121,9 @@ def draw_boxes(img, boxes, color=(0, 255, 0), label="", confidences=None):
 
 # --- EXECUTION MODES ---
 
-def run_audit_mode(draw_all=False):
+def run_audit_mode(model_path, draw_all=False):
     """ Audit mode (Dataset Test with Labels) """
-    if not check_system_integrity(check_dataset=True):
+    if not check_system_integrity(model_path, check_dataset=True):
         return
 
     print(f"--- 🕵️ STARTING AUDIT (Draw All: {draw_all}) ---")
@@ -119,7 +144,7 @@ def run_audit_mode(draw_all=False):
         print(f"📂 Separating errors in: {path_fn} and {path_fp}")
 
     reporter = ReportGenerator(OUTPUT_DIR, IOU_THRESHOLD)
-    model = YOLO(MODEL_PATH)
+    model = YOLO(model_path)
     
     image_files = glob.glob(os.path.join(DEFAULT_TEST_IMAGES, "*.*"))
     print(f"📸 Processing {len(image_files)} images...")
@@ -186,9 +211,9 @@ def run_audit_mode(draw_all=False):
     reporter.generate_html_report()
 
 
-def run_inference_mode(source_folder):
+def run_inference_mode(model_path, source_folder):
     """ Inference Mode (New images without labels) """
-    if not check_system_integrity(check_dataset=False):
+    if not check_system_integrity(model_path, check_dataset=False):
         return
 
     if not os.path.exists(source_folder):
@@ -200,7 +225,7 @@ def run_inference_mode(source_folder):
     if os.path.exists(save_dir): shutil.rmtree(save_dir)
     os.makedirs(save_dir)
     
-    model = YOLO(MODEL_PATH)
+    model = YOLO(model_path)
     images = glob.glob(os.path.join(source_folder, "*.*"))
     
     if not images:
@@ -221,9 +246,9 @@ def run_inference_mode(source_folder):
     print(f"✅ Results saved in: {save_dir}")
 
 
-def run_video_mode(video_path):
+def run_video_mode(model_path, video_path):
     """ Video Mode """
-    if not check_system_integrity(check_dataset=False):
+    if not check_system_integrity(model_path, check_dataset=False):
         return
 
     if not os.path.exists(video_path):
@@ -234,7 +259,7 @@ def run_video_mode(video_path):
     print(f"Processing: {video_path}")
     print("This may take a while depending on the duration...")
 
-    model = YOLO(MODEL_PATH)
+    model = YOLO(model_path)
     
     # save=True makes YOLO automatically save the video in runs/detect/predict...
     # stream=True saves memory on long videos
@@ -258,11 +283,14 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
+    # Ask for Model Name (or use default)
+    selected_model_path = select_model_path()
+
     # Mode Selector
     if args.video:
-        run_video_mode(args.video)
+        run_video_mode(selected_model_path, args.video)
     elif args.source:
-        run_inference_mode(args.source)
+        run_inference_mode(selected_model_path, args.source)
     else:
         # Default: Audit the test dataset
-        run_audit_mode(draw_all=args.draw_all)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all)

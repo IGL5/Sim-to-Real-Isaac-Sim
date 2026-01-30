@@ -46,20 +46,25 @@ python dataset_manager.py --append
 
 Downloads the pre-trained model (YOLOv8 Small by default) and performs fine-tuning with your data.
 
-# Standard training (50 epochs)
+### Execution Options:
+
+1. **Standard Training (Automatic):** Uses the default configuration (YOLOv8 Small, 50 epochs).
 
 ```bash
 python train_YOLO.py
 ```
 
-# Customize duration
+2. **Customize Duration:** Overrides the number of epochs without changing the rest of the configuration.
+
 ```bash
 python train_YOLO.py --epochs 100
 ```
 
-- **Output:** Model weights are saved in `cyclist_detector/v1_yolov8_small/weights/best.pt`.
+3. **Interactive Mode (Model Selection):** Opens a console assistant to choose the YOLO version (v8 or v11), model size (Nano, Small, Medium), and experiment name.
 
-- **Export:** Upon completion, a `.onnx` version ready for production is automatically generated.
+```bash
+python train_YOLO.py --select
+```
 
 ### Step 3: Audit and Visualization (visualize_results.py)
 
