@@ -1,511 +1,27 @@
 import os
-import glob
-import argparse
 import random
 import math
-
-
-parser = argparse.ArgumentParser("Dataset generator")
-parser.add_argument("--headless", type=bool, default=False, help="Launch script headless, default is False")
-parser.add_argument("--height", type=int, default=544, help="Height of image")
-parser.add_argument("--width", type=int, default=960, help="Width of image")
-parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
-parser.add_argument("--distractors", type=str, default="None",
-                    help="Options are 'warehouse', 'additional' or None (default)")
-parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data",
-                    help="Location where data will be output")
-
-args, unknown_args = parser.parse_known_args()
-
-# "renderer": "RayTracedLighting" is another option to consider
-CONFIG = {"renderer": "PathTracing", "headless": args.headless,
-          "width": args.width, "height": args.height, "num_frames": args.num_frames}
-
-
-from omni.isaac.kit import SimulationApp
-simulation_app = SimulationApp(launch_config=CONFIG)
-
-
 import carb
-from isaacsim.core.utils.nucleus import get_assets_root_path
+import traceback
+
+# --- MODULES ---
+from modules import config
+
+# --- ISAAC SIMULATION APP ---
+from isaacsim.simulation_app import SimulationApp
+simulation_app = SimulationApp(launch_config=config.CONFIG)
+
+# --- ISAAC / USD / REP IMPORTS ---
 from isaacsim.core.utils.stage import get_current_stage, open_stage
 from omni.timeline import get_timeline_interface
-from pxr import UsdPhysics, PhysxSchema, Semantics, UsdShade, Sdf, UsdGeom, Gf, Usd
+from pxr import UsdPhysics, Sdf
 import omni.replicator.core as rep
-from omni.physx import get_physx_scene_query_interface
 
+from modules import scene_utils
+from modules import content
 
 # Increase subframes if shadows/ghosting appears of moving objects
-rep.settings.carb_settings("/omni/replicator/RTSubframes", 128)
-
-# CONSTANTS
-WORLD_LIMITS = (-1300, 1300, -1300, 1300)
-TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
-
-# ASSET POOLS
-CYCLIST_ASSET_POOL = [
-    os.path.join(os.getcwd(), "assets", "cyclist", "cyclist_road_bike_black.usd"),
-]
-# UNIT_SCALE_FACTOR = 0.01
-
-# --- CONFIGURATION: ENVIRONMENT TARGETS ---
-ENVIRONMENT_LOOKUP_KEYS = [
-    "Terrain",
-    "Terrain_flat",
-    # "Road",
-    # "Path",
-    # "Lake"
-]
-
-# --- DEBUGGING ---
-DEBUG_WHEEL_CONTACT = False
-
-
-def find_prims_by_material_name(stage, material_names):
-    """
-    Finds prims matching material names. 
-    Ensures a prim is assigned to ONLY ONE group (the most specific one)
-    to avoid Replicator conflicts.
-    """
-    found_paths = {name: [] for name in material_names}
-    
-    sorted_keys = sorted(material_names, key=len, reverse=True)
-    
-    for prim in stage.Traverse():
-        if not prim.IsA(UsdGeom.Mesh): 
-            continue
-            
-        binding_api = UsdShade.MaterialBindingAPI(prim)
-        if binding_api:
-            direct_binding = binding_api.GetDirectBinding()
-            material = direct_binding.GetMaterial()
-            if material:
-                mat_path = material.GetPath()
-                mat_name = mat_path.name
-                
-                for target_name in sorted_keys:
-                    if target_name in mat_name:
-                        found_paths[target_name].append(str(prim.GetPath()))
-                        break 
-    
-    return found_paths
-
-
-def update_semantics(stage, keep_semantics=[]):
-    """ Remove semantics from the stage except for keep_semantic classes"""
-    for prim in stage.Traverse():
-        if prim.HasAPI(Semantics.SemanticsAPI):
-            processed_instances = set()
-            for property in prim.GetProperties():
-                is_semantic = Semantics.SemanticsAPI.IsSemanticsAPIPath(property.GetPath())
-                if is_semantic:
-                    instance_name = property.SplitName()[1]
-                    if instance_name in processed_instances:
-                        continue
-
-                    processed_instances.add(instance_name)
-                    sem = Semantics.SemanticsAPI.Get(prim, instance_name)
-                    type_attr = sem.GetSemanticTypeAttr()
-                    data_attr = sem.GetSemanticDataAttr()
-
-                    for semantic_class in keep_semantics:
-                        # Check for our data classes needed for the model
-                        if data_attr.Get() == semantic_class:
-                            continue
-                        else:
-                            # remove semantics of all other prims
-                            prim.RemoveProperty(type_attr.GetName())
-                            prim.RemoveProperty(data_attr.GetName())
-                            prim.RemoveAPI(Semantics.SemanticsAPI, instance_name)
-
-
-def prefix_with_isaac_asset_server(relative_path):
-    assets_root_path = get_assets_root_path()
-    if assets_root_path is None:
-        raise Exception("Nucleus server not found, could not access Isaac Sim assets folder")
-    return assets_root_path + relative_path
-
-
-def run_orchestrator():
-    rep.orchestrator.run()
-
-    while not rep.orchestrator.get_is_started():
-        simulation_app.update()
-    while rep.orchestrator.get_is_started():
-        simulation_app.update()
-
-    rep.BackendDispatch.wait_until_done()
-    rep.orchestrator.stop()
-
-
-def update_camera_pose(camera_prim, eye, target):
-    """
-    Manually sets the camera pose using USD APIs.
-    eye: (x, y, z) position of camera
-    target: (x, y, z) point to look at
-    """
-    eye_gf = Gf.Vec3d(*eye)
-    target_gf = Gf.Vec3d(*target)
-    up_axis = Gf.Vec3d(0, 0, 1) # Z-up
-
-    # Calculate View Matrix (World -> Camera)
-    view_matrix = Gf.Matrix4d().SetLookAt(eye_gf, target_gf, up_axis)
-    
-    # Camera Transform is Inverse of View (Camera -> World)
-    # We set this transform on the camera prim
-    xform_api = UsdGeom.Xformable(camera_prim)
-    
-    xform_api.ClearXformOpOrder()
-    xform_api.AddTransformOp().Set(view_matrix.GetInverse())
-
-
-def load_pbr_materials(stage):
-    """
-    Loads PBR materials and manually assigns textures to avoid API errors.
-    Returns a list of UsdShade.Material.
-    """
-    if not os.path.exists(TEXTURES_ROOT_DIR):
-        print(f"[ERROR] Texture directory not found: {TEXTURES_ROOT_DIR}")
-        return []
-
-    material_folders = [f.path for f in os.scandir(TEXTURES_ROOT_DIR) if f.is_dir()]
-    print(f"--- Found {len(material_folders)} texture folders ---")
-    
-    # 1. ROBUST CREATION
-    for i, folder_path in enumerate(material_folders):
-        try:
-            files = glob.glob(os.path.join(folder_path, "*.*"))
-            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "emission": None}
-            normal_gl = None
-            normal = None
-            
-            for f_path in files:
-                name = os.path.basename(f_path).lower()
-                if any(x in name for x in ["color", "diff", "alb"]): found_maps["diffuse"] = f_path
-                elif "rough" in name: found_maps["roughness"] = f_path
-                elif "norm" in name:
-                    if "gl" in name:
-                        normal_gl = f_path
-                    else: normal = f_path
-                elif "ao" in name: found_maps["ao"] = f_path
-                elif any(x in name for x in ["emiss", "emit"]): found_maps["emission"] = f_path
-
-            if not found_maps["diffuse"]: continue
-            found_maps["normal"] = normal_gl if normal_gl else normal
-            
-            # Create material ONLY with diffuse texture
-            rep_mat = rep.create.material_omnipbr(
-                diffuse_texture=found_maps["diffuse"],
-                roughness=0.5,
-                specular=0.5,
-                count=1
-            )
-            
-            # Manually inject the rest of the maps using internal Shader names.
-            with rep_mat:
-                if found_maps["roughness"]:
-                    rep.modify.attribute("inputs:reflectionroughness_texture", found_maps["roughness"])
-                if found_maps["normal"]:
-                    rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
-                if found_maps["ao"]:
-                    rep.modify.attribute("inputs:ao_texture", found_maps["ao"])
-                if found_maps["emission"]:
-                    rep.modify.attribute("inputs:enable_emission", True)
-                    rep.modify.attribute("inputs:emissive_color_texture", found_maps["emission"])
-                    rep.modify.attribute("inputs:emissive_intensity", 50.0)
-
-        except Exception as e:
-            print(f"Error creating material from {folder_path}: {e}")
-            
-    # 2. COLLECTION
-    loaded_materials_prims = []
-    looks_scope = stage.GetPrimAtPath("/Replicator/Looks")
-    
-    if looks_scope and looks_scope.IsValid():
-        for child in looks_scope.GetChildren():
-            if child.IsA(UsdShade.Material):
-                loaded_materials_prims.append(UsdShade.Material(child))
-    
-    print(f"--- Successfully loaded {len(loaded_materials_prims)} USD materials ---")
-    return loaded_materials_prims
-
-def setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials):
-    """
-    Assigns random materials to meshes dynamically.
-    Iterates through all detected keys in terrain_paths_map
-    and assigns a random material to each group.
-    """
-    if not loaded_materials:
-        print("[WARN] No textures loaded. Skipping initial assignment.")
-        return
-
-    print(f"--- Assigning initial materials for found groups ---")
-
-    for key, paths in terrain_paths_map.items():
-        if not paths:
-            continue
-            
-        chosen_mat = random.choice(loaded_materials)
-        print(f"   -> Group '{key}': Assigning material to {len(paths)} objects.")
-
-        for path in paths:
-            prim = stage.GetPrimAtPath(path)
-            if prim.IsValid():
-                UsdShade.MaterialBindingAPI(prim).Bind(chosen_mat)
-            
-    print("--- Initial materials assigned successfully ---")
-
-
-def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials):
-    """
-    Choose UNIQUE materials for each terrain section in this frame.
-    """
-    if not loaded_materials:
-        return
-
-    # Adjusted scales
-    scale_flat = (1.0, 2.0)      
-    scale_mountain = (0.03, 0.05)
-
-    # 1. FILTER ACTIVE GROUPS
-    active_keys = [k for k, v in terrain_paths_map.items() if v]
-    num_needed = len(active_keys)
-
-    # 2. SELECTION OF MATERIALS WITHOUT REPETITION
-    if len(loaded_materials) >= num_needed:
-        selected_materials = random.sample(loaded_materials, k=num_needed)
-    else:
-        print(f"[WARN] Not enough unique materials ({len(loaded_materials)}) for groups ({num_needed}). Collisions may occur.")
-        selected_materials = random.choices(loaded_materials, k=num_needed)
-
-    # 3. ASSIGNMENT
-    for key, chosen_material in zip(active_keys, selected_materials):
-        paths = terrain_paths_map[key]
-
-        shader = None
-        for child in chosen_material.GetPrim().GetChildren():
-            if child.IsA(UsdShade.Shader):
-                shader = UsdShade.Shader(child)
-                break
-        
-        if shader:
-            # Scale logic based on terrain type
-            if "flat" in key.lower():
-                s_min, s_max = scale_flat
-            else:
-                s_min, s_max = scale_mountain
-
-            scale_val = random.uniform(s_min, s_max)
-            rot_val = random.uniform(0, 360)
-
-            # color_val = Gf.Vec3f(
-            #     random.uniform(0.4, 1.0), 
-            #     random.uniform(0.4, 1.0), 
-            #     random.uniform(0.4, 1.0)
-            # )
-            
-            # Apply changes to the shader attributes
-            shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
-            shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
-            # shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
-            shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
-
-            normal_strength = random.uniform(1.5, 2.5) 
-            shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
-
-        # --- BIND ---
-        for path in paths:
-            prim = stage.GetPrimAtPath(path)
-            if prim.IsValid():
-                binding_api = UsdShade.MaterialBindingAPI(prim)
-                binding_api.Bind(chosen_material)
-
-
-def get_ground_height(x, y):
-    """
-    Cast a ray from high up (z=500) downwards to find the ground.
-    Returns the Z height of the hit point, or 0 if no hit.
-    """
-    origin = carb.Float3(x, y, 500.0)
-    direction = carb.Float3(0, 0, -1.0)
-    distance = 1000.0 # Sufficient to cover the range
-    
-    hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
-    
-    if hit["hit"]:
-        return hit["position"][2] # Return Z component
-    return -9999.0
-
-def get_drone_camera_pose(focus_target):
-    """
-    Calculates the position of the camera orbiting around a point of interest (focus_target).
-    Simulates a drone flight.
-    """
-    tx, ty, tz = focus_target
-    
-    # --- FLIGHT PARAMETERS ---
-    # Distance to target (hypotenuse)
-    distance = random.uniform(5.0, 10.0) 
-    
-    # Angular height (Pitch):
-    elevation_deg = random.uniform(30.0, 60.0)
-    elevation_rad = math.radians(elevation_deg)
-    
-    # Angle around the target (Azimuth)
-    azimuth_deg = random.uniform(0, 360)
-    azimuth_rad = math.radians(azimuth_deg)
-    
-    # --- POSITION CALCULATION (SPHERICAL COORDINATES) ---
-    cam_z = tz + distance * math.sin(elevation_rad)
-    
-    # Projection on the XY plane (how far we move horizontally)
-    dist_xy = distance * math.cos(elevation_rad)
-    
-    cam_x = tx + dist_xy * math.cos(azimuth_rad)
-    cam_y = ty + dist_xy * math.sin(azimuth_rad)
-    
-    # --- EXTRA SAFETY ---
-    ground_under_cam = get_ground_height(cam_x, cam_y)
-    
-    if cam_z < ground_under_cam + 5.0:
-        cam_z = ground_under_cam + 5.0
-
-    return (cam_x, cam_y, cam_z)
-
-
-def sample_assets_from_pool(asset_pool, num_samples, allow_duplicates=True):
-    """
-    Selects random assets from a list.
-    """
-    if not asset_pool:
-        return []
-    
-    if allow_duplicates:
-        return random.choices(asset_pool, k=num_samples)
-    else:
-        # Ensure we don't ask for more than available if duplicates are not allowed
-        k = min(num_samples, len(asset_pool))
-        return random.sample(asset_pool, k)
-
-
-def calculate_pitch_on_terrain(stage, x, y, yaw_degrees, wheelbase):
-    """
-    Calculates the pitch and adjusted Z height so that an object
-    rests correctly on the terrain.
-    
-    Args:
-        x, y: Center coordinates of the object.
-        yaw_degrees: Object orientation (where it faces).
-        wheelbase: Distance between axles in METERS.
-    
-    Returns:
-        (pitch_degrees, z_center_adjusted): Pitch angle and new Z height.
-        Returns (None, None) if any raycast fails.
-    """
-    # 1. Convert direction angle (Yaw) to unit vector
-    yaw_rad = math.radians(yaw_degrees)
-    dir_x = math.cos(yaw_rad)
-    dir_y = math.sin(yaw_rad)
-    
-    # 2. Calculate wheel positions (Front and Rear)
-    # Assume (x,y) is the center, so displace half the wheelbase
-    half_len = wheelbase / 2.0
-    
-    front_x = x + dir_x * half_len
-    front_y = y + dir_y * half_len
-    
-    back_x = x - dir_x * half_len
-    back_y = y - dir_y * half_len
-    
-    # 3. Raycast at each wheel
-    z_front = get_ground_height(front_x, front_y)
-    z_back = get_ground_height(back_x, back_y)
-    
-    # If any raycast returns the error value, abort
-    if z_front == -9999.0 or z_back == -9999.0: 
-        return None, None
-
-    # --- VISUAL DEBUG ---
-    if DEBUG_WHEEL_CONTACT:
-        draw_debug_cube(stage, (front_x, front_y, z_front))
-        draw_debug_cube(stage, (back_x, back_y, z_back))
-
-    # 4. Calculate pitch angle
-    delta_z = z_front - z_back
-    pitch_rad = math.atan2(delta_z, wheelbase)
-    pitch_deg = math.degrees(pitch_rad)
-    
-    # 5. Calculate center Z
-    z_center_adjusted = (z_front + z_back) / 2.0
-    
-    return pitch_deg, z_center_adjusted
-
-
-def draw_debug_cube(stage, position):
-    """ 
-    Draws a red cube at the given position.
-    Generates its own random name to avoid depending on external logic.
-    """
-    rand_id = random.randint(0, 20)
-    path = f"/World/Debug/DebugCube_{rand_id}"
-    
-    cube_geom = UsdGeom.Cube.Define(stage, path)
-    cube_geom.ClearXformOpOrder() # Clear previous transformations to avoid errors
-    
-    cube_geom.AddTranslateOp().Set(Gf.Vec3d(*position))
-    cube_geom.AddScaleOp().Set(Gf.Vec3d(0.1, 0.1, 0.1)) 
-    cube_geom.GetDisplayColorAttr().Set([(1, 0, 0)])
-
-
-def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0, max_radius=10.0):
-    """
-    Generates N valid positions with slope adaptation.
-    """
-    valid_poses = []
-    tx, ty, tz = target_pos
-    
-    max_attempts = num_objects * 100 
-    attempts = 0
-    
-    while len(valid_poses) < num_objects and attempts < max_attempts:
-        attempts += 1
-        
-        # 1. Generate random candidate
-        r = random.uniform(1.0, max_radius) 
-        theta = random.uniform(0, 2 * math.pi)
-        
-        cand_x = tx + r * math.cos(theta)
-        cand_y = ty + r * math.sin(theta)
-        
-        # 2. Check 2D collision with already accepted ones
-        collision = False
-        for (exist_pos, _) in valid_poses:
-            ex, ey, ez = exist_pos
-            dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
-            if dist < min_dist:
-                collision = True
-                break
-        
-        if not collision:
-            # 3. Generate a random rotation (Yaw)
-            angle_yaw = random.uniform(0, 360)
-            
-            # 4. CALCULATE SLOPE (Pitch)
-            wheelbase = 0.6
-            pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, wheelbase)
-            
-            # If calculation was valid (didn't fall in a hole)
-            if pitch_deg is not None:
-                # CONSTRUCT FINAL ROTATION
-                rotation_corrected = (90, -pitch_deg, angle_yaw)
-                
-                valid_poses.append(((cand_x, cand_y, z_adjusted), rotation_corrected))
-            
-    if len(valid_poses) < num_objects:
-        print(f"Warning: Could only place {len(valid_poses)}/{num_objects} objects.")
-        
-    return valid_poses
-
+rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
 
 def main():
     # --- 1. LOAD MAP (Scaled and Centered) ---
@@ -523,22 +39,68 @@ def main():
     timeline.play()
 
     # --- 2. MATERIAL SETUP ---
-    loaded_materials = load_pbr_materials(stage) 
-    terrain_paths_map = find_prims_by_material_name(stage, ENVIRONMENT_LOOKUP_KEYS)
-    setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
+    loaded_materials = content.load_pbr_materials(stage) 
+    terrain_paths_map = scene_utils.find_prims_by_material_name(stage, config.ENVIRONMENT_LOOKUP_KEYS)
+    content.setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
-    # --- 3. LOAD CYCLISTS ---
-    NUM_CYCLISTS = 2 
-    selected_paths = sample_assets_from_pool(CYCLIST_ASSET_POOL, NUM_CYCLISTS, allow_duplicates=True)
-    cyclist_reps = []
+    # --- 3. LOAD OBJECTS ---
+    assets_library = {}
+    for obj_class in config.OBJECTS_CONFIG.keys():
+        found_paths = content.discover_objective_assets(config.ASSETS_ROOT_DIR, obj_class)
+        if found_paths:
+            assets_library[obj_class] = found_paths
+        else:
+            print(f"[WARN] No assets found for class '{obj_class}'.")
     
-    for i, path in enumerate(selected_paths):
-        rep_item = rep.create.from_usd(
-            path, 
-            semantics=[('class', 'cyclist')],
-            name=f"cyclist_{i}" 
-        )
-        cyclist_reps.append(rep_item)
+    scene_reps = {} 
+    
+    for obj_class, obj_config in config.OBJECTS_CONFIG.items():
+        if obj_class not in assets_library: continue
+        
+        available_models = assets_library[obj_class]
+        num_unique = len(available_models)
+        target_pool_size = obj_config["pool_size"]
+        
+        paths_to_use = []
+        
+        # Ensure complete copies
+        full_copies = target_pool_size // num_unique
+        for _ in range(full_copies):
+            paths_to_use.extend(available_models)
+            
+        # Fill the remainder
+        remainder = target_pool_size - len(paths_to_use)
+        if remainder > 0:
+            paths_to_use.extend(random.sample(available_models, remainder))
+            
+        # Shuffle to avoid ordered patterns
+        random.shuffle(paths_to_use)
+        
+        # Instantiation
+        items_paths = []
+        for i, path in enumerate(paths_to_use):
+            prim_name = f"{obj_class}_{i}"
+
+            rep_item = rep.create.from_usd(
+                path, 
+                semantics=[('class', obj_class)],
+                name=prim_name
+            )
+            
+            # Look for path quickly knowing the name
+            found_path = None
+            for p in stage.Traverse():
+                if p.GetName() == prim_name:
+                    found_path = str(p.GetPath())
+                    break
+
+            if found_path:
+                items_paths.append(found_path)
+            else:
+                print(f"[ERROR] Could not find path for generated object: {prim_name}")
+            
+        scene_reps[obj_class] = items_paths
+        print(f"--- Pool Created: {len(items_paths)} objects for '{obj_class}' (Balanced Mix) ---")
 
     # Run physics warmup
     for i in range(60):
@@ -566,31 +128,31 @@ def main():
     
     # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
-    writer.initialize(output_dir=args.data_dir, omit_semantic_type=True)
+    writer.initialize(output_dir=config.args.data_dir, omit_semantic_type=True)
     
-    render_product = rep.create.render_product(cam_rep, (CONFIG["width"], CONFIG["height"]))
+    render_product = rep.create.render_product(cam_rep, (config.CONFIG["width"], config.CONFIG["height"]))
     writer.attach(render_product)
 
     # --- 6. MAIN LOOP ---
-    print(f"Starting generation of {CONFIG['num_frames']} frames...")
+    print(f"Starting generation of {config.CONFIG['num_frames']} frames...")
     rep.orchestrator.stop()
 
     frames_generated = 0
-    max_attempts = CONFIG["num_frames"] * 5 # Avoid infinite loops
+    max_attempts = config.CONFIG["num_frames"] * 5 # Avoid infinite loops
     attempts = 0
     
     # --- Main Loop ---
-    while frames_generated < CONFIG["num_frames"] and attempts < max_attempts:
+    while frames_generated < config.CONFIG["num_frames"] and attempts < max_attempts:
         attempts += 1
         print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
 
         # A. APPLY MATERIAL RANDOMIZATION
-        randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
+        content.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
 
         # B. CHOOSE TARGET
-        tx = random.uniform(WORLD_LIMITS[0], WORLD_LIMITS[1])
-        ty = random.uniform(WORLD_LIMITS[2], WORLD_LIMITS[3])
-        tz = get_ground_height(tx, ty)
+        tx = random.uniform(config.WORLD_LIMITS[0], config.WORLD_LIMITS[1])
+        ty = random.uniform(config.WORLD_LIMITS[2], config.WORLD_LIMITS[3])
+        tz = scene_utils.get_ground_height(tx, ty)
         
         # If it returns the error value (-9999) or is out of logical limits
         if tz == -9999.0 or tz < -200.0: 
@@ -600,42 +162,88 @@ def main():
         current_target = (tx, ty, tz)
         
         # C. POSITION CAMERA (Using Replicator LookAt)
-        cam_x, cam_y, cam_z = get_drone_camera_pose(current_target)
+        jitter_angle = random.uniform(0, 2 * math.pi)
+        jitter_dist = random.uniform(0, config.LOOKAT_JITTER_RADIUS)
+        jx = tx + jitter_dist * math.cos(jitter_angle)
+        jy = ty + jitter_dist * math.sin(jitter_angle)
+        camera_look_at_target = (jx, jy, tz)
+
+        cam_x, cam_y, cam_z = scene_utils.get_drone_camera_pose(current_target)
         
         with cam_rep:
             rep.modify.pose(
                 position=(cam_x, cam_y, cam_z),
-                look_at=current_target
+                look_at=camera_look_at_target
             )
 
-        # D. POSITION CYCLISTS (Avoiding clipping)
-        poses = get_multiple_poses_near_target(
-            stage,
-            target_pos=current_target,
-            num_objects=len(cyclist_reps),
-            min_dist=2.5,
-            max_radius=4.0
-        )
+        # D. POSITION OBJECTS (Visibility Toggling)
+        all_poses_occupied = [] 
+        frame_failed = False
 
-        # If no space was found for the bikes, we abort this frame as well
-        if len(poses) < len(cyclist_reps):
-             print("[RETRY] Could not place cyclists safely.")
-             continue
-        
-        for rep_item, (pos, rot) in zip(cyclist_reps, poses):
-            with rep_item:
-                rep.modify.pose(
-                    position=pos,
-                    rotation=rot,
-                    # scale=UNIT_SCALE_FACTOR 
+        for obj_class, object_paths in scene_reps.items():
+            if not object_paths: continue
+            
+            obj_config = config.OBJECTS_CONFIG[obj_class]
+            
+            # 1. Select how many will be visible
+            min_v, max_v = obj_config.get("num_visible_range", (1, 1))
+            count_visible = random.randint(min_v, max_v)
+            
+            # 2. Select a random subset from the pool
+            current_paths = object_paths[:]
+            random.shuffle(current_paths)
+            
+            active_paths = current_paths[:count_visible]
+            inactive_paths = current_paths[count_visible:]
+            
+            # 3. Calculate positions (Only for the active items)
+            poses = scene_utils.get_multiple_poses_near_target(
+                stage,
+                target_pos=current_target,
+                num_objects=len(active_paths),
+                min_dist=0.5,
+                max_radius=10.0,
+                existing_obstacles=all_poses_occupied,
+                wheelbase=obj_config["wheelbase"]
+            )
+
+            if len(poses) < len(active_paths):
+                 print(f"[RETRY] Could not place {len(active_paths)} {obj_class} safely.")
+                 frame_failed = True
+                 break
+            
+            # 4. Move and activate the VISIBLE ones
+            for path_str, (pos, rot) in zip(active_paths, poses):
+                scene_utils.update_prim_pose_and_visibility(
+                    stage, 
+                    path_str,
+                    pos, 
+                    rot, 
+                    obj_config["scale"], 
+                    visible=True
                 )
+                all_poses_occupied.append(pos)
+
+            # 5. Hide the INVISIBLE ones
+            for path_str in inactive_paths:
+                scene_utils.update_prim_pose_and_visibility(
+                    stage, 
+                    path_str,
+                    None,
+                    None,
+                    None,
+                    visible=False
+                )
+        
+        if frame_failed:
+            continue
 
         # E. SHOOT
         simulation_app.update()
         simulation_app.update()
         simulation_app.update()
 
-        rep.orchestrator.step(delta_time=0.0, rt_subframes=128)
+        rep.orchestrator.step(delta_time=0.0, rt_subframes=64)
         rep.BackendDispatch.wait_until_done()
 
         frames_generated += 1
@@ -650,7 +258,6 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         carb.log_error(f"Exception: {e}")
-        import traceback
         traceback.print_exc()
     finally:
         simulation_app.close()
