@@ -45,10 +45,10 @@ def main():
 
     # --- 3. LOAD ASSETS ---
     print("\n--- Loading Detectable Objects ---")
-    detectable_pools = content.create_class_pool(stage, config.OBJECTS_CONFIG, config.ASSETS_ROOT_DIR)
+    detectable_pools = content.create_class_pool(stage, config.OBJECTS_CONFIG, config.ASSETS_ROOT_DIR, apply_semantics=True)
     
     print("\n--- Loading Distractors ---")
-    distractor_pools = content.create_class_pool(stage, config.DISTRACTOR_CONFIG, config.ASSETS_ROOT_DIR)
+    distractor_pools = content.create_class_pool(stage, config.DISTRACTOR_CONFIG, config.ASSETS_ROOT_DIR, apply_semantics=False)
 
     # Run physics warmup
     for i in range(60):

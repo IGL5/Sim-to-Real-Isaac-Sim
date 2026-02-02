@@ -246,10 +246,12 @@ def discover_assets(root_dir, category_name, recursive=False):
 def create_class_pool(stage, config_map, root_dir):
     """
     Creates the object pool in Replicator (initially hidden).
-    Serves both OBJECTS_CONFIG and DISTRACTOR_CONFIG.
+    Args:
+        apply_semantics (bool): If True, adds labels for training.
+                                If False (distractors), the object is "invisible" to the AI.
     """
     pools_paths = {}
-    print(f"--- Creating Asset Pools ---")
+    print(f"--- Creating Asset Pools (Semantics={apply_semantics}) ---")
 
     for category, cfg in config_map.items():
         if not cfg.get("active", True): continue
@@ -279,7 +281,8 @@ def create_class_pool(stage, config_map, root_dir):
             prim_name = f"{category}_{i}"
             
             # Create instance
-            rep.create.from_usd(usd_path, semantics=[('class', category)], name=prim_name)
+            sem_data = [('class', category)] if apply_semantics else []
+            rep.create.from_usd(usd_path, semantics=sem_data, name=prim_name)
             
             # Find real path
             found_path = None
