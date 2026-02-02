@@ -45,10 +45,20 @@ def main():
 
     # --- 3. LOAD ASSETS ---
     print("\n--- Loading Detectable Objects ---")
-    detectable_pools = content.create_class_pool(stage, config.OBJECTS_CONFIG, config.ASSETS_ROOT_DIR, apply_semantics=True)
+    detectable_pools = content.create_class_pool(
+        stage, 
+        config.OBJECTS_CONFIG, 
+        config.ASSETS_ROOT_DIR, 
+        apply_semantics=True
+    )
     
     print("\n--- Loading Distractors ---")
-    distractor_pools = content.create_class_pool(stage, config.DISTRACTOR_CONFIG, config.ASSETS_ROOT_DIR, apply_semantics=False)
+    distractor_pools = content.create_class_pool(
+        stage, 
+        config.DISTRACTOR_CONFIG, 
+        config.ASSETS_ROOT_DIR, 
+        apply_semantics=False
+    )
 
     # Run physics warmup
     for i in range(60):
@@ -57,7 +67,11 @@ def main():
     # --- 4. LIGHTS AND CAMERA (SETUP) ---
     
     # Ambient Light (Fill)
-    rep.create.light(light_type="Dome", intensity=10, texture=None)
+    rep.create.light(
+        light_type="Dome", 
+        intensity=10, 
+        texture=None
+    )
 
     # Sun (Main)
     distant_light = rep.create.light(
@@ -69,10 +83,7 @@ def main():
         rep.modify.attribute("inputs:angle", 0.5)
     
     # REPLICATOR CAMERA
-    cam_rep = rep.create.camera(
-        focal_length=18.0,
-        name="DroneCamera"
-    )
+    cam_rep = rep.create.camera(focal_length=18.0, name="DroneCamera")
     
     # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
