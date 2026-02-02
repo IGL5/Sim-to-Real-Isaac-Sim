@@ -43,8 +43,8 @@ ENVIRONMENT_LOOKUP_KEYS = [
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "cyclist": {
-        "pool_size": 10,
         "active": True,
+        "pool_size": 10,
         "radius": 1.0,           # Radius of safety (bicycle + person)
         "cost_units": 2.0,       # High cost (main character)
         "selection_weight": 100, # Always want to appear if there's space

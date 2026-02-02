@@ -36,46 +36,6 @@ def find_prims_by_material_name(stage, material_names):
     return found_paths
 
 
-def update_semantics(stage, keep_semantics=[]):
-    """ Remove semantics from the stage except for keep_semantic classes"""
-    for prim in stage.Traverse():
-        if prim.HasAPI(Semantics.SemanticsAPI):
-            processed_instances = set()
-            for property in prim.GetProperties():
-                is_semantic = Semantics.SemanticsAPI.IsSemanticsAPIPath(property.GetPath())
-                if is_semantic:
-                    instance_name = property.SplitName()[1]
-                    if instance_name in processed_instances:
-                        continue
-
-                    processed_instances.add(instance_name)
-                    sem = Semantics.SemanticsAPI.Get(prim, instance_name)
-                    type_attr = sem.GetSemanticTypeAttr()
-                    data_attr = sem.GetSemanticDataAttr()
-
-                    for semantic_class in keep_semantics:
-                        # Check for our data classes needed for the model
-                        if data_attr.Get() == semantic_class:
-                            continue
-                        else:
-                            # remove semantics of all other prims
-                            prim.RemoveProperty(type_attr.GetName())
-                            prim.RemoveProperty(data_attr.GetName())
-                            prim.RemoveAPI(Semantics.SemanticsAPI, instance_name)
-
-
-def run_orchestrator(simulation_app):
-    rep.orchestrator.run()
-
-    while not rep.orchestrator.get_is_started():
-        simulation_app.update()
-    while rep.orchestrator.get_is_started():
-        simulation_app.update()
-
-    rep.BackendDispatch.wait_until_done()
-    rep.orchestrator.stop()
-
-
 def get_ground_height(x, y):
     """
     Cast a ray from high up (z=500) downwards to find the ground.

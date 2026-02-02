@@ -44,92 +44,21 @@ def main():
     terrain_paths_map = scene_utils.find_prims_by_material_name(stage, config.ENVIRONMENT_LOOKUP_KEYS)
     content.setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
-    # --- 3. LOAD OBJECTS ---
-    assets_library = {}
-    for obj_class in config.OBJECTS_CONFIG.keys():
-        found_paths = content.discover_objective_assets(config.ASSETS_ROOT_DIR, obj_class)
-        if found_paths:
-            assets_library[obj_class] = found_paths
-        else:
-            print(f"[WARN] No assets found for class '{obj_class}'.")
+    # --- 3. LOAD ASSETS ---
+    print("\n--- Loading Detectable Objects ---")
+    detectable_pools = content.create_class_pool(stage, config.OBJECTS_CONFIG, config.ASSETS_ROOT_DIR)
     
-    scene_reps = {} 
-    
-    for obj_class, obj_config in config.OBJECTS_CONFIG.items():
-        if obj_class not in assets_library: continue
-        
-        available_models = assets_library[obj_class]
-        num_unique = len(available_models)
-        target_pool_size = obj_config["pool_size"]
-        
-        paths_to_use = []
-        
-        # Ensure complete copies
-        full_copies = target_pool_size // num_unique
-        for _ in range(full_copies):
-            paths_to_use.extend(available_models)
-            
-        # Fill the remainder
-        remainder = target_pool_size - len(paths_to_use)
-        if remainder > 0:
-            paths_to_use.extend(random.sample(available_models, remainder))
-            
-        # Shuffle to avoid ordered patterns
-        random.shuffle(paths_to_use)
-        
-        # Instantiation
-        items_paths = []
-        for i, path in enumerate(paths_to_use):
-            prim_name = f"{obj_class}_{i}"
-
-            rep_item = rep.create.from_usd(
-                path, 
-                semantics=[('class', obj_class)],
-                name=prim_name
-            )
-            
-            # Look for path quickly knowing the name
-            found_path = None
-            for p in stage.Traverse():
-                if p.GetName() == prim_name:
-                    found_path = str(p.GetPath())
-                    break
-
-            if found_path:
-                items_paths.append(found_path)
-            else:
-                print(f"[ERROR] Could not find path for generated object: {prim_name}")
-            
-        scene_reps[obj_class] = items_paths
-        print(f"--- Pool Created: {len(items_paths)} objects for '{obj_class}' (Balanced Mix) ---")
-
-
-    # 4. SCATTER SETUP
-    distractor_pools = scatter.load_distractor_pools(config.ASSETS_ROOT_DIR, config.DISTRACTOR_CONFIG)
-    # This returns the list of Replicator objects already created but hidden
-    scene_distractors_reps = scatter.create_distractor_instances(distractor_pools, config.DISTRACTOR_CONFIG)
-    
-    # Pre-fetch paths to optimize
-    scene_distractors_paths = {}
-    for cat, items in scene_distractors_reps.items():
-        path_list = []
-        for i, item in enumerate(items):
-            # We assume name by convention or search
-            name = f"distractor_{cat}_{i}"
-            for p in stage.Traverse():
-                if p.GetName() == name:
-                    path_list.append(str(p.GetPath()))
-                    break
-        scene_distractors_paths[cat] = path_list
+    print("\n--- Loading Distractors ---")
+    distractor_pools = content.create_class_pool(stage, config.DISTRACTOR_CONFIG, config.ASSETS_ROOT_DIR)
 
     # Run physics warmup
     for i in range(60):
         simulation_app.update()
     
-    # --- 5. LIGHTS AND CAMERA (SETUP) ---
+    # --- 4. LIGHTS AND CAMERA (SETUP) ---
     
     # Ambient Light (Fill)
-    rep.create.light(light_type="Dome", intensity=5, texture=None)
+    rep.create.light(light_type="Dome", intensity=10, texture=None)
 
     # Sun (Main)
     distant_light = rep.create.light(
@@ -153,7 +82,7 @@ def main():
     render_product = rep.create.render_product(cam_rep, (config.CONFIG["width"], config.CONFIG["height"]))
     writer.attach(render_product)
 
-    # --- 6. MAIN LOOP ---
+    # --- 5. MAIN LOOP ---
     print(f"Starting generation of {config.CONFIG['num_frames']} frames...")
     rep.orchestrator.stop()
 
@@ -200,7 +129,7 @@ def main():
             stage=stage,
             target_pos=current_target,
             config_map=config.OBJECTS_CONFIG,
-            pools_paths_map=scene_reps,
+            pools_paths_map=detectable_pools,
             budget_range=(15.0, 25.0),
             max_radius=10.0,
             previous_obstacles=[]
@@ -213,7 +142,7 @@ def main():
             stage=stage,
             target_pos=current_target,
             config_map=config.DISTRACTOR_CONFIG,
-            pools_paths_map=scene_distractors_paths,
+            pools_paths_map=distractor_pools,
             budget_range=(20.0, 60.0),
             max_radius=30.0,
             previous_obstacles=all_obstacles

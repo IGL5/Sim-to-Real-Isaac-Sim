@@ -1,16 +1,9 @@
 import os
 import glob
 import random
-from isaacsim.core.utils.nucleus import get_assets_root_path
 from pxr import UsdShade, Gf, Sdf, Usd
 import omni.replicator.core as rep
 from modules import config
-
-def prefix_with_isaac_asset_server(relative_path):
-    assets_root_path = get_assets_root_path()
-    if assets_root_path is None:
-        raise Exception("Nucleus server not found, could not access Isaac Sim assets folder")
-    return assets_root_path + relative_path
 
 
 def discover_objective_assets(base_dir, obj_dir):
@@ -215,16 +208,94 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
                 binding_api.Bind(chosen_material)
 
 
-def sample_assets_from_pool(asset_pool, num_samples, allow_duplicates=True):
+def discover_assets(root_dir, category_name, recursive=False):
     """
-    Selects random assets from a list.
+    Busca archivos USD. Unifica la lógica de 'Objetivos' y 'Distractores'.
     """
-    if not asset_pool:
-        return []
+    found_paths = []
     
-    if allow_duplicates:
-        return random.choices(asset_pool, k=num_samples)
-    else:
-        # Ensure we don't ask for more than available if duplicates are not allowed
-        k = min(num_samples, len(asset_pool))
-        return random.sample(asset_pool, k)
+    # 1. Modo Recursivo (Distractores): assets/objects/distractors/cat/**/*.usd
+    if recursive:
+        search_path = os.path.join(root_dir, "distractors", category_name)
+        if os.path.exists(search_path):
+            found_paths = glob.glob(os.path.join(search_path, "**", "*.usd*"), recursive=True)
+    
+    # 2. Modo Estándar (Objetivos): assets/objects/cat/cat.usd
+    if not found_paths:
+        search_path = os.path.join(root_dir, category_name)
+        if os.path.exists(search_path):
+            # Prioridad: Archivo con mismo nombre que carpeta
+            # (Ej: assets/objects/cyclist/cyclist.usd)
+            subfolders = [f.path for f in os.scandir(search_path) if f.is_dir()]
+            for folder in subfolders:
+                folder_name = os.path.basename(folder)
+                expected_usd = os.path.join(folder, f"{folder_name}.usd")
+                if os.path.exists(expected_usd):
+                    found_paths.append(expected_usd)
+                else:
+                    # Fallback: cualquier usd
+                    any_usd = glob.glob(os.path.join(folder, "*.usd*"))
+                    if any_usd: found_paths.append(any_usd[0])
+            
+            # Si no hay subcarpetas, busca en la raiz de category
+            if not found_paths:
+                found_paths = glob.glob(os.path.join(search_path, "*.usd*"))
+
+    return found_paths
+
+def create_class_pool(stage, config_map, root_dir):
+    """
+    Crea el pool de objetos en Replicator (ocultos inicialmente).
+    Sirve tanto para OBJECTS_CONFIG como para DISTRACTOR_CONFIG.
+    """
+    pools_paths = {}
+    print(f"--- Creating Asset Pools ---")
+
+    for category, cfg in config_map.items():
+        if not cfg.get("active", True): continue
+            
+        # Determinar si es recursivo (si está en distractores)
+        is_recursive = category in config.DISTRACTOR_CONFIG
+        
+        asset_files = discover_assets(root_dir, category, recursive=is_recursive)
+        
+        if not asset_files:
+            print(f"[WARN] No assets found for '{category}'")
+            continue
+            
+        target_pool_size = cfg["pool_size"]
+        created_paths = []
+        
+        # Rellenar lista para cumplir el tamaño del pool
+        assets_to_use = []
+        while len(assets_to_use) < target_pool_size:
+            assets_to_use.extend(asset_files)
+        assets_to_use = assets_to_use[:target_pool_size]
+        random.shuffle(assets_to_use)
+        
+        print(f"   -> Instantiating {target_pool_size} objects for '{category}'...")
+        
+        for i, usd_path in enumerate(assets_to_use):
+            prim_name = f"{category}_{i}"
+            
+            # Crear instancia
+            rep.create.from_usd(usd_path, semantics=[('class', category)], name=prim_name)
+            
+            # Buscar path real
+            found_path = None
+            for p in stage.Traverse():
+                if p.GetName() == prim_name:
+                    found_path = str(p.GetPath())
+                    break
+            
+            if found_path:
+                # Ocultar
+                prim = stage.GetPrimAtPath(found_path)
+                UsdGeom.Imageable(prim).MakeInvisible()
+                created_paths.append(found_path)
+            else:
+                print(f"[ERROR] Path not found for {prim_name}")
+
+        pools_paths[category] = created_paths
+        
+    return pools_paths
