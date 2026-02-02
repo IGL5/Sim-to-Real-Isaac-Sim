@@ -210,22 +210,22 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
 
 def discover_assets(root_dir, category_name, recursive=False):
     """
-    Busca archivos USD. Unifica la lógica de 'Objetivos' y 'Distractores'.
+    Looks for USD files. Unifies the logic of 'Objetivos' and 'Distractores'.
     """
     found_paths = []
     
-    # 1. Modo Recursivo (Distractores): assets/objects/distractors/cat/**/*.usd
+    # 1. Recursive Mode (Distractors): assets/objects/distractors/cat/**/*.usd
     if recursive:
         search_path = os.path.join(root_dir, "distractors", category_name)
         if os.path.exists(search_path):
             found_paths = glob.glob(os.path.join(search_path, "**", "*.usd*"), recursive=True)
     
-    # 2. Modo Estándar (Objetivos): assets/objects/cat/cat.usd
+    # 2. Standard Mode (Objectives): assets/objects/cat/cat.usd
     if not found_paths:
         search_path = os.path.join(root_dir, category_name)
         if os.path.exists(search_path):
-            # Prioridad: Archivo con mismo nombre que carpeta
-            # (Ej: assets/objects/cyclist/cyclist.usd)
+            # Priority: File with the same name as the folder
+            # (Ex: assets/objects/cyclist/cyclist.usd)
             subfolders = [f.path for f in os.scandir(search_path) if f.is_dir()]
             for folder in subfolders:
                 folder_name = os.path.basename(folder)
@@ -233,11 +233,11 @@ def discover_assets(root_dir, category_name, recursive=False):
                 if os.path.exists(expected_usd):
                     found_paths.append(expected_usd)
                 else:
-                    # Fallback: cualquier usd
+                    # Fallback: any usd
                     any_usd = glob.glob(os.path.join(folder, "*.usd*"))
                     if any_usd: found_paths.append(any_usd[0])
             
-            # Si no hay subcarpetas, busca en la raiz de category
+            # If no subfolders, look in the root of category
             if not found_paths:
                 found_paths = glob.glob(os.path.join(search_path, "*.usd*"))
 
@@ -245,8 +245,8 @@ def discover_assets(root_dir, category_name, recursive=False):
 
 def create_class_pool(stage, config_map, root_dir):
     """
-    Crea el pool de objetos en Replicator (ocultos inicialmente).
-    Sirve tanto para OBJECTS_CONFIG como para DISTRACTOR_CONFIG.
+    Creates the object pool in Replicator (initially hidden).
+    Serves both OBJECTS_CONFIG and DISTRACTOR_CONFIG.
     """
     pools_paths = {}
     print(f"--- Creating Asset Pools ---")
@@ -254,7 +254,7 @@ def create_class_pool(stage, config_map, root_dir):
     for category, cfg in config_map.items():
         if not cfg.get("active", True): continue
             
-        # Determinar si es recursivo (si está en distractores)
+        # Determine if it is recursive (if it is in distractors)
         is_recursive = category in config.DISTRACTOR_CONFIG
         
         asset_files = discover_assets(root_dir, category, recursive=is_recursive)
@@ -266,7 +266,7 @@ def create_class_pool(stage, config_map, root_dir):
         target_pool_size = cfg["pool_size"]
         created_paths = []
         
-        # Rellenar lista para cumplir el tamaño del pool
+        # Fill list to meet pool size
         assets_to_use = []
         while len(assets_to_use) < target_pool_size:
             assets_to_use.extend(asset_files)
@@ -278,10 +278,10 @@ def create_class_pool(stage, config_map, root_dir):
         for i, usd_path in enumerate(assets_to_use):
             prim_name = f"{category}_{i}"
             
-            # Crear instancia
+            # Create instance
             rep.create.from_usd(usd_path, semantics=[('class', category)], name=prim_name)
             
-            # Buscar path real
+            # Find real path
             found_path = None
             for p in stage.Traverse():
                 if p.GetName() == prim_name:
@@ -289,7 +289,7 @@ def create_class_pool(stage, config_map, root_dir):
                     break
             
             if found_path:
-                # Ocultar
+                # Hide
                 prim = stage.GetPrimAtPath(found_path)
                 UsdGeom.Imageable(prim).MakeInvisible()
                 created_paths.append(found_path)
