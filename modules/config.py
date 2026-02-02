@@ -30,17 +30,6 @@ LOOKAT_JITTER_RADIUS = 2.5
 RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
-# ASSET POOLS
-ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
-OBJECTS_CONFIG = {
-    "cyclist": {
-        "pool_size": 10,                # Memory pool size
-        "num_visible_range": (1, 7),    # Number of visible objects per frame
-        "wheelbase": 0.6,               # Physics: For incline calculation (None if not applicable)
-        "scale": 1.0                    # Scale factor
-    },
-}
-
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
     "Terrain",
@@ -50,29 +39,49 @@ ENVIRONMENT_LOOKUP_KEYS = [
     # "Lake"
 ]
 
+# ASSET POOLS
+ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
+OBJECTS_CONFIG = {
+    "cyclist": {
+        "pool_size": 10,
+        "active": True,
+        "radius": 1.0,           # Radius of safety (bicycle + person)
+        "cost_units": 2.0,       # High cost (main character)
+        "selection_weight": 100, # Always want to appear if there's space
+        "wheelbase": 0.6,        # For incline calculation (None if not applicable)
+        "scale_range": (1.0, 1.0) # Fixed scale for rigorous datasets
+    },
+}
+
 # DISTRACTOR CONFIGURATION (Scatter)
 # Keys must match folder names in assets/objects/distractors/
 DISTRACTOR_CONFIG = {
     "vegetation": {
         "active": True,
-        "pool_size": 20,         # Variedad de modelos
-        "density_range": (5, 15), # Entre 5 y 15 árboles por frame
-        "scale_range": (0.8, 1.5),
-        "spawn_radius": (5.0, 25.0) # Distancia desde el centro (min, max)
+        "pool_size": 20,
+        "spawn_radius": (5.0, 25.0),
+        "radius": 1.5,          # Physical radius (m)
+        "cost_units": 3.0,      # Cost units (large)
+        "selection_weight": 10, # Medium Frecuency 
+        "scale_range": (0.8, 1.5)
     },
     "debris": {
         "active": True,
-        "pool_size": 10,
-        "density_range": (10, 30), # Muchas piedras pequeñas
-        "scale_range": (0.1, 0.4),
-        "spawn_radius": (2.0, 15.0) # Más cerca de la cámara
-    }
+        "pool_size": 20, # Increase pool for variety
+        "spawn_radius": (2.0, 15.0),
+        "radius": 0.3,          # Physical radius (m)
+        "cost_units": 0.5,      # Cost units (small)
+        "selection_weight": 50, # High Frecuency 
+        "scale_range": (0.2, 0.5)
+    },
     "manmade": {
-        "active": True, # Podemos desactivarlo si el mapa es muy "salvaje"
+        "active": True,
         "pool_size": 5,
-        "density_range": (0, 5),    # Menos cantidad, son más raros
-        "scale_range": (0.8, 1.2),
-        "spawn_radius": (10.0, 50.0)
+        "spawn_radius": (10.0, 40.0),
+        "radius": 0.8,
+        "cost_units": 1.0,
+        "selection_weight": 2, # Low Frecuency 
+        "scale_range": (0.8, 1.2)
     }
 }
 

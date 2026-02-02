@@ -198,82 +198,175 @@ def draw_debug_cube(stage, position):
     cube_geom.GetDisplayColorAttr().Set([(1, 0, 0)])
 
 
-def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0, max_radius=10.0, existing_obstacles=[], wheelbase= None):
+def select_objects_by_budget(available_keys, config_map, total_budget):
     """
-    Generates N valid positions with slope adaptation.
-    Avoids collisions with 'existing_obstacles' and with itself.
-    
-    If wheelbase is not None, it will calculate the pitch angle based on the two wheels.
+    Selects objects until the budget of 'units' is filled.
+    Returns a list of keys (e.g: ['truck', 'rock', 'rock', 'sign'])
     """
-    valid_poses = []
-    tx, ty, tz = target_pos
-
-    obstacles_xy = [(p[0], p[1]) for p in existing_obstacles]
+    selected_keys = []
+    current_usage = 0
     
-    max_attempts = num_objects * 100 
+    # Avoid infinite loops if nothing fits
+    active_costs = [config_map[k]['cost_units'] for k in available_keys]
+    if not active_costs: return []
+    min_cost = min(active_costs)
+    
     attempts = 0
-    
-    while len(valid_poses) < num_objects and attempts < max_attempts:
+    while (total_budget - current_usage) >= min_cost and attempts < 100:
         attempts += 1
         
-        # 1. Generate random candidate
-        r = random.uniform(1.0, max_radius) 
-        theta = random.uniform(0, 2 * math.pi)
+        # Weighted selection
+        keys = list(available_keys)
+        weights = [config_map[k]['selection_weight'] for k in keys]
         
-        cand_x = tx + r * math.cos(theta)
-        cand_y = ty + r * math.sin(theta)
+        choice = random.choices(keys, weights=weights, k=1)[0]
+        cost = config_map[choice]['cost_units']
         
-        # 2. Check 2D collision
-        collision = False
-        # A) Check against previous obstacles
-        for (ex, ey) in obstacles_xy:
-            dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
-            if dist < min_dist:
-                collision = True
-                break
+        if current_usage + cost <= total_budget:
+            selected_keys.append(choice)
+            current_usage += cost
+            
+    return selected_keys
+
+
+def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=10.0, existing_obstacles=[]):
+    """
+    Generates non-overlapping positions and rotations for a set of objects around a target point.
+    Adjusts height and pitch based on terrain geometry.
+    """
+    valid_results = []
+    tx, ty, _ = target_pos
+    
+    # Local copy of obstacles (x, y, radius)
+    current_obstacles = [(p[0], p[1], p[2]) for p in existing_obstacles] 
+
+    for i, spec in enumerate(candidates_specs):
+        obj_radius = spec['radius']
+        obj_wheelbase = spec.get('wheelbase', None)
         
-        # B) Check against the ones we just generated in this same loop
-        if not collision:
-            for (exist_pos, _) in valid_poses:
-                ex, ey, _ = exist_pos
+        placed = False
+        attempts = 0
+        max_attempts = 100 # Attempts per object
+        
+        while not placed and attempts < max_attempts:
+            attempts += 1
+            
+            # 1. Generate candidate
+            r = random.uniform(0.0, max_radius) # Can be 0 to be very close
+            theta = random.uniform(0, 2 * math.pi)
+            
+            cand_x = tx + r * math.cos(theta)
+            cand_y = ty + r * math.sin(theta)
+            
+            # 2. Collision check (Variable Radius)
+            collision = False
+            for (ex, ey, er) in current_obstacles:
                 dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
-                if dist < min_dist:
+                # The minimum distance is the sum of the two radius
+                min_separation = obj_radius + er
+                
+                if dist < min_separation:
                     collision = True
                     break
-        
-        if not collision:
-            angle_yaw = random.uniform(0, 360)
             
-            # 3. DIFFERENT LOGIC: Is it a vehicle or static?
-            if wheelbase is not None:
-                # --- VEHICLE MODE ---
-                # Calculate pitch based on the two wheels
-                pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, wheelbase)
+            if not collision:
+                # 3. Calculate Height / Pitch
+                angle_yaw = random.uniform(0, 360)
                 
-                if pitch_deg is None: 
-                    continue
+                if obj_wheelbase is not None:
+                    # Vehicle mode
+                    pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, obj_wheelbase)
+                    if pitch_deg is None: continue
+                    rotation = (90, -pitch_deg, angle_yaw)
+                    z_final = z_adjusted
+                else:
+                    # Static mode
+                    z_ground = get_ground_height(cand_x, cand_y)
+                    if z_ground == -9999.0: continue
+                    rotation = (90, 0, angle_yaw)
+                    z_final = z_ground
                 
-                rotation_corrected = (90, -pitch_deg, angle_yaw)
-                z_final = z_adjusted
+                # Save valid candidate
+                valid_results.append( ((cand_x, cand_y, z_final), rotation, i) )
+                current_obstacles.append( (cand_x, cand_y, obj_radius) )
+                placed = True
                 
-            else:
-                # --- STATIC MODE ---
-                # Only need the ground height at the center
-                z_ground = get_ground_height(cand_x, cand_y)
-                
-                if z_ground == -9999.0: 
-                    continue
-                
-                rotation_corrected = (90, 0, angle_yaw)
-                z_final = z_ground
+        if not placed:
+            print(f"[WARN] Could not place object with radius {obj_radius}")
 
-            # 4. Save valid candidate
-            valid_poses.append(((cand_x, cand_y, z_final), rotation_corrected))
+    return valid_results
+
+
+def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[]):
+    """
+    Orquestador Maestro Optimizado.
+    Maneja: Selección (Presupuesto) -> Asignación Única (Stack) -> Colocación -> Limpieza.
+    """
+    # 1. Presupuesto y Selección Teórica
+    budget = random.uniform(budget_range[0], budget_range[1])
+    active_keys = [k for k, v in config_map.items() if v.get('active', True)]
+    
+    # List of desired objects (e.g: ['rock', 'rock', 'tree', ...])
+    chosen_keys = select_objects_by_budget(active_keys, config_map, budget)
+    
+    # 2. Sort by radius (Biggest first)
+    chosen_keys.sort(key=lambda k: config_map[k]['radius'], reverse=True)
+    
+    # Sampling without replacement
+    working_pools = {}
+    for key, paths in pools_paths_map.items():
+        if paths:
+            pool_copy = list(paths)
+            random.shuffle(pool_copy)
+            working_pools[key] = pool_copy
+
+    # 3. Resource Assignment
+    candidates_specs = []
+    paths_candidates = []
+    keys_candidates = []
+    
+    for key in chosen_keys:
+        # Skip if no stock or pool is empty (Dynamic pruning)
+        if not working_pools.get(key):
+            continue
             
-    if len(valid_poses) < num_objects:
-        print(f"[WARN] Could only place {len(valid_poses)}/{num_objects} objects safely.")
+        path = working_pools[key].pop()
+        cfg = config_map[key]
         
-    return valid_poses
+        candidates_specs.append({'radius': cfg['radius'], 'wheelbase': cfg.get('wheelbase')})
+        paths_candidates.append(path)
+        keys_candidates.append(key)
+        
+    # 4. Calculate Poses (Mathematics)
+    # results devuelve: [ ((x,y,z), rot, original_index), ... ]
+    results = get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius, previous_obstacles)
+    
+    # 5. Move successfully placed objects
+    new_obstacles = [] 
+    successfully_placed_paths = set()
+
+    for (pos, rot, original_idx) in results:
+        path = paths_candidates[original_idx]
+        
+        key = keys_candidates[original_idx]
+        cfg = config_map[key]
+        
+        s_min, s_max = cfg.get('scale_range', (1.0, 1.0))
+        scale = random.uniform(s_min, s_max)
+        
+        update_prim_pose_and_visibility(stage, path, pos, rot, scale, visible=True)
+        
+        # Register success
+        new_obstacles.append( (pos[0], pos[1], cfg['radius']) )
+        successfully_placed_paths.add(path)
+        
+    # 6. Clean up unused objects
+    for key, pool in pools_paths_map.items():
+        for path in pool:
+            if path not in successfully_placed_paths:
+                update_prim_pose_and_visibility(stage, path, None, None, None, visible=False)
+
+    return new_obstacles
 
 
 def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visible=True):

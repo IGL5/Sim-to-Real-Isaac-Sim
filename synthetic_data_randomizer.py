@@ -195,116 +195,29 @@ def main():
                 look_at=camera_look_at_target
             )
 
-        # D. POSITION OBJECTS (Visibility Toggling)
-        all_poses_occupied = [] 
-        frame_failed = False
-
-        for obj_class, object_paths in scene_reps.items():
-            if not object_paths: continue
-            
-            obj_config = config.OBJECTS_CONFIG[obj_class]
-            
-            # 1. Select how many will be visible
-            min_v, max_v = obj_config.get("num_visible_range", (1, 1))
-            count_visible = random.randint(min_v, max_v)
-            
-            # 2. Select a random subset from the pool
-            current_paths = object_paths[:]
-            random.shuffle(current_paths)
-            
-            active_paths = current_paths[:count_visible]
-            inactive_paths = current_paths[count_visible:]
-            
-            # 3. Calculate positions (Only for the active items)
-            poses = scene_utils.get_multiple_poses_near_target(
-                stage,
-                target_pos=current_target,
-                num_objects=len(active_paths),
-                min_dist=1.0,
-                max_radius=10.0,
-                existing_obstacles=all_poses_occupied,
-                wheelbase=obj_config["wheelbase"]
-            )
-
-            if len(poses) < len(active_paths):
-                 print(f"[RETRY] Could not place {len(active_paths)} {obj_class} safely.")
-                 frame_failed = True
-                 break
-            
-            # 4. Move and activate the VISIBLE ones
-            for path_str, (pos, rot) in zip(active_paths, poses):
-                scene_utils.update_prim_pose_and_visibility(
-                    stage, 
-                    path_str,
-                    pos, 
-                    rot, 
-                    obj_config["scale"], 
-                    visible=True
-                )
-                all_poses_occupied.append(pos)
-
-            # 5. Hide the INVISIBLE ones
-            for path_str in inactive_paths:
-                scene_utils.update_prim_pose_and_visibility(
-                    stage, 
-                    path_str,
-                    None,
-                    None,
-                    None,
-                    visible=False
-                )
+        # D. POSITION DETECTABLE OBJECTS (Cyclists, Vehicles...)
+        detectables_obstacles = scene_utils.place_objects_from_config(
+            stage=stage,
+            target_pos=current_target,
+            config_map=config.OBJECTS_CONFIG,
+            pools_paths_map=scene_reps,
+            budget_range=(15.0, 25.0),
+            max_radius=10.0,
+            previous_obstacles=[]
+        )
         
-        if frame_failed:
-            continue
+        # E. POSITION DISTRACTORS (Rocks, Vegetation...)
+        all_obstacles = detectables_obstacles 
 
-        # E. POSITION DISTRACTORS (Manual Local Cloud)
-        distractor_poses_occupied = [] # To avoid them colliding with each other (optional)
-        
-        for category, paths in scene_distractors_paths.items():
-            settings = config.DISTRACTOR_CONFIG[category]
-            
-            # 1. How many do we want today? (Temporal Variability)
-            min_d, max_d = settings.get("density_range", (0, 0))
-            count_active = random.randint(min_d, max_d)
-            
-            # 2. Selection of active items
-            random.shuffle(paths) # Shuffle to use different models
-            active_paths = paths[:count_active]
-            inactive_paths = paths[count_active:]
-            
-            # 3. Calculate positions AROUND THE TARGET (Spatial Variability)
-            # We use a similar logic to get_multiple_poses... but simplified
-            min_r, max_r = settings.get("spawn_radius", (5.0, 20.0))
-            
-            # Generate poses quickly
-            dist_lax = 0.5
-
-            poses = scene_utils.get_multiple_poses_near_target(
-                stage,
-                target_pos=current_target, # Camera center
-                num_objects=len(active_paths),
-                min_dist=dist_lax, # Don't get too close
-                max_radius=max_r,
-                # Optional: pass all_poses_occupied (cyclists) if we don't want them to collide with bikes
-                existing_obstacles=all_poses_occupied, 
-                wheelbase=None # Static mode (only Z, no pitch)
-            )
-            
-            # 4. Move Active Items
-            for path_str, (pos, rot) in zip(active_paths, poses):
-                # Random scale variation per frame
-                s_min, s_max = settings.get("scale_range", (1.0, 1.0))
-                scale_rnd = random.uniform(s_min, s_max)
-                
-                scene_utils.update_prim_pose_and_visibility(
-                    stage, path_str, pos, rot, scale_rnd, visible=True
-                )
-                
-            # 5. Hide Inactive Items
-            for path_str in inactive_paths:
-                scene_utils.update_prim_pose_and_visibility(
-                    stage, path_str, None, None, None, visible=False
-                )
+        scene_utils.place_objects_from_config(
+            stage=stage,
+            target_pos=current_target,
+            config_map=config.DISTRACTOR_CONFIG,
+            pools_paths_map=scene_distractors_paths,
+            budget_range=(20.0, 60.0),
+            max_radius=30.0,
+            previous_obstacles=all_obstacles
+        )
 
         # F. SHOOT
         simulation_app.update()
