@@ -3,7 +3,6 @@ import random
 import carb
 from omni.physx import get_physx_scene_query_interface
 from pxr import UsdGeom, Gf, Semantics, UsdShade, Sdf
-import omni.replicator.core as rep
 from modules import config
 
 def find_prims_by_material_name(stage, material_names):

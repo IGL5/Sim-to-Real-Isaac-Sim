@@ -19,7 +19,6 @@ import omni.replicator.core as rep
 
 from modules import scene_utils
 from modules import content
-from modules import scatter
 
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
