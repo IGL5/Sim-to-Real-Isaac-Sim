@@ -61,7 +61,7 @@ def main():
     )
 
     # Run physics warmup
-    for i in range(60):
+    for i in range(100):
         simulation_app.update()
     
     # --- 4. LIGHTS AND CAMERA (SETUP) ---
@@ -92,7 +92,32 @@ def main():
     render_product = rep.create.render_product(cam_rep, (config.CONFIG["width"], config.CONFIG["height"]))
     writer.attach(render_product)
 
-    # --- 5. MAIN LOOP ---
+    # --- 5. VALIDATION CHECK ---
+    print("\n--- Configuration Safety Check ---")
+    
+    # Check Objects
+    ok_obj, msg_obj = scene_utils.validate_placement_config(
+        config.OBJECTS_CONFIG, 
+        config.OBJECTS_BUDGET_RANGE[1], # Use max of range
+        config.OBJECTS_MAX_RADIUS, 
+        "Detectables"
+    )
+    print(msg_obj)
+    
+    # Check Distractors
+    ok_dist, msg_dist = scene_utils.validate_placement_config(
+        config.DISTRACTOR_CONFIG, 
+        config.DISTRACTOR_BUDGET_RANGE[1], 
+        config.DISTRACTOR_MAX_RADIUS, 
+        "Distractors"
+    )
+    print(msg_dist)
+    
+    if not ok_obj or not ok_dist:
+        print("\n⚠️  WARNING: High density detected! Consider increasing MAX_RADIUS or decreasing BUDGET.")
+        input("Press Enter to continue anyway...")
+
+    # --- 6. MAIN LOOP ---
     print(f"Starting generation of {config.CONFIG['num_frames']} frames...")
     rep.orchestrator.stop()
 
@@ -140,8 +165,8 @@ def main():
             target_pos=current_target,
             config_map=config.OBJECTS_CONFIG,
             pools_paths_map=detectable_pools,
-            budget_range=(15.0, 25.0),
-            max_radius=10.0,
+            budget_range=config.OBJECTS_BUDGET_RANGE,
+            max_radius=config.OBJECTS_MAX_RADIUS,
             previous_obstacles=[]
         )
         
@@ -153,8 +178,8 @@ def main():
             target_pos=current_target,
             config_map=config.DISTRACTOR_CONFIG,
             pools_paths_map=distractor_pools,
-            budget_range=(20.0, 60.0),
-            max_radius=30.0,
+            budget_range=config.DISTRACTOR_BUDGET_RANGE,
+            max_radius=config.DISTRACTOR_MAX_RADIUS,
             previous_obstacles=all_obstacles
         )
 

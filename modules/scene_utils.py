@@ -354,3 +354,67 @@ def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visi
             print(f"[ERROR] Failed to set pose for {path}: {e}")
     else:
         imageable.MakeInvisible()
+
+
+def validate_placement_config(config_map, budget_max, container_radius, context_name="Config"):
+    """
+    Analizes if objects fit in the assigned space based on the maximum budget
+    and selection probabilities.
+    
+    Returns:
+        (is_safe, message): Boolean and string with the diagnosis.
+    """
+    total_weight = 0
+    weighted_area_sum = 0
+    weighted_cost_sum = 0
+    
+    # Only consider active items
+    active_items = {k: v for k, v in config_map.items() if v.get('active', True)}
+    
+    if not active_items:
+        return True, f"[{context_name}] No active items."
+
+    # 1. Calculate weighted averages
+    for k, v in active_items.items():
+        weight = v.get('selection_weight', 1)
+        radius = v.get('radius', 1.0)
+        cost = v.get('cost_units', 1.0)
+        
+        area = math.pi * (radius ** 2)
+        
+        weighted_area_sum += weight * area
+        weighted_cost_sum += weight * cost
+        total_weight += weight
+        
+    if total_weight == 0:
+        return True, f"[{context_name}] Total weights are 0."
+
+    avg_area_per_item = weighted_area_sum / total_weight
+    avg_cost_per_item = weighted_cost_sum / total_weight
+    
+    # 2. Estimation of worst case (Maximum budget)
+    estimated_num_items = budget_max / avg_cost_per_item if avg_cost_per_item > 0 else 0
+    required_area = estimated_num_items * avg_area_per_item
+    
+    # 3. Available area
+    available_area = math.pi * (container_radius ** 2)
+    
+    # 4. Packing Factor
+    # Perfect circles fill ~90%. Random placement is ~40-50%.
+    # If we exceed 60%, we will start having many failures.
+    fill_ratio = required_area / available_area if available_area > 0 else 999.0
+    
+    packing_limit_safe = 0.45  # Green: Very safe
+    packing_limit_warn = 0.65  # Yellow: Possible failures, but acceptable
+    
+    msg = (f"[{context_name}] Ratio of Occupation: {fill_ratio*100:.1f}% "
+           f"(Req: {required_area:.0f}m² / Disp: {available_area:.0f}m²)")
+    
+    if fill_ratio > 1.0:
+        return False, f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
+    elif fill_ratio > packing_limit_warn:
+        return False, f"🟠 {msg} -> CRITICAL (High probability of failure)"
+    elif fill_ratio > packing_limit_safe:
+        return True, f"🟡 {msg} -> DENSE (May have some warnings)"
+    else:
+        return True, f"🟢 {msg} -> OK"

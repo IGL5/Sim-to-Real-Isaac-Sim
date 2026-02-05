@@ -1,7 +1,7 @@
 import os
 import glob
 import random
-from pxr import UsdShade, Gf, Sdf, Usd
+from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom
 import omni.replicator.core as rep
 from modules import config
 
@@ -243,7 +243,7 @@ def discover_assets(root_dir, category_name, recursive=False):
 
     return found_paths
 
-def create_class_pool(stage, config_map, root_dir):
+def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
     """
     Creates the object pool in Replicator (initially hidden).
     Args:

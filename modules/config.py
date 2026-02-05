@@ -22,13 +22,21 @@ WORLD_LIMITS = (-1300, 1300, -1300, 1300)
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 
 # CAMERA CONSTANTS
-CAMERA_HEIGHT_RANGE = (30.0, 80.0)
-CAMERA_DISTANCE_RANGE = (10.0, 20.0)
+CAMERA_HEIGHT_RANGE = (20.0, 80.0)
+CAMERA_DISTANCE_RANGE = (8.0, 18.0)
 LOOKAT_JITTER_RADIUS = 2.5
 
 # RAYCAST SETTINGS
 RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
+
+# OBJECT BUDGET
+OBJECTS_BUDGET_RANGE = (0.0, 25.0)
+OBJECTS_MAX_RADIUS = 10.0
+
+# DISTRACTOR BUDGET
+DISTRACTOR_BUDGET_RANGE = (125.0, 300.0)
+DISTRACTOR_MAX_RADIUS = 15.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
@@ -44,8 +52,8 @@ ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "cyclist": {
         "active": True,
-        "pool_size": 10,
-        "radius": 1.0,           # Radius of safety (bicycle + person)
+        "pool_size": 15,
+        "radius": 0.8,           # Radius of safety (bicycle + person)
         "cost_units": 2.0,       # High cost (main character)
         "selection_weight": 100, # Always want to appear if there's space
         "wheelbase": 0.6,        # For incline calculation (None if not applicable)
@@ -58,29 +66,38 @@ OBJECTS_CONFIG = {
 DISTRACTOR_CONFIG = {
     "vegetation": {
         "active": True,
+        "pool_size": 25,
+        "spawn_radius": (5.0, 25.0),
+        "radius": 0.5,          # Physical radius (m)
+        "cost_units": 2.0,      # Cost units (large)
+        "selection_weight": 50, # Medium Frecuency 
+        "scale_range": (0.7, 1.5)
+    },
+    "trees": {
+        "active": True,
         "pool_size": 20,
         "spawn_radius": (5.0, 25.0),
-        "radius": 1.5,          # Physical radius (m)
-        "cost_units": 3.0,      # Cost units (large)
-        "selection_weight": 10, # Medium Frecuency 
-        "scale_range": (0.8, 1.5)
+        "radius": 2.0,          # Physical radius (m)
+        "cost_units": 5.0,      # Cost units (large)
+        "selection_weight": 20, # Medium Frecuency 
+        "scale_range": (0.6, 1.2)
     },
     "debris": {
         "active": True,
-        "pool_size": 20, # Increase pool for variety
+        "pool_size": 50, # Increase pool for variety
         "spawn_radius": (2.0, 15.0),
-        "radius": 0.3,          # Physical radius (m)
+        "radius": 0.5,          # Physical radius (m)
         "cost_units": 0.5,      # Cost units (small)
         "selection_weight": 50, # High Frecuency 
-        "scale_range": (0.2, 0.5)
+        "scale_range": (0.3, 1.0)
     },
     "manmade": {
         "active": True,
-        "pool_size": 5,
+        "pool_size": 30,
         "spawn_radius": (10.0, 40.0),
-        "radius": 0.8,
-        "cost_units": 1.0,
-        "selection_weight": 2, # Low Frecuency 
+        "radius": 1.0,
+        "cost_units": 2.0,
+        "selection_weight": 20, # Low Frecuency 
         "scale_range": (0.8, 1.2)
     }
 }
