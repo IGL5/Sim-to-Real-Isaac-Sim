@@ -292,8 +292,19 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                     break
             
             if found_path:
-                # Hide
                 prim = stage.GetPrimAtPath(found_path)
+
+                # Optimized transform creation
+                xform = UsdGeom.Xformable(prim)
+                if not xform.GetCustomDataByKey("initialized_ops"):
+                    xform.ClearXformOpOrder()
+                    xform.AddTranslateOp().Set(Gf.Vec3d(0, 0, 0))
+                    xform.AddRotateXYZOp().Set(Gf.Vec3f(0, 0, 0))
+                    xform.AddScaleOp().Set(Gf.Vec3f(1, 1, 1))
+                    # Mark as initialized for security
+                    xform.SetCustomDataByKey("initialized_ops", True)
+                
+                # Hide
                 UsdGeom.Imageable(prim).MakeInvisible()
                 created_paths.append(found_path)
             else:

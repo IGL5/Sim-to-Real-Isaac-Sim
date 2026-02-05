@@ -338,22 +338,34 @@ def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visi
 
     # Visibility
     imageable = UsdGeom.Imageable(prim)
-    if visible:
-        imageable.MakeVisible()
 
-        # Pose
+    # Optimized visibility update
+    current_vis = imageable.GetVisibilityAttr().Get()
+    target_vis = UsdGeom.Tokens.inherited if visible else UsdGeom.Tokens.invisible
+    if current_vis != target_vis:
+        if visible:
+            imageable.MakeVisible()
+        else:
+            imageable.MakeInvisible()
+
+    if visible:
         xform = UsdGeom.Xformable(prim)
-        xform.ClearXformOpOrder()
+        ops = xform.GetOrderedXformOps()
         
         # Add operations
-        try:
+        if len(ops) >= 3:
+            # Op 0: Translate
+            ops[0].Set(Gf.Vec3d(float(position[0]), float(position[1]), float(position[2])))
+            # Op 1: Rotate
+            ops[1].Set(Gf.Vec3f(float(rotation[0]), float(rotation[1]), float(rotation[2])))
+            # Op 2: Scale
+            ops[2].Set(Gf.Vec3f(float(scale), float(scale), float(scale)))
+        else:
+            # Fallback
+            xform.ClearXformOpOrder()
             xform.AddTranslateOp().Set(Gf.Vec3d(float(position[0]), float(position[1]), float(position[2])))
             xform.AddRotateXYZOp().Set(Gf.Vec3f(float(rotation[0]), float(rotation[1]), float(rotation[2])))
             xform.AddScaleOp().Set(Gf.Vec3f(float(scale), float(scale), float(scale)))
-        except Exception as e:
-            print(f"[ERROR] Failed to set pose for {path}: {e}")
-    else:
-        imageable.MakeInvisible()
 
 
 def validate_placement_config(config_map, budget_max, container_radius, context_name="Config"):
