@@ -1,6 +1,7 @@
 import os
 import random
 import math
+import time
 import carb
 import traceback
 
@@ -124,8 +125,16 @@ def main():
     frames_generated = 0
     max_attempts = config.CONFIG["num_frames"] * 5 # Avoid infinite loops
     attempts = 0
+
+    # Timer global
+    total_start_time = time.time()
+    frame_start_time = time.time()
     
     while frames_generated < config.CONFIG["num_frames"] and attempts < max_attempts:
+
+        # Timer frame
+        frame_start_time = time.time()
+
         attempts += 1
         print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
 
@@ -190,6 +199,15 @@ def main():
 
         rep.orchestrator.step(delta_time=0.0, rt_subframes=64)
         rep.BackendDispatch.wait_until_done()
+
+        # Calculate frame duration
+        frame_duration = time.time() - frame_start_time
+        
+        # Intelligent logging (Frame 1 and every 50)
+        if frames_generated == 0 or (frames_generated + 1) % 50 == 0:
+            elapsed_total = time.time() - total_start_time
+            avg_time = elapsed_total / (frames_generated + 1)
+            print(f"⏱️  [Frame {frames_generated+1}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
 
         frames_generated += 1
 
