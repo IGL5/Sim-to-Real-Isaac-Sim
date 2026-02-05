@@ -204,10 +204,10 @@ def main():
         frame_duration = time.time() - frame_start_time
         
         # Intelligent logging (Frame 1 and every 50)
-        if frames_generated == 0 or (frames_generated + 1) % 50 == 0:
+        if frames_generated == 1 or (frames_generated + 1) % 50 == 0:
             elapsed_total = time.time() - total_start_time
             avg_time = elapsed_total / (frames_generated + 1)
-            print(f"⏱️  [Frame {frames_generated+1}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
+            print(f"⏱️  [Frame {frames_generated}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
 
         frames_generated += 1
 
