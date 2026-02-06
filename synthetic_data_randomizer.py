@@ -15,7 +15,7 @@ simulation_app = SimulationApp(launch_config=config.CONFIG)
 # --- ISAAC / USD / REP IMPORTS ---
 from isaacsim.core.utils.stage import get_current_stage, open_stage
 from omni.timeline import get_timeline_interface
-from pxr import UsdPhysics, Sdf
+from pxr import UsdPhysics, Sdf, UsdGeom, Gf
 import omni.replicator.core as rep
 
 from modules import scene_utils
@@ -84,7 +84,23 @@ def main():
         rep.modify.attribute("inputs:angle", 0.5)
     
     # REPLICATOR CAMERA
-    cam_rep = rep.create.camera(focal_length=18.0, name="DroneCamera")
+    cam_rep = rep.create.camera(
+        position=(0, 0, 0),
+        rotation=(0, 0, 0),
+        focal_length=18.0,
+        name="DroneCamera"
+    )
+
+    camera_path = None
+    for prim in stage.Traverse():
+        if prim.GetName() == "DroneCamera":
+            camera_path = str(prim.GetPath())
+            break
+    
+    cam_prim = stage.GetPrimAtPath(camera_path)
+    cam_xform = UsdGeom.Xformable(cam_prim)
+    cam_xform.ClearXformOpOrder()
+    cam_xform.AddTransformOp().Set(Gf.Matrix4d(1.0))
     
     # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
@@ -162,11 +178,7 @@ def main():
 
         cam_x, cam_y, cam_z = scene_utils.get_drone_camera_pose(current_target)
         
-        with cam_rep:
-            rep.modify.pose(
-                position=(cam_x, cam_y, cam_z),
-                look_at=camera_look_at_target
-            )
+        scene_utils.update_camera_pose(stage, camera_path, (cam_x, cam_y, cam_z), camera_look_at_target)
 
         # D. POSITION DETECTABLE OBJECTS (Cyclists, Vehicles...)
         detectables_obstacles = scene_utils.place_objects_from_config(

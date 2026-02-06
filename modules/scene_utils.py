@@ -430,3 +430,41 @@ def validate_placement_config(config_map, budget_max, container_radius, context_
         return True, f"🟡 {msg} -> DENSE (May have some warnings)"
     else:
         return True, f"🟢 {msg} -> OK"
+
+
+def update_camera_pose(stage, cam_path, eye, target):
+    """
+    Moves the camera manually using USD, avoiding that the Replicator graph grows.
+    Calculates the transformation matrix for 'LookAt'.
+    """
+    prim = stage.GetPrimAtPath(cam_path)
+    if not prim.IsValid(): return
+    
+    # 1. Vectors
+    eye_vec = Gf.Vec3d(*eye)
+    target_vec = Gf.Vec3d(*target)
+    up_vec = Gf.Vec3d(0, 0, 1)
+    
+    # 2. Calculate View Matrix (World -> Camera)
+    view_mtx = Gf.Matrix4d().SetLookAt(eye_vec, target_vec, up_vec)
+    
+    # 3. Invert for getting Transform (Camera -> World) that we move
+    xform_mtx = view_mtx.GetInverse()
+    
+    # 4. Apply to the camera
+    xform = UsdGeom.Xformable(prim)
+    
+    # Search if it already has a Transformation operation
+    ops = xform.GetOrderedXformOps()
+    found_op = None
+    for op in ops:
+        if op.GetOpType() == UsdGeom.XformOp.TypeTransform:
+            found_op = op
+            break
+            
+    if found_op:
+        found_op.Set(xform_mtx)
+    else:
+        # If it's the first time, clear and create
+        xform.ClearXformOpOrder()
+        xform.AddTransformOp().Set(xform_mtx)
