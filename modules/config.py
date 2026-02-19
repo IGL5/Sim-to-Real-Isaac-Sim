@@ -14,8 +14,6 @@ parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data
 args, unknown_args = parser.parse_known_args()
 
 
-MAP_NAME = "Environment_variable.usd"
-
 # Sky config
 HDR_MAPS_DIR = os.path.join(os.getcwd(), "assets", "hdr")
 AVAILABLE_HDRS = []
@@ -26,7 +24,10 @@ CONFIG = {"renderer": "PathTracing", "headless": args.headless,
           "width": args.width, "height": args.height, "num_frames": args.num_frames}
 
 # GENERAL CONSTANTS
-WORLD_LIMITS = (-1300, 1300, -1300, 1300)
+MAP_NAME = "Environment_variable_light.usd"     # For the big map -> "Environment_variable.usd"
+WORLD_LIMITS = (-650, 650, -650, 650)           # For the big map -> (-1300, 1300, -1300, 1300)
+MATERIAL_SCALE_FLAT = (0.5, 1.0)                # For th big map -> (1.0, 2.0)
+MATERIAL_SCALE_MOUNTAIN = (0.06, 0.1)           # For the big map -> (0.03, 0.05)
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 
 # CAMERA CONSTANTS

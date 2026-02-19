@@ -150,10 +150,6 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
     if not loaded_materials:
         return
 
-    # Adjusted scales
-    scale_flat = (1.0, 2.0)      
-    scale_mountain = (0.03, 0.05)
-
     # 1. FILTER ACTIVE GROUPS
     active_keys = [k for k, v in terrain_paths_map.items() if v]
     num_needed = len(active_keys)
@@ -178,9 +174,9 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
         if shader:
             # Scale logic based on terrain type
             if "flat" in key.lower():
-                s_min, s_max = scale_flat
+                s_min, s_max = config.MATERIAL_SCALE_FLAT
             else:
-                s_min, s_max = scale_mountain
+                s_min, s_max = config.MATERIAL_SCALE_MOUNTAIN
 
             scale_val = random.uniform(s_min, s_max)
             rot_val = random.uniform(0, 360)
