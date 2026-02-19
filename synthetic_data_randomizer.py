@@ -60,7 +60,7 @@ def main():
             light_path = os.path.join(config.HDR_MAPS_DIR, config.AVAILABLE_HDRS[0])
             dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(light_path))
             # High intensity to compete with the sun
-            dome_light.CreateIntensityAttr().Set(1000.0) 
+            dome_light.CreateIntensityAttr().Set(1200.0) 
     else:
         print("[WARN] SkyDome not found in USD. Background might be black.")
 
@@ -71,7 +71,7 @@ def main():
     if sun_prim.IsValid():
         print("   -> Found Sun_Light. Randomizing time of day...")
         sun_light = UsdLux.DistantLight(sun_prim)
-        sun_light.CreateIntensityAttr().Set(2500.0)
+        sun_light.CreateIntensityAttr().Set(2000.0)
         
         # Random rotation (Simulate time of day and direction)
         xform = UsdGeom.Xformable(sun_prim)
@@ -138,7 +138,8 @@ def main():
     writer.attach(render_product)
 
     # Run physics warmup
-    for i in range(150):
+    rep.orchestrator.stop()
+    for i in range(100):
         simulation_app.update()
 
     # --- 6. VALIDATION CHECK ---
@@ -168,7 +169,6 @@ def main():
 
     # --- 7. MAIN LOOP ---
     print(f"\nStarting generation of {config.CONFIG['num_frames']} frames...")
-    rep.orchestrator.stop()
 
     frames_generated = 0
     max_attempts = config.CONFIG["num_frames"] * 5 # Avoid infinite loops

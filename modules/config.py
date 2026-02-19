@@ -24,10 +24,11 @@ CONFIG = {"renderer": "PathTracing", "headless": args.headless,
           "width": args.width, "height": args.height, "num_frames": args.num_frames}
 
 # GENERAL CONSTANTS
-MAP_NAME = "Environment_variable_light.usd"     # For the big map -> "Environment_variable.usd"
-WORLD_LIMITS = (-650, 650, -650, 650)           # For the big map -> (-1300, 1300, -1300, 1300)
-MATERIAL_SCALE_FLAT = (0.5, 1.0)                # For th big map -> (1.0, 2.0)
-MATERIAL_SCALE_MOUNTAIN = (0.06, 0.1)           # For the big map -> (0.03, 0.05)
+MAP_NAME = "Environment_variable.usd"
+WORLD_LIMITS = (-1300, 1300, -1300, 1300)
+MATERIAL_SCALE_FLAT = (0.4, 0.8)
+MATERIAL_SCALE_MOUNTAIN = (0.03, 0.05)
+
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 
 # CAMERA CONSTANTS
