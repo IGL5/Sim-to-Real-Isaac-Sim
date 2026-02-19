@@ -13,6 +13,9 @@ parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data
 
 args, unknown_args = parser.parse_known_args()
 
+
+MAP_NAME = "Environment_variable.usd"
+
 # Sky config
 HDR_MAPS_DIR = os.path.join(os.getcwd(), "assets", "hdr")
 AVAILABLE_HDRS = []
