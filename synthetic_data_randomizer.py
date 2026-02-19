@@ -1,6 +1,7 @@
 import os
 import random
 import math
+import time
 import carb
 import traceback
 
@@ -14,7 +15,7 @@ simulation_app = SimulationApp(launch_config=config.CONFIG)
 # --- ISAAC / USD / REP IMPORTS ---
 from isaacsim.core.utils.stage import get_current_stage, open_stage
 from omni.timeline import get_timeline_interface
-from pxr import UsdPhysics, Sdf
+from pxr import UsdPhysics, Sdf, UsdGeom, Gf
 import omni.replicator.core as rep
 
 from modules import scene_utils
@@ -43,73 +44,35 @@ def main():
     terrain_paths_map = scene_utils.find_prims_by_material_name(stage, config.ENVIRONMENT_LOOKUP_KEYS)
     content.setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
-    # --- 3. LOAD OBJECTS ---
-    assets_library = {}
-    for obj_class in config.OBJECTS_CONFIG.keys():
-        found_paths = content.discover_objective_assets(config.ASSETS_ROOT_DIR, obj_class)
-        if found_paths:
-            assets_library[obj_class] = found_paths
-        else:
-            print(f"[WARN] No assets found for class '{obj_class}'.")
+    # --- 3. LOAD ASSETS ---
+    print("\n--- Loading Detectable Objects ---")
+    detectable_pools = content.create_class_pool(
+        stage, 
+        config.OBJECTS_CONFIG, 
+        config.ASSETS_ROOT_DIR, 
+        apply_semantics=True
+    )
     
-    scene_reps = {} 
-    
-    for obj_class, obj_config in config.OBJECTS_CONFIG.items():
-        if obj_class not in assets_library: continue
-        
-        available_models = assets_library[obj_class]
-        num_unique = len(available_models)
-        target_pool_size = obj_config["pool_size"]
-        
-        paths_to_use = []
-        
-        # Ensure complete copies
-        full_copies = target_pool_size // num_unique
-        for _ in range(full_copies):
-            paths_to_use.extend(available_models)
-            
-        # Fill the remainder
-        remainder = target_pool_size - len(paths_to_use)
-        if remainder > 0:
-            paths_to_use.extend(random.sample(available_models, remainder))
-            
-        # Shuffle to avoid ordered patterns
-        random.shuffle(paths_to_use)
-        
-        # Instantiation
-        items_paths = []
-        for i, path in enumerate(paths_to_use):
-            prim_name = f"{obj_class}_{i}"
-
-            rep_item = rep.create.from_usd(
-                path, 
-                semantics=[('class', obj_class)],
-                name=prim_name
-            )
-            
-            # Look for path quickly knowing the name
-            found_path = None
-            for p in stage.Traverse():
-                if p.GetName() == prim_name:
-                    found_path = str(p.GetPath())
-                    break
-
-            if found_path:
-                items_paths.append(found_path)
-            else:
-                print(f"[ERROR] Could not find path for generated object: {prim_name}")
-            
-        scene_reps[obj_class] = items_paths
-        print(f"--- Pool Created: {len(items_paths)} objects for '{obj_class}' (Balanced Mix) ---")
+    print("\n--- Loading Distractors ---")
+    distractor_pools = content.create_class_pool(
+        stage, 
+        config.DISTRACTOR_CONFIG, 
+        config.ASSETS_ROOT_DIR, 
+        apply_semantics=False
+    )
 
     # Run physics warmup
-    for i in range(60):
+    for i in range(100):
         simulation_app.update()
     
-    # --- 5. LIGHTS AND CAMERA (SETUP) ---
+    # --- 4. LIGHTS AND CAMERA (SETUP) ---
     
     # Ambient Light (Fill)
-    rep.create.light(light_type="Dome", intensity=5, texture=None)
+    rep.create.light(
+        light_type="Dome", 
+        intensity=10, 
+        texture=None
+    )
 
     # Sun (Main)
     distant_light = rep.create.light(
@@ -122,9 +85,22 @@ def main():
     
     # REPLICATOR CAMERA
     cam_rep = rep.create.camera(
+        position=(0, 0, 0),
+        rotation=(0, 0, 0),
         focal_length=18.0,
         name="DroneCamera"
     )
+
+    camera_path = None
+    for prim in stage.Traverse():
+        if prim.GetName() == "DroneCamera":
+            camera_path = str(prim.GetPath())
+            break
+    
+    cam_prim = stage.GetPrimAtPath(camera_path)
+    cam_xform = UsdGeom.Xformable(cam_prim)
+    cam_xform.ClearXformOpOrder()
+    cam_xform.AddTransformOp().Set(Gf.Matrix4d(1.0))
     
     # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
@@ -133,6 +109,31 @@ def main():
     render_product = rep.create.render_product(cam_rep, (config.CONFIG["width"], config.CONFIG["height"]))
     writer.attach(render_product)
 
+    # --- 5. VALIDATION CHECK ---
+    print("\n--- Configuration Safety Check ---")
+    
+    # Check Objects
+    ok_obj, msg_obj = scene_utils.validate_placement_config(
+        config.OBJECTS_CONFIG, 
+        config.OBJECTS_BUDGET_RANGE[1], # Use max of range
+        config.OBJECTS_MAX_RADIUS, 
+        "Detectables"
+    )
+    print(msg_obj)
+    
+    # Check Distractors
+    ok_dist, msg_dist = scene_utils.validate_placement_config(
+        config.DISTRACTOR_CONFIG, 
+        config.DISTRACTOR_BUDGET_RANGE[1], 
+        config.DISTRACTOR_MAX_RADIUS, 
+        "Distractors"
+    )
+    print(msg_dist)
+    
+    if not ok_obj or not ok_dist:
+        print("\n⚠️  WARNING: High density detected! Consider increasing MAX_RADIUS or decreasing BUDGET.")
+        input("Press Enter to continue anyway...")
+
     # --- 6. MAIN LOOP ---
     print(f"Starting generation of {config.CONFIG['num_frames']} frames...")
     rep.orchestrator.stop()
@@ -140,9 +141,16 @@ def main():
     frames_generated = 0
     max_attempts = config.CONFIG["num_frames"] * 5 # Avoid infinite loops
     attempts = 0
+
+    # Timer global
+    total_start_time = time.time()
+    frame_start_time = time.time()
     
-    # --- Main Loop ---
     while frames_generated < config.CONFIG["num_frames"] and attempts < max_attempts:
+
+        # Timer frame
+        frame_start_time = time.time()
+
         attempts += 1
         print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
 
@@ -170,81 +178,48 @@ def main():
 
         cam_x, cam_y, cam_z = scene_utils.get_drone_camera_pose(current_target)
         
-        with cam_rep:
-            rep.modify.pose(
-                position=(cam_x, cam_y, cam_z),
-                look_at=camera_look_at_target
-            )
+        scene_utils.update_camera_pose(stage, camera_path, (cam_x, cam_y, cam_z), camera_look_at_target)
 
-        # D. POSITION OBJECTS (Visibility Toggling)
-        all_poses_occupied = [] 
-        frame_failed = False
-
-        for obj_class, object_paths in scene_reps.items():
-            if not object_paths: continue
-            
-            obj_config = config.OBJECTS_CONFIG[obj_class]
-            
-            # 1. Select how many will be visible
-            min_v, max_v = obj_config.get("num_visible_range", (1, 1))
-            count_visible = random.randint(min_v, max_v)
-            
-            # 2. Select a random subset from the pool
-            current_paths = object_paths[:]
-            random.shuffle(current_paths)
-            
-            active_paths = current_paths[:count_visible]
-            inactive_paths = current_paths[count_visible:]
-            
-            # 3. Calculate positions (Only for the active items)
-            poses = scene_utils.get_multiple_poses_near_target(
-                stage,
-                target_pos=current_target,
-                num_objects=len(active_paths),
-                min_dist=0.5,
-                max_radius=10.0,
-                existing_obstacles=all_poses_occupied,
-                wheelbase=obj_config["wheelbase"]
-            )
-
-            if len(poses) < len(active_paths):
-                 print(f"[RETRY] Could not place {len(active_paths)} {obj_class} safely.")
-                 frame_failed = True
-                 break
-            
-            # 4. Move and activate the VISIBLE ones
-            for path_str, (pos, rot) in zip(active_paths, poses):
-                scene_utils.update_prim_pose_and_visibility(
-                    stage, 
-                    path_str,
-                    pos, 
-                    rot, 
-                    obj_config["scale"], 
-                    visible=True
-                )
-                all_poses_occupied.append(pos)
-
-            # 5. Hide the INVISIBLE ones
-            for path_str in inactive_paths:
-                scene_utils.update_prim_pose_and_visibility(
-                    stage, 
-                    path_str,
-                    None,
-                    None,
-                    None,
-                    visible=False
-                )
+        # D. POSITION DETECTABLE OBJECTS (Cyclists, Vehicles...)
+        detectables_obstacles = scene_utils.place_objects_from_config(
+            stage=stage,
+            target_pos=current_target,
+            config_map=config.OBJECTS_CONFIG,
+            pools_paths_map=detectable_pools,
+            budget_range=config.OBJECTS_BUDGET_RANGE,
+            max_radius=config.OBJECTS_MAX_RADIUS,
+            previous_obstacles=[]
+        )
         
-        if frame_failed:
-            continue
+        # E. POSITION DISTRACTORS (Rocks, Vegetation...)
+        all_obstacles = detectables_obstacles 
 
-        # E. SHOOT
+        scene_utils.place_objects_from_config(
+            stage=stage,
+            target_pos=current_target,
+            config_map=config.DISTRACTOR_CONFIG,
+            pools_paths_map=distractor_pools,
+            budget_range=config.DISTRACTOR_BUDGET_RANGE,
+            max_radius=config.DISTRACTOR_MAX_RADIUS,
+            previous_obstacles=all_obstacles
+        )
+
+        # F. SHOOT
         simulation_app.update()
         simulation_app.update()
         simulation_app.update()
 
         rep.orchestrator.step(delta_time=0.0, rt_subframes=64)
         rep.BackendDispatch.wait_until_done()
+
+        # Calculate frame duration
+        frame_duration = time.time() - frame_start_time
+        
+        # Intelligent logging (Frame 1 and every 50)
+        if frames_generated == 1 or (frames_generated + 1) % 50 == 0:
+            elapsed_total = time.time() - total_start_time
+            avg_time = elapsed_total / (frames_generated + 1)
+            print(f"⏱️  [Frame {frames_generated}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
 
         frames_generated += 1
 

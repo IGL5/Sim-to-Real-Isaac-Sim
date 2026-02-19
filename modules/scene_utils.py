@@ -3,7 +3,6 @@ import random
 import carb
 from omni.physx import get_physx_scene_query_interface
 from pxr import UsdGeom, Gf, Semantics, UsdShade, Sdf
-import omni.replicator.core as rep
 from modules import config
 
 def find_prims_by_material_name(stage, material_names):
@@ -34,46 +33,6 @@ def find_prims_by_material_name(stage, material_names):
                         break 
     
     return found_paths
-
-
-def update_semantics(stage, keep_semantics=[]):
-    """ Remove semantics from the stage except for keep_semantic classes"""
-    for prim in stage.Traverse():
-        if prim.HasAPI(Semantics.SemanticsAPI):
-            processed_instances = set()
-            for property in prim.GetProperties():
-                is_semantic = Semantics.SemanticsAPI.IsSemanticsAPIPath(property.GetPath())
-                if is_semantic:
-                    instance_name = property.SplitName()[1]
-                    if instance_name in processed_instances:
-                        continue
-
-                    processed_instances.add(instance_name)
-                    sem = Semantics.SemanticsAPI.Get(prim, instance_name)
-                    type_attr = sem.GetSemanticTypeAttr()
-                    data_attr = sem.GetSemanticDataAttr()
-
-                    for semantic_class in keep_semantics:
-                        # Check for our data classes needed for the model
-                        if data_attr.Get() == semantic_class:
-                            continue
-                        else:
-                            # remove semantics of all other prims
-                            prim.RemoveProperty(type_attr.GetName())
-                            prim.RemoveProperty(data_attr.GetName())
-                            prim.RemoveAPI(Semantics.SemanticsAPI, instance_name)
-
-
-def run_orchestrator(simulation_app):
-    rep.orchestrator.run()
-
-    while not rep.orchestrator.get_is_started():
-        simulation_app.update()
-    while rep.orchestrator.get_is_started():
-        simulation_app.update()
-
-    rep.BackendDispatch.wait_until_done()
-    rep.orchestrator.stop()
 
 
 def get_ground_height(x, y):
@@ -198,82 +157,175 @@ def draw_debug_cube(stage, position):
     cube_geom.GetDisplayColorAttr().Set([(1, 0, 0)])
 
 
-def get_multiple_poses_near_target(stage, target_pos, num_objects, min_dist=2.0, max_radius=10.0, existing_obstacles=[], wheelbase= None):
+def select_objects_by_budget(available_keys, config_map, total_budget):
     """
-    Generates N valid positions with slope adaptation.
-    Avoids collisions with 'existing_obstacles' and with itself.
-    
-    If wheelbase is not None, it will calculate the pitch angle based on the two wheels.
+    Selects objects until the budget of 'units' is filled.
+    Returns a list of keys (e.g: ['truck', 'rock', 'rock', 'sign'])
     """
-    valid_poses = []
-    tx, ty, tz = target_pos
-
-    obstacles_xy = [(p[0], p[1]) for p in existing_obstacles]
+    selected_keys = []
+    current_usage = 0
     
-    max_attempts = num_objects * 100 
+    # Avoid infinite loops if nothing fits
+    active_costs = [config_map[k]['cost_units'] for k in available_keys]
+    if not active_costs: return []
+    min_cost = min(active_costs)
+    
     attempts = 0
-    
-    while len(valid_poses) < num_objects and attempts < max_attempts:
+    while (total_budget - current_usage) >= min_cost and attempts < 100:
         attempts += 1
         
-        # 1. Generate random candidate
-        r = random.uniform(1.0, max_radius) 
-        theta = random.uniform(0, 2 * math.pi)
+        # Weighted selection
+        keys = list(available_keys)
+        weights = [config_map[k]['selection_weight'] for k in keys]
         
-        cand_x = tx + r * math.cos(theta)
-        cand_y = ty + r * math.sin(theta)
+        choice = random.choices(keys, weights=weights, k=1)[0]
+        cost = config_map[choice]['cost_units']
         
-        # 2. Check 2D collision
-        collision = False
-        # A) Check against previous obstacles
-        for (ex, ey) in obstacles_xy:
-            dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
-            if dist < min_dist:
-                collision = True
-                break
+        if current_usage + cost <= total_budget:
+            selected_keys.append(choice)
+            current_usage += cost
+            
+    return selected_keys
+
+
+def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=10.0, existing_obstacles=[]):
+    """
+    Generates non-overlapping positions and rotations for a set of objects around a target point.
+    Adjusts height and pitch based on terrain geometry.
+    """
+    valid_results = []
+    tx, ty, _ = target_pos
+    
+    # Local copy of obstacles (x, y, radius)
+    current_obstacles = [(p[0], p[1], p[2]) for p in existing_obstacles] 
+
+    for i, spec in enumerate(candidates_specs):
+        obj_radius = spec['radius']
+        obj_wheelbase = spec.get('wheelbase', None)
         
-        # B) Check against the ones we just generated in this same loop
-        if not collision:
-            for (exist_pos, _) in valid_poses:
-                ex, ey, _ = exist_pos
+        placed = False
+        attempts = 0
+        max_attempts = 100 # Attempts per object
+        
+        while not placed and attempts < max_attempts:
+            attempts += 1
+            
+            # 1. Generate candidate
+            r = random.uniform(0.0, max_radius) # Can be 0 to be very close
+            theta = random.uniform(0, 2 * math.pi)
+            
+            cand_x = tx + r * math.cos(theta)
+            cand_y = ty + r * math.sin(theta)
+            
+            # 2. Collision check (Variable Radius)
+            collision = False
+            for (ex, ey, er) in current_obstacles:
                 dist = math.sqrt((cand_x - ex)**2 + (cand_y - ey)**2)
-                if dist < min_dist:
+                # The minimum distance is the sum of the two radius
+                min_separation = obj_radius + er
+                
+                if dist < min_separation:
                     collision = True
                     break
-        
-        if not collision:
-            angle_yaw = random.uniform(0, 360)
             
-            # 3. DIFFERENT LOGIC: Is it a vehicle or static?
-            if wheelbase is not None:
-                # --- VEHICLE MODE ---
-                # Calculate pitch based on the two wheels
-                pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, wheelbase)
+            if not collision:
+                # 3. Calculate Height / Pitch
+                angle_yaw = random.uniform(0, 360)
                 
-                if pitch_deg is None: 
-                    continue
+                if obj_wheelbase is not None:
+                    # Vehicle mode
+                    pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, obj_wheelbase)
+                    if pitch_deg is None: continue
+                    rotation = (90, -pitch_deg, angle_yaw)
+                    z_final = z_adjusted
+                else:
+                    # Static mode
+                    z_ground = get_ground_height(cand_x, cand_y)
+                    if z_ground == -9999.0: continue
+                    rotation = (90, 0, angle_yaw)
+                    z_final = z_ground
                 
-                rotation_corrected = (90, -pitch_deg, angle_yaw)
-                z_final = z_adjusted
+                # Save valid candidate
+                valid_results.append( ((cand_x, cand_y, z_final), rotation, i) )
+                current_obstacles.append( (cand_x, cand_y, obj_radius) )
+                placed = True
                 
-            else:
-                # --- STATIC MODE ---
-                # Only need the ground height at the center
-                z_ground = get_ground_height(cand_x, cand_y)
-                
-                if z_ground == -9999.0: 
-                    continue
-                
-                rotation_corrected = (90, 0, angle_yaw)
-                z_final = z_ground
+        if not placed:
+            print(f"[WARN] Could not place object with radius {obj_radius}")
 
-            # 4. Save valid candidate
-            valid_poses.append(((cand_x, cand_y, z_final), rotation_corrected))
+    return valid_results
+
+
+def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[]):
+    """
+    Master Orchestrator.
+    Handles: Selection (Budget) -> Unique Assignment (Stack) -> Placement -> Cleanup.
+    """
+    # 1. Budget and Theoretical Selection
+    budget = random.uniform(budget_range[0], budget_range[1])
+    active_keys = [k for k, v in config_map.items() if v.get('active', True)]
+    
+    # List of desired objects (e.g: ['rock', 'rock', 'tree', ...])
+    chosen_keys = select_objects_by_budget(active_keys, config_map, budget)
+    
+    # 2. Sort by radius (Biggest first)
+    chosen_keys.sort(key=lambda k: config_map[k]['radius'], reverse=True)
+    
+    # Sampling without replacement
+    working_pools = {}
+    for key, paths in pools_paths_map.items():
+        if paths:
+            pool_copy = list(paths)
+            random.shuffle(pool_copy)
+            working_pools[key] = pool_copy
+
+    # 3. Resource Assignment
+    candidates_specs = []
+    paths_candidates = []
+    keys_candidates = []
+    
+    for key in chosen_keys:
+        # Skip if no stock or pool is empty (Dynamic pruning)
+        if not working_pools.get(key):
+            continue
             
-    if len(valid_poses) < num_objects:
-        print(f"[WARN] Could only place {len(valid_poses)}/{num_objects} objects safely.")
+        path = working_pools[key].pop()
+        cfg = config_map[key]
         
-    return valid_poses
+        candidates_specs.append({'radius': cfg['radius'], 'wheelbase': cfg.get('wheelbase')})
+        paths_candidates.append(path)
+        keys_candidates.append(key)
+        
+    # 4. Calculate Poses (Mathematics)
+    # results devuelve: [ ((x,y,z), rot, original_index), ... ]
+    results = get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius, previous_obstacles)
+    
+    # 5. Move successfully placed objects
+    new_obstacles = [] 
+    successfully_placed_paths = set()
+
+    for (pos, rot, original_idx) in results:
+        path = paths_candidates[original_idx]
+        
+        key = keys_candidates[original_idx]
+        cfg = config_map[key]
+        
+        s_min, s_max = cfg.get('scale_range', (1.0, 1.0))
+        scale = random.uniform(s_min, s_max)
+        
+        update_prim_pose_and_visibility(stage, path, pos, rot, scale, visible=True)
+        
+        # Register success
+        new_obstacles.append( (pos[0], pos[1], cfg['radius']) )
+        successfully_placed_paths.add(path)
+        
+    # 6. Clean up unused objects
+    for key, pool in pools_paths_map.items():
+        for path in pool:
+            if path not in successfully_placed_paths:
+                update_prim_pose_and_visibility(stage, path, None, None, None, visible=False)
+
+    return new_obstacles
 
 
 def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visible=True):
@@ -286,19 +338,133 @@ def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visi
 
     # Visibility
     imageable = UsdGeom.Imageable(prim)
-    if visible:
-        imageable.MakeVisible()
 
-        # Pose
+    # Optimized visibility update
+    current_vis = imageable.GetVisibilityAttr().Get()
+    target_vis = UsdGeom.Tokens.inherited if visible else UsdGeom.Tokens.invisible
+    if current_vis != target_vis:
+        if visible:
+            imageable.MakeVisible()
+        else:
+            imageable.MakeInvisible()
+
+    if visible:
         xform = UsdGeom.Xformable(prim)
-        xform.ClearXformOpOrder()
+        ops = xform.GetOrderedXformOps()
         
         # Add operations
-        try:
+        if len(ops) >= 3:
+            # Op 0: Translate
+            ops[0].Set(Gf.Vec3d(float(position[0]), float(position[1]), float(position[2])))
+            # Op 1: Rotate
+            ops[1].Set(Gf.Vec3f(float(rotation[0]), float(rotation[1]), float(rotation[2])))
+            # Op 2: Scale
+            ops[2].Set(Gf.Vec3f(float(scale), float(scale), float(scale)))
+        else:
+            # Fallback
+            xform.ClearXformOpOrder()
             xform.AddTranslateOp().Set(Gf.Vec3d(float(position[0]), float(position[1]), float(position[2])))
             xform.AddRotateXYZOp().Set(Gf.Vec3f(float(rotation[0]), float(rotation[1]), float(rotation[2])))
             xform.AddScaleOp().Set(Gf.Vec3f(float(scale), float(scale), float(scale)))
-        except Exception as e:
-            print(f"[ERROR] Failed to set pose for {path}: {e}")
+
+
+def validate_placement_config(config_map, budget_max, container_radius, context_name="Config"):
+    """
+    Analizes if objects fit in the assigned space based on the maximum budget
+    and selection probabilities.
+    
+    Returns:
+        (is_safe, message): Boolean and string with the diagnosis.
+    """
+    total_weight = 0
+    weighted_area_sum = 0
+    weighted_cost_sum = 0
+    
+    # Only consider active items
+    active_items = {k: v for k, v in config_map.items() if v.get('active', True)}
+    
+    if not active_items:
+        return True, f"[{context_name}] No active items."
+
+    # 1. Calculate weighted averages
+    for k, v in active_items.items():
+        weight = v.get('selection_weight', 1)
+        radius = v.get('radius', 1.0)
+        cost = v.get('cost_units', 1.0)
+        
+        area = math.pi * (radius ** 2)
+        
+        weighted_area_sum += weight * area
+        weighted_cost_sum += weight * cost
+        total_weight += weight
+        
+    if total_weight == 0:
+        return True, f"[{context_name}] Total weights are 0."
+
+    avg_area_per_item = weighted_area_sum / total_weight
+    avg_cost_per_item = weighted_cost_sum / total_weight
+    
+    # 2. Estimation of worst case (Maximum budget)
+    estimated_num_items = budget_max / avg_cost_per_item if avg_cost_per_item > 0 else 0
+    required_area = estimated_num_items * avg_area_per_item
+    
+    # 3. Available area
+    available_area = math.pi * (container_radius ** 2)
+    
+    # 4. Packing Factor
+    # Perfect circles fill ~90%. Random placement is ~40-50%.
+    # If we exceed 60%, we will start having many failures.
+    fill_ratio = required_area / available_area if available_area > 0 else 999.0
+    
+    packing_limit_safe = 0.45  # Green: Very safe
+    packing_limit_warn = 0.65  # Yellow: Possible failures, but acceptable
+    
+    msg = (f"[{context_name}] Ratio of Occupation: {fill_ratio*100:.1f}% "
+           f"(Req: {required_area:.0f}m² / Disp: {available_area:.0f}m²)")
+    
+    if fill_ratio > 1.0:
+        return False, f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
+    elif fill_ratio > packing_limit_warn:
+        return False, f"🟠 {msg} -> CRITICAL (High probability of failure)"
+    elif fill_ratio > packing_limit_safe:
+        return True, f"🟡 {msg} -> DENSE (May have some warnings)"
     else:
-        imageable.MakeInvisible()
+        return True, f"🟢 {msg} -> OK"
+
+
+def update_camera_pose(stage, cam_path, eye, target):
+    """
+    Moves the camera manually using USD, avoiding that the Replicator graph grows.
+    Calculates the transformation matrix for 'LookAt'.
+    """
+    prim = stage.GetPrimAtPath(cam_path)
+    if not prim.IsValid(): return
+    
+    # 1. Vectors
+    eye_vec = Gf.Vec3d(*eye)
+    target_vec = Gf.Vec3d(*target)
+    up_vec = Gf.Vec3d(0, 0, 1)
+    
+    # 2. Calculate View Matrix (World -> Camera)
+    view_mtx = Gf.Matrix4d().SetLookAt(eye_vec, target_vec, up_vec)
+    
+    # 3. Invert for getting Transform (Camera -> World) that we move
+    xform_mtx = view_mtx.GetInverse()
+    
+    # 4. Apply to the camera
+    xform = UsdGeom.Xformable(prim)
+    
+    # Search if it already has a Transformation operation
+    ops = xform.GetOrderedXformOps()
+    found_op = None
+    for op in ops:
+        if op.GetOpType() == UsdGeom.XformOp.TypeTransform:
+            found_op = op
+            break
+            
+    if found_op:
+        found_op.Set(xform_mtx)
+    else:
+        # If it's the first time, clear and create
+        xform.ClearXformOpOrder()
+        xform.AddTransformOp().Set(xform_mtx)
