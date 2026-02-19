@@ -139,7 +139,7 @@ def main():
 
     # Run physics warmup
     rep.orchestrator.stop()
-    for i in range(100):
+    for i in range(60):
         simulation_app.update()
 
     # --- 6. VALIDATION CHECK ---
