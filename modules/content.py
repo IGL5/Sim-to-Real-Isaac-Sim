@@ -1,7 +1,7 @@
 import os
 import glob
 import random
-from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom
+from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom, UsdLux
 import omni.replicator.core as rep
 from modules import config
 
@@ -55,7 +55,7 @@ def load_pbr_materials(stage):
         return []
 
     material_folders = [f.path for f in os.scandir(config.TEXTURES_ROOT_DIR) if f.is_dir()]
-    print(f"--- Found {len(material_folders)} texture folders ---")
+    print(f"\n--- Found {len(material_folders)} texture folders ---")
     
     # 1. ROBUST CREATION
     for i, folder_path in enumerate(material_folders):
@@ -195,7 +195,8 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
             shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
-            shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.4, 0.9))
+            shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.7, 1.0))
+            shader.CreateInput("specular_level", Sdf.ValueTypeNames.Float).Set(random.uniform(0.1, 0.3))
 
             normal_strength = random.uniform(1.5, 2.5) 
             shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
@@ -206,6 +207,56 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             if prim.IsValid():
                 binding_api = UsdShade.MaterialBindingAPI(prim)
                 binding_api.Bind(chosen_material)
+
+
+def discover_hdr_maps(directory):
+    """
+    Looks for .hdr or .exr files in the given directory.
+    Not recursive (searches only in the root of the folder).
+    """
+    if not os.path.exists(directory):
+        print(f"[ERROR] HDR Directory not found: {directory}")
+        # Try to create it to help the user
+        try:
+            os.makedirs(directory, exist_ok=True)
+            print(f"   -> Created directory: {directory}. Please add .hdr files there.")
+        except:
+            pass
+        return []
+
+    # Search for valid file extensions
+    supported_extensions = ('.hdr', '.exr')
+    files = [f for f in os.listdir(directory) if f.lower().endswith(supported_extensions)]
+    
+    print(f"\n--- Found {len(files)} HDR maps in local folder ---")
+        
+    return files
+
+
+def setup_dome_light(stage, dome_light_path, hdr_texture_path, intensity):
+    """
+    Configures the Dome Light with an HDR texture and an intensity.
+    """
+    # Get the Dome Light Prim
+    dome_prim = stage.GetPrimAtPath(dome_light_path)
+    if not dome_prim.IsValid():
+        print(f"[ERROR] Dome Light not found at {dome_light_path}")
+        return
+
+    # Use the UsdLux API to configure it
+    dome_light = UsdLux.DomeLight(dome_prim)
+    
+    # Assign HDR Texture
+    dome_light.CreateTextureFileAttr().Set(hdr_texture_path)
+    dome_light.CreateTextureFormatAttr().Set(UsdLux.Tokens.latlong)
+    dome_light.CreateIntensityAttr().Set(intensity)
+    
+    # Rotation
+    xform = UsdGeom.Xformable(dome_prim)
+    ops = xform.GetOrderedXformOps()
+    if ops:
+        random_angle = random.uniform(0, 360)
+        ops[0].Set(Gf.Vec3f(0, 0, random_angle))
 
 
 def discover_assets(root_dir, category_name, recursive=False):

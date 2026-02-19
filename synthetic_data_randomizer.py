@@ -15,7 +15,7 @@ simulation_app = SimulationApp(launch_config=config.CONFIG)
 # --- ISAAC / USD / REP IMPORTS ---
 from isaacsim.core.utils.stage import get_current_stage, open_stage
 from omni.timeline import get_timeline_interface
-from pxr import UsdPhysics, Sdf, UsdGeom, Gf
+from pxr import UsdPhysics, Sdf, UsdGeom, Gf, UsdLux
 import omni.replicator.core as rep
 
 from modules import scene_utils
@@ -25,7 +25,14 @@ from modules import content
 rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
 
 def main():
-    # --- 1. LOAD MAP (Scaled and Centered) ---
+    # --- 1. LOAD MAP & SKY ---
+    found_hdrs = content.discover_hdr_maps(config.HDR_MAPS_DIR)
+    
+    if found_hdrs:
+        config.AVAILABLE_HDRS = found_hdrs
+    else:
+        print("[CRITICAL] No HDR files found!")
+
     map_path = os.path.join(os.getcwd(), "map", "Environment_variable.usd")
     open_stage(map_path)
     stage = get_current_stage()
@@ -36,15 +43,57 @@ def main():
         scene.CreateGravityDirectionAttr().Set((0, 0, -1))
         scene.CreateGravityMagnitudeAttr().Set(9.81)
 
+    # --- 2. LIGHTS SETUP ---
+    print("--- Configuring Lights ---")
+
+    # SkyDome
+    dome_light_path = "/World/SkyDome"
+    dome_prim = stage.GetPrimAtPath(dome_light_path)
+    
+    if dome_prim.IsValid():
+        print("   -> Found SkyDome. Configuring...")
+        dome_light = UsdLux.DomeLight(dome_prim)
+        dome_light.CreateTextureFormatAttr().Set(UsdLux.Tokens.latlong)
+        
+        # Apply initial HDR texture
+        if config.AVAILABLE_HDRS:
+            light_path = os.path.join(config.HDR_MAPS_DIR, config.AVAILABLE_HDRS[0])
+            dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(light_path))
+            # High intensity to compete with the sun
+            dome_light.CreateIntensityAttr().Set(1000.0) 
+    else:
+        print("[WARN] SkyDome not found in USD. Background might be black.")
+
+    # Sun
+    sun_path = "/World/Sun_Light"
+    sun_prim = stage.GetPrimAtPath(sun_path)
+    
+    if sun_prim.IsValid():
+        print("   -> Found Sun_Light. Randomizing time of day...")
+        sun_light = UsdLux.DistantLight(sun_prim)
+        sun_light.CreateIntensityAttr().Set(2500.0)
+        
+        # Random rotation (Simulate time of day and direction)
+        xform = UsdGeom.Xformable(sun_prim)
+        xform.ClearXformOpOrder()
+        
+        elevation = random.uniform(20, 85)
+        azimuth = random.uniform(0, 360)
+        
+        # Apply rotation
+        xform.AddRotateXYZOp().Set(Gf.Vec3f(0, elevation, azimuth))
+    else:
+        print("[WARN] Sun_Light not found manually. Shadows might be weak.")
+
     timeline = get_timeline_interface()
     timeline.play()
 
-    # --- 2. MATERIAL SETUP ---
+    # --- 3. MATERIAL SETUP ---
     loaded_materials = content.load_pbr_materials(stage) 
     terrain_paths_map = scene_utils.find_prims_by_material_name(stage, config.ENVIRONMENT_LOOKUP_KEYS)
     content.setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
-    # --- 3. LOAD ASSETS ---
+    # --- 4. LOAD ASSETS ---
     print("\n--- Loading Detectable Objects ---")
     detectable_pools = content.create_class_pool(
         stage, 
@@ -61,29 +110,8 @@ def main():
         apply_semantics=False
     )
 
-    # Run physics warmup
-    for i in range(100):
-        simulation_app.update()
-    
-    # --- 4. LIGHTS AND CAMERA (SETUP) ---
-    
-    # Ambient Light (Fill)
-    rep.create.light(
-        light_type="Dome", 
-        intensity=10, 
-        texture=None
-    )
 
-    # Sun (Main)
-    distant_light = rep.create.light(
-        light_type="Distant", 
-        intensity=50, 
-        rotation=(300, 0, 0)
-    )
-    with distant_light:
-        rep.modify.attribute("inputs:angle", 0.5)
-    
-    # REPLICATOR CAMERA
+    # --- 5. REPLICATOR CAMERA SETUP ---
     cam_rep = rep.create.camera(
         position=(0, 0, 0),
         rotation=(0, 0, 0),
@@ -109,7 +137,11 @@ def main():
     render_product = rep.create.render_product(cam_rep, (config.CONFIG["width"], config.CONFIG["height"]))
     writer.attach(render_product)
 
-    # --- 5. VALIDATION CHECK ---
+    # Run physics warmup
+    for i in range(150):
+        simulation_app.update()
+
+    # --- 6. VALIDATION CHECK ---
     print("\n--- Configuration Safety Check ---")
     
     # Check Objects
@@ -134,8 +166,8 @@ def main():
         print("\n⚠️  WARNING: High density detected! Consider increasing MAX_RADIUS or decreasing BUDGET.")
         input("Press Enter to continue anyway...")
 
-    # --- 6. MAIN LOOP ---
-    print(f"Starting generation of {config.CONFIG['num_frames']} frames...")
+    # --- 7. MAIN LOOP ---
+    print(f"\nStarting generation of {config.CONFIG['num_frames']} frames...")
     rep.orchestrator.stop()
 
     frames_generated = 0
@@ -154,8 +186,28 @@ def main():
         attempts += 1
         print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
 
-        # A. APPLY MATERIAL RANDOMIZATION
+        # A. APPLY MATERIAL & SKY RANDOMIZATION
         content.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
+
+        # Randomize sky
+        if config.AVAILABLE_HDRS and dome_prim.IsValid():
+            hdr_name = random.choice(config.AVAILABLE_HDRS)
+            light_path = os.path.join(config.HDR_MAPS_DIR, hdr_name)
+            
+            hdr_intensity = random.uniform(config.HDR_INTENSITY_RANGE[0] * 1000, 
+                                         config.HDR_INTENSITY_RANGE[1] * 1000)
+            
+            content.setup_dome_light(stage, dome_light_path, light_path, hdr_intensity)
+
+        # Randomize sun
+        if sun_prim.IsValid():
+            elevation = random.uniform(15, 80)
+            azimuth = random.uniform(0, 360)
+            
+            xform = UsdGeom.Xformable(sun_prim)
+            ops = xform.GetOrderedXformOps()
+            if ops:
+                ops[0].Set(Gf.Vec3f(0, elevation, azimuth))
 
         # B. CHOOSE TARGET
         tx = random.uniform(config.WORLD_LIMITS[0], config.WORLD_LIMITS[1])
