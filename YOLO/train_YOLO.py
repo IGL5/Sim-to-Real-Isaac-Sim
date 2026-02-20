@@ -121,7 +121,7 @@ def main():
     
     # Options
     parser.add_argument('--epochs', type=int, default=None, help="Override number of epochs")
-    parser.add_argument('--patience', type=int, default=0, help="Override patience")
+    parser.add_argument('--patience', type=int, default=15, help="Override patience")
     parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
