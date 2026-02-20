@@ -33,7 +33,7 @@ def main():
     else:
         print("[CRITICAL] No HDR files found!")
 
-    map_path = os.path.join(os.getcwd(), "map", config.MAP_NAME)
+    map_path = os.path.join(os.getcwd(), "assets", "map", config.MAP_NAME)
     open_stage(map_path)
     stage = get_current_stage()
 
