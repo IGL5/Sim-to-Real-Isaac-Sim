@@ -184,10 +184,11 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             scale_val = random.uniform(s_min, s_max)
             rot_val = random.uniform(0, 360)
 
+            base_light = random.uniform(0.4, 1.0)
             color_val = Gf.Vec3f(
-                random.uniform(0.4, 1.0), 
-                random.uniform(0.4, 1.0), 
-                random.uniform(0.4, 1.0)
+                base_light * random.uniform(0.85, 1.0), # R
+                base_light * random.uniform(0.85, 1.0), # G
+                base_light * random.uniform(0.85, 1.0)  # B
             )
             
             # Apply changes to the shader attributes
