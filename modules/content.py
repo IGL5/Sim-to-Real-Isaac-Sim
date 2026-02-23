@@ -73,7 +73,7 @@ def load_pbr_materials(stage):
                     if "gl" in name:
                         normal_gl = f_path
                     else: normal = f_path
-                elif "ao" in name: found_maps["ao"] = f_path
+                elif any(x in name for x in ["ao", "ambientocclusion"]): found_maps["ao"] = f_path
                 elif any(x in name for x in ["emiss", "emit"]): found_maps["emission"] = f_path
                 elif any(x in name for x in ["metal", "met"]): found_maps["metalness"] = f_path
 
