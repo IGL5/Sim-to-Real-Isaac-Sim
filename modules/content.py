@@ -93,7 +93,7 @@ def load_pbr_materials(stage):
                 if found_maps["roughness"]:
                     rep.modify.attribute("inputs:reflectionroughness_texture", found_maps["roughness"])
                 if found_maps["metallic"]:
-                    rep.modify.attribute("inputs:reflectionmetallic_texture", found_maps["metallic"])
+                    rep.modify.attribute("inputs:metallic_texture", found_maps["metallic"])
                 if found_maps["normal"]:
                     rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
                 if found_maps["ao"]:
