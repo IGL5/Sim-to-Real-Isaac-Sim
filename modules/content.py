@@ -61,7 +61,7 @@ def load_pbr_materials(stage):
     for i, folder_path in enumerate(material_folders):
         try:
             files = glob.glob(os.path.join(folder_path, "*.*"))
-            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "emission": None}
+            found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "emission": None, "metalness": None}
             normal_gl = None
             normal = None
             
@@ -69,12 +69,13 @@ def load_pbr_materials(stage):
                 name = os.path.basename(f_path).lower()
                 if any(x in name for x in ["color", "diff", "alb"]): found_maps["diffuse"] = f_path
                 elif "rough" in name: found_maps["roughness"] = f_path
-                elif "norm" in name:
+                elif any(x in name for x in ["norm", "nor_"]):
                     if "gl" in name:
                         normal_gl = f_path
                     else: normal = f_path
                 elif "ao" in name: found_maps["ao"] = f_path
                 elif any(x in name for x in ["emiss", "emit"]): found_maps["emission"] = f_path
+                elif any(x in name for x in ["metal", "met"]): found_maps["metalness"] = f_path
 
             if not found_maps["diffuse"]: continue
             found_maps["normal"] = normal_gl if normal_gl else normal
@@ -91,6 +92,8 @@ def load_pbr_materials(stage):
             with rep_mat:
                 if found_maps["roughness"]:
                     rep.modify.attribute("inputs:reflectionroughness_texture", found_maps["roughness"])
+                if found_maps["metalness"]:
+                    rep.modify.attribute("inputs:reflectionmetalness_texture", found_maps["metalness"])
                 if found_maps["normal"]:
                     rep.modify.attribute("inputs:normalmap_texture", found_maps["normal"])
                 if found_maps["ao"]:
