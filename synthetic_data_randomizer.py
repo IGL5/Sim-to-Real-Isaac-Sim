@@ -60,7 +60,7 @@ def main():
             light_path = os.path.join(config.HDR_MAPS_DIR, config.AVAILABLE_HDRS[0])
             dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(light_path))
             # High intensity to compete with the sun
-            dome_light.CreateIntensityAttr().Set(1200.0) 
+            dome_light.CreateIntensityAttr().Set(2000.0)
     else:
         print("[WARN] SkyDome not found in USD. Background might be black.")
 
@@ -71,13 +71,13 @@ def main():
     if sun_prim.IsValid():
         print("   -> Found Sun_Light. Randomizing time of day...")
         sun_light = UsdLux.DistantLight(sun_prim)
-        sun_light.CreateIntensityAttr().Set(2000.0)
+        sun_light.CreateIntensityAttr().Set(2500.0)
         
         # Random rotation (Simulate time of day and direction)
         xform = UsdGeom.Xformable(sun_prim)
         xform.ClearXformOpOrder()
         
-        elevation = random.uniform(20, 85)
+        elevation = random.uniform(30, 85)
         azimuth = random.uniform(0, 360)
         
         # Apply rotation
