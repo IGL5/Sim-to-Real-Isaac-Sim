@@ -317,7 +317,8 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
             continue
             
         target_pool_size = cfg["pool_size"]
-        created_paths = []
+        created_objects = [] 
+        target_mat_names = cfg.get("randomize_materials", [])
         
         # Fill list to meet pool size
         assets_to_use = []
@@ -357,10 +358,28 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                 
                 # Hide
                 UsdGeom.Imageable(prim).MakeInvisible()
-                created_paths.append(found_path)
+
+                shader_paths = []
+                if target_mat_names:
+                    root_prim = stage.GetPrimAtPath(found_path)
+                    for p in Usd.PrimRange(root_prim):
+                        if p.IsA(UsdShade.Material):
+                            mat_name = p.GetName().lower()
+                            if any(target.lower() in mat_name for target in target_mat_names):
+                                for child in p.GetChildren():
+                                    if child.IsA(UsdShade.Shader):
+                                        if "Tex" not in child.GetName():
+                                            shader_paths.append(str(child.GetPath()))
+                                            print(f"   -> Found shader: {child.GetPath()}")
+
+                # Save info
+                created_objects.append({
+                    "path": found_path,
+                    "shaders": shader_paths
+                })
             else:
                 print(f"[ERROR] Path not found for {prim_name}")
 
-        pools_paths[category] = created_paths
+        pools_paths[category] = created_objects
         
     return pools_paths

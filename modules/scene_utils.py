@@ -256,6 +256,26 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
     return valid_results
 
 
+def randomize_precalculated_shaders(stage, shader_paths):
+    """
+    Applies a random tint directly to pre-calculated shader paths.
+    """
+    if not shader_paths: return
+    
+    color_val = Gf.Vec3f(
+        random.uniform(0.5, 1.0),
+        random.uniform(0.5, 1.0),
+        random.uniform(0.5, 1.0)
+    )
+    
+    for spath in shader_paths:
+        shader_prim = stage.GetPrimAtPath(spath)
+        if shader_prim.IsValid():
+            shader = UsdShade.Shader(shader_prim)
+            shader.CreateInput("base_color_factor", Sdf.ValueTypeNames.Color3f).Set(color_val)
+            print(f"[INFO] Randomized shader: {spath}")
+
+
 def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[]):
     """
     Master Orchestrator.
@@ -283,17 +303,19 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
     candidates_specs = []
     paths_candidates = []
     keys_candidates = []
+    shaders_candidates = []
     
     for key in chosen_keys:
         # Skip if no stock or pool is empty (Dynamic pruning)
         if not working_pools.get(key):
             continue
             
-        path = working_pools[key].pop()
+        obj_data = working_pools[key].pop()
         cfg = config_map[key]
         
         candidates_specs.append({'radius': cfg['radius'], 'wheelbase': cfg.get('wheelbase')})
-        paths_candidates.append(path)
+        paths_candidates.append(obj_data["path"])
+        shaders_candidates.append(obj_data["shaders"])
         keys_candidates.append(key)
         
     # 4. Calculate Poses (Mathematics)
@@ -306,7 +328,7 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
 
     for (pos, rot, original_idx) in results:
         path = paths_candidates[original_idx]
-        
+        shaders = shaders_candidates[original_idx]
         key = keys_candidates[original_idx]
         cfg = config_map[key]
         
@@ -314,14 +336,18 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         scale = random.uniform(s_min, s_max)
         
         update_prim_pose_and_visibility(stage, path, pos, rot, scale, visible=True)
+
+        if "randomize_materials" in cfg and cfg["randomize_materials"]:
+            randomize_precalculated_shaders(stage, shaders)
         
         # Register success
         new_obstacles.append( (pos[0], pos[1], cfg['radius']) )
         successfully_placed_paths.add(path)
         
     # 6. Clean up unused objects
-    for key, pool in pools_paths_map.items():
-        for path in pool:
+    for key, pool_list in pools_paths_map.items():
+        for obj_data in pool_list:
+            path = obj_data["path"]
             if path not in successfully_placed_paths:
                 update_prim_pose_and_visibility(stage, path, None, None, None, visible=False)
 

@@ -63,11 +63,12 @@ OBJECTS_CONFIG = {
     "bicycle": {
         "active": True,
         "pool_size": 15,
-        "radius": 0.8,              # Radius of safety (bicycle + person)
-        "cost_units": 2.0,          # High cost (main character)
-        "selection_weight": 100,    # Always want to appear if there's space
-        "wheelbase": 0.6,           # For incline calculation (None if not applicable)
-        "scale_range": (1.0, 1.0)   # Fixed scale for rigorous datasets
+        "radius": 0.8,                      # Radius of safety (bicycle + person)
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        "randomize_materials": ["frame"]    # List of prim names to randomize materials
     },
 }
 
