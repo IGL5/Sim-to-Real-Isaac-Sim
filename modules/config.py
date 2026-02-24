@@ -26,8 +26,8 @@ CONFIG = {"renderer": "PathTracing", "headless": args.headless,
 # GENERAL CONSTANTS
 MAP_NAME = "Environment_variable.usd"
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
-MATERIAL_SCALE_FLAT = (0.4, 0.8)
-MATERIAL_SCALE_MOUNTAIN = (0.03, 0.05)
+MATERIAL_SCALE_FLAT = (0.6, 1.0)
+MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
 
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 

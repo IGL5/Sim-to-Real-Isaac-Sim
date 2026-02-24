@@ -263,9 +263,9 @@ def randomize_precalculated_shaders(stage, shader_paths):
     if not shader_paths: return
     
     color_val = Gf.Vec3f(
-        random.uniform(0.5, 1.0),
-        random.uniform(0.5, 1.0),
-        random.uniform(0.5, 1.0)
+        random.uniform(0.05, 1.0),
+        random.uniform(0.05, 1.0),
+        random.uniform(0.05, 1.0)
     )
     
     for spath in shader_paths:
@@ -273,7 +273,6 @@ def randomize_precalculated_shaders(stage, shader_paths):
         if shader_prim.IsValid():
             shader = UsdShade.Shader(shader_prim)
             shader.CreateInput("base_color_factor", Sdf.ValueTypeNames.Color3f).Set(color_val)
-            print(f"[INFO] Randomized shader: {spath}")
 
 
 def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[]):
@@ -400,7 +399,7 @@ def validate_placement_config(config_map, budget_max, container_radius, context_
     and selection probabilities.
     
     Returns:
-        (is_safe, message): Boolean and string with the diagnosis.
+        (level, message): Level string and string with the diagnosis.
     """
     total_weight = 0
     weighted_area_sum = 0
@@ -449,13 +448,13 @@ def validate_placement_config(config_map, budget_max, container_radius, context_
            f"(Req: {required_area:.0f}m² / Disp: {available_area:.0f}m²)")
     
     if fill_ratio > 1.0:
-        return False, f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
+        return "red", f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
     elif fill_ratio > packing_limit_warn:
-        return False, f"🟠 {msg} -> CRITICAL (High probability of failure)"
+        return "orange", f"🟠 {msg} -> CRITICAL (High probability of failure)"
     elif fill_ratio > packing_limit_safe:
-        return True, f"🟡 {msg} -> DENSE (May have some warnings)"
+        return "yellow", f"🟡 {msg} -> DENSE (May have some warnings)"
     else:
-        return True, f"🟢 {msg} -> OK"
+        return "green", f"🟢 {msg} -> OK"
 
 
 def update_camera_pose(stage, cam_path, eye, target):

@@ -198,7 +198,7 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.7, 1.0))
             shader.CreateInput("specular_level", Sdf.ValueTypeNames.Float).Set(random.uniform(0.1, 0.3))
 
-            normal_strength = random.uniform(1.5, 2.5) 
+            normal_strength = random.uniform(1.0, 2.0) 
             shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
 
         # --- BIND ---
@@ -370,7 +370,6 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                                     if child.IsA(UsdShade.Shader):
                                         if "Tex" not in child.GetName():
                                             shader_paths.append(str(child.GetPath()))
-                                            print(f"   -> Found shader: {child.GetPath()}")
 
                 # Save info
                 created_objects.append({

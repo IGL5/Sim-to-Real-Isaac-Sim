@@ -146,7 +146,7 @@ def main():
     print("\n--- Configuration Safety Check ---")
     
     # Check Objects
-    ok_obj, msg_obj = scene_utils.validate_placement_config(
+    level_obj, msg_obj = scene_utils.validate_placement_config(
         config.OBJECTS_CONFIG, 
         config.OBJECTS_BUDGET_RANGE[1], # Use max of range
         config.OBJECTS_MAX_RADIUS, 
@@ -155,7 +155,7 @@ def main():
     print(msg_obj)
     
     # Check Distractors
-    ok_dist, msg_dist = scene_utils.validate_placement_config(
+    level_dist, msg_dist = scene_utils.validate_placement_config(
         config.DISTRACTOR_CONFIG, 
         config.DISTRACTOR_BUDGET_RANGE[1], 
         config.DISTRACTOR_MAX_RADIUS, 
@@ -163,9 +163,13 @@ def main():
     )
     print(msg_dist)
     
-    if not ok_obj or not ok_dist:
+    if level_obj == "red" or level_dist == "red":
+        print("\n🛑 CRITICAL ERROR: Impossible density detected.")
+        input("ℹ️ Press Enter to continue anyway or Ctrl+C to cancel...")
+    elif level_obj == "orange" or level_dist == "orange":
         print("\n⚠️  WARNING: High density detected! Consider increasing MAX_RADIUS or decreasing BUDGET.")
-        input("Press Enter to continue anyway...")
+        print("⏳ Continuing in 10 seconds... (Press Ctrl+C to cancel)")
+        time.sleep(10)
 
     # --- 7. MAIN LOOP ---
     print(f"\nStarting generation of {config.CONFIG['num_frames']} frames...")
