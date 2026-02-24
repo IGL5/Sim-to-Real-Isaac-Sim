@@ -13,30 +13,40 @@ parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data
 
 args, unknown_args = parser.parse_known_args()
 
+
+# Sky config
+HDR_MAPS_DIR = os.path.join(os.getcwd(), "assets", "hdr")
+AVAILABLE_HDRS = []
+HDR_INTENSITY_RANGE = (0.8, 1.5)
+
 # "renderer": "RayTracedLighting" is another option to consider
 CONFIG = {"renderer": "PathTracing", "headless": args.headless,
           "width": args.width, "height": args.height, "num_frames": args.num_frames}
 
 # GENERAL CONSTANTS
+MAP_NAME = "Environment_variable.usd"
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
+MATERIAL_SCALE_FLAT = (0.4, 0.8)
+MATERIAL_SCALE_MOUNTAIN = (0.03, 0.05)
+
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 
 # CAMERA CONSTANTS
-CAMERA_HEIGHT_RANGE = (20.0, 80.0)
-CAMERA_DISTANCE_RANGE = (8.0, 18.0)
-LOOKAT_JITTER_RADIUS = 2.5
+CAMERA_HEIGHT_RANGE = (0.0, 1.0)
+CAMERA_DISTANCE_RANGE = (2.0, 6.0)
+LOOKAT_JITTER_RADIUS = 0.5
 
 # RAYCAST SETTINGS
 RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (5.0, 25.0)
-OBJECTS_MAX_RADIUS = 10.0
+OBJECTS_BUDGET_RANGE = (0.5, 7.0)
+OBJECTS_MAX_RADIUS = 3.0
 
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (125.0, 300.0)
-DISTRACTOR_MAX_RADIUS = 15.0
+DISTRACTOR_BUDGET_RANGE = (30.0, 75.0)
+DISTRACTOR_MAX_RADIUS = 7.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
@@ -50,14 +60,14 @@ ENVIRONMENT_LOOKUP_KEYS = [
 # ASSET POOLS
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
-    "cyclist": {
+    "bicycle": {
         "active": True,
         "pool_size": 15,
-        "radius": 0.8,           # Radius of safety (bicycle + person)
-        "cost_units": 2.0,       # High cost (main character)
-        "selection_weight": 100, # Always want to appear if there's space
-        "wheelbase": 0.6,        # For incline calculation (None if not applicable)
-        "scale_range": (1.0, 1.0) # Fixed scale for rigorous datasets
+        "radius": 0.8,              # Radius of safety (bicycle + person)
+        "cost_units": 2.0,          # High cost (main character)
+        "selection_weight": 100,    # Always want to appear if there's space
+        "wheelbase": 0.6,           # For incline calculation (None if not applicable)
+        "scale_range": (1.0, 1.0)   # Fixed scale for rigorous datasets
     },
 }
 

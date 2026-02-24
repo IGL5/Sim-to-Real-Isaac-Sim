@@ -6,6 +6,8 @@ This directory contains the complete toolkit for processing synthetic data gener
 
 - `dataset_manager.py`: ETL (Extract, Transform, Load). Converts labels from KITTI format to YOLO, manages folder structure (`train/val/test`), and allows adding data incrementally.
 
+- `clean_dataset.py`: Cleans the dataset by removing corrupted images.
+
 - `train_YOLO.py`: Training script. Automatically configures the environment for YOLOv8 and exports the final model to ONNX.
 
 - `visualize_results.py`: Audit and testing tool. Generates interactive HTML reports, confusion matrices, and prediction visualizations.
@@ -23,6 +25,10 @@ pip install ultralytics opencv-python matplotlib seaborn pandas pyyaml
 Note: It is recommended to use a virtual environment or Conda to avoid interfering with the Isaac Sim environment if running on the same machine.
 
 ## 🚀 Workflow
+
+### Step 0: Clean Dataset (clean_dataset.py)
+
+This script automatically looks for data generated in the `../_output_data/` folder of the main repository and removes corrupted images.
 
 ### Step 1: Dataset Management (dataset_manager.py)
 
@@ -60,7 +66,13 @@ python train_YOLO.py
 python train_YOLO.py --epochs 100
 ```
 
-3. **Interactive Mode (Model Selection):** Opens a console assistant to choose the YOLO version (v8 or v11), model size (Nano, Small, Medium), and experiment name.
+3. **Customize Patience:** Overrides the patience configuration without changing the rest of the configuration.
+
+```bash
+python train_YOLO.py --patience 15
+```
+
+4. **Interactive Mode (Model Selection):** Opens a console assistant to choose the YOLO version (v8 or v11), model size (Nano, Small, Medium), and experiment name.
 
 ```bash
 python train_YOLO.py --select

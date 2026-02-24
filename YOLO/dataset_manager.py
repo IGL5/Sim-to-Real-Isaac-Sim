@@ -16,7 +16,7 @@ IMAGES_DIR = os.path.join(os.getcwd(), "..", "_output_data", "DroneCamera", "rgb
 BASE_OUTPUT = os.path.join(os.getcwd(), "dataset_yolo_output")
 
 # Classes to detect
-CLASES = ["cyclist"]
+CLASES = ["bicycle"]
 
 # Split ratios
 TRAIN_RATIO = 0.7

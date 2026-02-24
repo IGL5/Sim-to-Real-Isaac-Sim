@@ -24,8 +24,7 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
 │   ├── scene_utils.py            # Physics, camera, and positioning helpers
 │   ├── content.py                # Asset handling and material randomization
 │   └── __init__.py
-├── assets/                       # Objects and Textures
-├── map/                          # Environment USD files
+├── assets/                       # Objects, Distractors, Map and Textures
 ├── _output_data/                 # Generated dataset output (created automatically)
 └── YOLO/                         # YOLOv8 training and validation pipeline
 ```

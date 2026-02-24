@@ -82,8 +82,8 @@ def get_drone_camera_pose(focus_target):
     # --- EXTRA SAFETY ---
     ground_under_cam = get_ground_height(cam_x, cam_y)
     
-    if cam_z < ground_under_cam + 5.0:
-        cam_z = ground_under_cam + 5.0
+    if cam_z < ground_under_cam + 1.0:
+        cam_z = ground_under_cam + 1.0
 
     return (cam_x, cam_y, cam_z)
 

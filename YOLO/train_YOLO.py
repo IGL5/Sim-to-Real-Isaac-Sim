@@ -59,7 +59,7 @@ def create_yaml_config():
         'test': TEST_REL,
 
         'names': {
-            0: 'cyclist'  # Class name
+            0: 'bicycle'  # Class name
         }
     }
 
@@ -121,6 +121,7 @@ def main():
     
     # Options
     parser.add_argument('--epochs', type=int, default=None, help="Override number of epochs")
+    parser.add_argument('--patience', type=int, default=15, help="Override patience")
     parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
@@ -161,10 +162,11 @@ def main():
         project=PROJECT_NAME,
         name=experiment_name,
         device=device,
-        patience=15,   # If it doesn't improve in 15 epochs, stop.
-        save=True,     # Save the best model
-        exist_ok=True, # If the experiment already exists, it will be overwritten.
-        verbose=True   # Show training progress
+        patience=args.patience,     # If it doesn't improve in x epochs, stop (0 = disabled).
+        save=True,                  # Save the best model
+        exist_ok=True,              # If the experiment already exists, it will be overwritten.
+        verbose=True,               # Show training progress
+        freeze=10                   # Freeze the first 10 layers
     )
 
     print("\n--- Training completed ---")
