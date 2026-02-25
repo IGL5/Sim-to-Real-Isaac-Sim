@@ -164,7 +164,7 @@ def main():
     print(msg_dist)
     
     if level_obj == "red" or level_dist == "red":
-        print("\n🛑 CRITICAL ERROR: Impossible density detected.")
+        print("\n🛑 CRITICAL ERROR: Impossible density detected. Increase MAX_RADIUS or decrease BUDGET.")
         input("ℹ️ Press Enter to continue anyway or Ctrl+C to cancel...")
     elif level_obj == "orange" or level_dist == "orange":
         print("\n⚠️  WARNING: High density detected! Consider increasing MAX_RADIUS or decreasing BUDGET.")
