@@ -61,9 +61,9 @@ ENVIRONMENT_LOOKUP_KEYS = [
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "bicycle": {
-        "active": True,
-        "pool_size": 15,
-        "radius": 0.8,                      # Radius of safety (bicycle + person)
+        "active": True,                     # Enable this object type
+        "pool_size": 15,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
         "cost_units": 2.0,                  # High cost (main character)
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
@@ -79,27 +79,27 @@ DISTRACTOR_CONFIG = {
         "active": True,
         "pool_size": 25,
         "spawn_radius": (5.0, 25.0),
-        "radius": 0.5,          # Physical radius (m)
-        "cost_units": 2.0,      # Cost units (large)
-        "selection_weight": 50, # Medium Frecuency 
+        "radius": 0.5,
+        "cost_units": 2.0,
+        "selection_weight": 50,
         "scale_range": (0.7, 1.5)
     },
     "trees": {
         "active": True,
         "pool_size": 20,
         "spawn_radius": (5.0, 25.0),
-        "radius": 2.0,          # Physical radius (m)
-        "cost_units": 5.0,      # Cost units (large)
-        "selection_weight": 20, # Medium Frecuency 
+        "radius": 2.0,
+        "cost_units": 5.0,
+        "selection_weight": 20,
         "scale_range": (0.6, 1.2)
     },
     "debris": {
         "active": True,
-        "pool_size": 50, # Increase pool for variety
+        "pool_size": 50,
         "spawn_radius": (2.0, 15.0),
-        "radius": 0.5,          # Physical radius (m)
-        "cost_units": 0.5,      # Cost units (small)
-        "selection_weight": 50, # High Frecuency 
+        "radius": 0.5,
+        "cost_units": 0.5,
+        "selection_weight": 50,
         "scale_range": (0.3, 1.0)
     },
     "manmade": {
@@ -108,7 +108,7 @@ DISTRACTOR_CONFIG = {
         "spawn_radius": (10.0, 40.0),
         "radius": 1.0,
         "cost_units": 2.0,
-        "selection_weight": 20, # Low Frecuency 
+        "selection_weight": 20,
         "scale_range": (0.8, 1.2)
     }
 }
