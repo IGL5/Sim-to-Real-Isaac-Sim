@@ -2,6 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
+from .core_visual_utils import calculate_iou_matrix
 
 
 class InferenceReportGenerator:
@@ -20,37 +21,6 @@ class InferenceReportGenerator:
             "overlap_events": []
         }
 
-    def calculate_iou_matrix(self, boxesA, boxesB):
-        """ 
-        Calculates the Intersection over Union (IoU) matrix between two sets of boxes.
-        boxesA: List or array of N boxes [x1, y1, x2, y2]
-        boxesB: List or array of M boxes [x1, y1, x2, y2]
-        Returns: Numpy matrix of shape (N, M) with the IoUs.
-        """
-        if len(boxesA) == 0 or len(boxesB) == 0:
-            return np.zeros((len(boxesA), len(boxesB)))
-
-        bA = np.array(boxesA)
-        bB = np.array(boxesB)
-
-        A = bA[:, np.newaxis, :]
-        B = bB[np.newaxis, :, :]
-        xA = np.maximum(A[..., 0], B[..., 0])
-        yA = np.maximum(A[..., 1], B[..., 1])
-        xB = np.minimum(A[..., 2], B[..., 2])
-        yB = np.minimum(A[..., 3], B[..., 3])
-
-        # Área de intersección
-        interArea = np.maximum(0, xB - xA) * np.maximum(0, yB - yA)
-
-        # Áreas individuales
-        boxAArea = (A[..., 2] - A[..., 0]) * (A[..., 3] - A[..., 1])
-        boxBArea = (B[..., 2] - B[..., 0]) * (B[..., 3] - B[..., 1])
-
-        iou = interArea / (boxAArea + boxBArea - interArea + 1e-6)
-
-        return iou
-
     def update(self, pred_boxes, confidences, img_shape, filename):
         h, w = img_shape
         self.stats["total_images"] += 1
@@ -64,7 +34,7 @@ class InferenceReportGenerator:
             self.stats["bbox_centers_norm"].append((cx_abs/w, cy_abs/h))
             
         # Overlapping / concentric detections (IoU > 0.45 in the same image)
-        iou_matrix = self.calculate_iou_matrix(pred_boxes, pred_boxes)
+        iou_matrix = calculate_iou_matrix(pred_boxes, pred_boxes)
         overlapping_pairs = np.argwhere(np.triu(iou_matrix, k=1) > self.overlap_threshold)
         
         problematic_pairs_indices = []

@@ -12,7 +12,7 @@ This directory contains the complete toolkit for processing synthetic data gener
 
 - `visualize_results.py`: Audit and testing tool. Generates interactive HTML reports, confusion matrices, and prediction visualizations.
 
-- `report_utils.py`: Auxiliary library for mathematical calculations (IoU, metrics) and graph generation.
+- `modules/`: Contains auxiliary classes for reporting (`audit_reporter.py` and `inference_reporter.py`) and visualization tools (`core_visual_utils.py`).
 
 ## ⚙️ Installation
 
@@ -86,13 +86,13 @@ Once the model is trained, use this tool to understand what is happening.
 
 Analyzes images from the test set (which have real labels) and compares them with the AI's prediction.
 
-- **See only errors:** Generates separate folders for False Negatives (missed) and False Positives (invented).
+- **See only errors:** Generates separate folders for False Negatives (missed, `audit_missed_FN`), False Positives (invented, `audit_invented_FP`), and Poor Bounding Boxes (`audit_poor_bbox`).
 
 ```bash
 python visualize_results.py
 ```
 
-- **See all (Full Report):** Generates images with Green boxes (Ground Truth) and Blue boxes (AI + Confidence). Creates an HTML report with a heatmap and metrics.
+- **See all (Full Report):** Generates images with Green boxes (Ground Truth) and Blue boxes (AI + Confidence). Creates a complete HTML report (`report.html`) with heatmaps, PR Curves, metrics, etc.
 
 ```bash
 python visualize_results.py --draw_all
@@ -100,7 +100,7 @@ python visualize_results.py --draw_all
 
 #### 🌍 **Inference Mode (Real World)**
 
-Test your model with new photos that do not have labels (e.g., real camera photos).
+Test your model with new photos that do not have labels (e.g., real camera photos). Evaluates inference confidence, detects bounding box overlaps, and generates an `inference_report.html`.
 
 ```bash
 python visualize_results.py --source /path/to/my/real_photos
@@ -114,12 +114,19 @@ Processes an MP4 video and generates an output video with detections.
 python visualize_results.py --video assets/test_video.mp4
 ```
 
-## 📊 The HTML Report (audit_report/)
+## 📊 The HTML Reports
 
+### Audit Report (`audit_report/report.html`)
 If you run the audit mode, an `audit_report` folder will be generated. Open the `report.html` file in your browser to see:
 
-- **Precision/Recall/F1:** Industrial quality metrics.
-
+- **Metrics:** Precision, Recall, F1-Score, mAP@50, and mAP@50-95.
 - **Heatmap:** Does your model detect only in the center of the image or does it cover the edges well?
-
 - **Confidence Histogram:** Is the model too confident in its errors?
+- **Confusion Matrix & PR Curve:** Detailed statistical analysis of hits vs misses.
+
+### Inference Report (`audit_report/inference_report.html`)
+If you run the inference mode, it generates a report summarizing the AI's behavior on real, unlabeled images:
+
+- **Spatial Distribution Heatmap:** Analyzes where the object detections are concentrated.
+- **Confidence Distribution:** Evaluates the AI's certainty on the given unlabelled data.
+- **Suspicious Overlap Analysis:** Highlights overlapping bounding boxes with high IoU to detect potential duplication issues or confused predictions.
