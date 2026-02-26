@@ -182,9 +182,8 @@ class ReportGenerator:
                 .container {{ display: flex; flex-wrap: wrap; gap: 20px; }}
                 .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex: 1; min-width: 200px; }}
                 .metric {{ font-size: 2em; font-weight: bold; color: #2c3e50; }}
-                .map-metric {{ color: #1f618d; }} /* NUEVO: Azul oscuro profesional */
+                .map-metric {{ color: #1f618d; }}
                 
-                /* NUEVO: Cuadrícula de 2 columnas para que las gráficas se vean gigantes */
                 .plot-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }}
                 .plot-grid .card {{ min-width: 0; display: flex; justify-content: center; align-items: center; }}
                 
@@ -194,7 +193,7 @@ class ReportGenerator:
             </style>
         </head>
         <body>
-            <h1>📊 YOLO Audit Report</h1>
+            <h1>🔎 YOLO Audit Report</h1>
             <p>Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
             
             <div class="container">

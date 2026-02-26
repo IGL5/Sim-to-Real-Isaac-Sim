@@ -56,12 +56,14 @@ def run_audit_mode(model_path, draw_all=False):
 
     if draw_all:
         os.makedirs(path_all)
-        print(f"📂 Saving everything in: {path_all}")
+        short_all = path_all[path_all.find("YOLO"):] if "YOLO" in path_all else path_all
+        print(f"📂 Saving everything in: {short_all}")
     else:
         os.makedirs(path_fn)
         os.makedirs(path_fp)
         os.makedirs(path_poor)
-        print(f"📂 Separating errors in: {path_fn}, {path_fp} and {path_poor}")
+        shorten = lambda p: p[p.find("YOLO"):] if "YOLO" in p else p
+        print(f"📂 Separating errors in: {shorten(path_fn)}, {shorten(path_fp)} and {shorten(path_poor)}")
 
     reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD)
     model = YOLO(model_path)
@@ -141,6 +143,8 @@ def run_inference_mode(model_path, source_folder):
     save_dir = os.path.join(cvu.OUTPUT_DIR, "inference_real")
     if os.path.exists(save_dir): shutil.rmtree(save_dir)
     os.makedirs(save_dir)
+    short_dir = save_dir[save_dir.find("YOLO"):] if "YOLO" in save_dir else save_dir
+    print(f"📂 Saving inference results in: {short_dir}")
 
     reporter = InferenceReportGenerator(save_dir, overlap_threshold=cvu.OVERLAP_THRESHOLD_ANALYSIS)
     overlaps_dir_path = reporter.overlaps_dir
