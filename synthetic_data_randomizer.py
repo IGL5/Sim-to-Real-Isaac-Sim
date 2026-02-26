@@ -4,6 +4,8 @@ import math
 import time
 import carb
 import traceback
+import json
+from datetime import datetime
 
 # --- MODULES ---
 from modules import config
@@ -181,6 +183,10 @@ def main():
     # Timer global
     total_start_time = time.time()
     frame_start_time = time.time()
+
+    track_total_detectables = 0
+    track_total_distractors = 0
+    track_empty_target_frames = 0
     
     while frames_generated < config.CONFIG["num_frames"] and attempts < max_attempts:
 
@@ -250,7 +256,7 @@ def main():
         # E. POSITION DISTRACTORS (Rocks, Vegetation...)
         all_obstacles = detectables_obstacles 
 
-        scene_utils.place_objects_from_config(
+        distractor_obstacles = scene_utils.place_objects_from_config(
             stage=stage,
             target_pos=current_target,
             config_map=config.DISTRACTOR_CONFIG,
@@ -259,6 +265,13 @@ def main():
             max_radius=config.DISTRACTOR_MAX_RADIUS,
             previous_obstacles=all_obstacles
         )
+
+        num_detectables = len(detectables_obstacles)
+        track_total_detectables += num_detectables
+        track_total_distractors += len(distractor_obstacles)
+        
+        if num_detectables == 0:
+            track_empty_target_frames += 1
 
         # F. SHOOT
         simulation_app.update()
@@ -283,6 +296,49 @@ def main():
     print("Finalizing writes...")
     rep.BackendDispatch.wait_until_done()
     simulation_app.update()
+
+    # --- 8. METADATA EXPORTATION ---
+    elapsed_total_seconds = time.time() - total_start_time
+    
+    safe_frames = frames_generated if frames_generated > 0 else 1
+    
+    metadata = {
+        "generation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "config": {
+            "width": config.CONFIG["width"],
+            "height": config.CONFIG["height"],
+            "renderer": config.CONFIG["renderer"],
+            "world_limits": config.WORLD_LIMITS
+        },
+        "performance": {
+            "total_frames_requested": config.CONFIG["num_frames"],
+            "total_frames_generated": frames_generated,
+            "total_attempts": attempts,
+            "generation_efficiency_percent": round((frames_generated / attempts) * 100, 2) if attempts > 0 else 0,
+            "total_time_seconds": round(elapsed_total_seconds, 2),
+            "average_time_per_frame_seconds": round(elapsed_total_seconds / safe_frames, 2)
+        },
+        "content_density": {
+            "average_detectables_per_frame": round(track_total_detectables / safe_frames, 2),
+            "average_distractors_per_frame": round(track_total_distractors / safe_frames, 2),
+            "empty_target_frames": track_empty_target_frames,
+            "total_detectables_spawned": track_total_detectables
+        },
+        "domain_randomization": {
+            "hdr_maps_available": len(config.AVAILABLE_HDRS),
+            "pbr_materials_loaded": len(loaded_materials)
+        }
+    }
+
+    # Create the metadata file and save it
+    metadata_path = os.path.join(config.args.data_dir, "generation_metadata.json")
+    os.makedirs(config.args.data_dir, exist_ok=True)
+    
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=4)
+        
+    print(f"📊 Metadata exported successfully to: {metadata_path}")
+
 
 if __name__ == "__main__":
     try:
