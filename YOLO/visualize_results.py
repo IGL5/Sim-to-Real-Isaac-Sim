@@ -132,10 +132,10 @@ def run_audit_mode(model_path, draw_all=False):
     # 1. Prepare folders according to the mode
     if os.path.exists(OUTPUT_DIR): shutil.rmtree(OUTPUT_DIR)
     
-    path_fn = os.path.join(OUTPUT_DIR, "audit_missed_FN")
-    path_fp = os.path.join(OUTPUT_DIR, "audit_invented_FP")
-    path_poor = os.path.join(OUTPUT_DIR, "audit_poor_bbox")
-    path_all = os.path.join(OUTPUT_DIR, "audit_all")
+    path_fn = os.path.join(OUTPUT_DIR, "audit", "audit_missed_FN")
+    path_fp = os.path.join(OUTPUT_DIR, "audit", "audit_invented_FP")
+    path_poor = os.path.join(OUTPUT_DIR, "audit", "audit_poor_bbox")
+    path_all = os.path.join(OUTPUT_DIR, "audit", "audit_all")
 
     if draw_all:
         os.makedirs(path_all)
