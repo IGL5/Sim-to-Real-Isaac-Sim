@@ -9,8 +9,9 @@ from ultralytics import YOLO
 # Import the class from the other file
 try:
     from report_utils import ReportGenerator
+    from inference_utils import InferenceReportGenerator
 except ImportError:
-    print("❌ CRITICAL ERROR: Not finding 'report_utils.py'.")
+    print("❌ CRITICAL ERROR: Not finding 'report_utils.py' or 'inference_utils.py'.")
     print("   Make sure both files are in the same folder.")
     sys.exit(1)
 
@@ -133,6 +134,7 @@ def run_audit_mode(model_path, draw_all=False):
     
     path_fn = os.path.join(OUTPUT_DIR, "audit_missed_FN")
     path_fp = os.path.join(OUTPUT_DIR, "audit_invented_FP")
+    path_poor = os.path.join(OUTPUT_DIR, "audit_poor_bbox")
     path_all = os.path.join(OUTPUT_DIR, "audit_all")
 
     if draw_all:
@@ -141,7 +143,8 @@ def run_audit_mode(model_path, draw_all=False):
     else:
         os.makedirs(path_fn)
         os.makedirs(path_fp)
-        print(f"📂 Separating errors in: {path_fn} and {path_fp}")
+        os.makedirs(path_poor)
+        print(f"📂 Separating errors in: {path_fn}, {path_fp} and {path_poor}")
 
     reporter = ReportGenerator(OUTPUT_DIR, IOU_THRESHOLD)
     model = YOLO(model_path)
@@ -172,39 +175,38 @@ def run_audit_mode(model_path, draw_all=False):
             confidences.append(float(box.conf))
 
         # Statistics
-        reporter.update(pred_boxes, gt_boxes, confidences)
+        img_stats = reporter.update(pred_boxes, gt_boxes, confidences)
 
         # Save and Organization Logic
         if i < LIMIT_IMAGES:
-            num_gt = len(gt_boxes)
-            num_pred = len(pred_boxes)
             
-            # Simple error classification for the folder
-            status = "OK"
-            if num_gt > num_pred: status = "FN"
-            elif num_pred > num_gt: status = "FP"
-
-            should_save = False
-            save_path = ""
-
-            if draw_all:
-                should_save = True
-                # In 'all' mode, we save everything with a prefix to identify
-                save_path = os.path.join(path_all, f"{status}_{filename}")
-            else:
-                # In normal mode, we only save if there is an error
-                if status == "FN":
-                    should_save = True
-                    save_path = os.path.join(path_fn, filename)
-                elif status == "FP":
-                    should_save = True
-                    save_path = os.path.join(path_fp, filename)
-
-            if should_save:
-                img = draw_boxes(img, gt_boxes, color=(0, 255, 0), label="REAL")
-                img = draw_boxes(img, pred_boxes, color=(255, 0, 0), confidences=confidences)
+            # A. Check if there is any error in the image
+            has_errors = img_stats["FN"] > 0 or img_stats["poor_bbox"] > 0 or img_stats["FP"] > 0
+            
+            # B. Draw the boxes ONLY ONCE, only if it is necessary to save the image
+            if draw_all or has_errors:
+                img_drawn = draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), label="REAL")
+                img_drawn = draw_boxes(img_drawn, pred_boxes, color=(255, 0, 0), confidences=confidences)
                 
-                cv2.imwrite(save_path, img)
+                # C. Save logic according to the mode
+                if draw_all:
+                    # Default status OK. The order of the if marks the priority of the error.
+                    status = "OK"
+                    if img_stats["FN"] > 0: status = "FN"
+                    elif img_stats["poor_bbox"] > 0: status = "POOR"
+                    elif img_stats["FP"] > 0: status = "FP"
+                    
+                    save_path = os.path.join(path_all, f"{status}_{filename}")
+                    cv2.imwrite(save_path, img_drawn)
+                    
+                else:
+                    # Save the same pre-drawn image in the error folders it has
+                    if img_stats["FN"] > 0:
+                        cv2.imwrite(os.path.join(path_fn, filename), img_drawn)
+                    if img_stats["poor_bbox"] > 0:
+                        cv2.imwrite(os.path.join(path_poor, filename), img_drawn)
+                    if img_stats["FP"] > 0:
+                        cv2.imwrite(os.path.join(path_fp, filename), img_drawn)
 
     # Generate final report
     reporter.generate_plots()
@@ -224,6 +226,8 @@ def run_inference_mode(model_path, source_folder):
     save_dir = os.path.join(OUTPUT_DIR, "inference_real")
     if os.path.exists(save_dir): shutil.rmtree(save_dir)
     os.makedirs(save_dir)
+
+    reporter = InferenceReportGenerator(save_dir)
     
     model = YOLO(model_path)
     images = glob.glob(os.path.join(source_folder, "*.*"))
@@ -237,13 +241,27 @@ def run_inference_mode(model_path, source_folder):
         if i >= LIMIT_IMAGES: break
         
         try:
-            res = model.predict(img_path, conf=CONF_THRESHOLD, verbose=False)
+            res = model.predict(img_path, conf=CONF_THRESHOLD, verbose=False)[0]
+            
+            pred_boxes = []
+            confidences = []
+            for box in res.boxes:
+                coords = box.xyxy[0].cpu().numpy()
+                pred_boxes.append(coords)
+                confidences.append(float(box.conf))
+                
+            reporter.update(pred_boxes, confidences)
+            
             filename = "PRED_" + os.path.basename(img_path)
-            res[0].save(os.path.join(save_dir, filename))
+            res.save(os.path.join(save_dir, filename))
+            
         except Exception as e:
             print(f"Error processing {img_path}: {e}")
+            
+    reporter.generate_plots()
+    reporter.generate_html_report()
     
-    print(f"✅ Results saved in: {save_dir}")
+    print(f"✅ Results and report saved in: {save_dir}")
 
 
 def run_video_mode(model_path, video_path):
