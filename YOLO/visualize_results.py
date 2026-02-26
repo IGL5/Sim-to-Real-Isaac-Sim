@@ -120,6 +120,34 @@ def draw_boxes(img, boxes, color=(0, 255, 0), label="", confidences=None):
     return img
 
 
+def draw_overlapping_pairs(img, pred_boxes, pairs_indices, confidences=None):
+    """
+    Dibuja SOLO los pares de cajas que se solapan para resaltarlos.
+    pairs_indices: Lista de tuplas [(idx1, idx2), (idx3, idx4)...]
+    """
+    alert_color = (0, 165, 255) 
+    thickness = 3
+    
+    boxes_to_draw_idx = set()
+    for i, j in pairs_indices:
+        boxes_to_draw_idx.add(i)
+        boxes_to_draw_idx.add(j)
+        
+    for idx in boxes_to_draw_idx:
+        box = pred_boxes[idx]
+        x1, y1, x2, y2 = map(int, box)
+        cv2.rectangle(img, (x1, y1), (x2, y2), alert_color, thickness)
+        
+        if confidences:
+            conf = confidences[idx]
+            label = f"{conf:.2f}"
+            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
+            cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), alert_color, -1)
+            cv2.putText(img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            
+    return img
+
+
 # --- EXECUTION MODES ---
 
 def run_audit_mode(model_path, draw_all=False):
@@ -215,6 +243,8 @@ def run_audit_mode(model_path, draw_all=False):
 
 def run_inference_mode(model_path, source_folder):
     """ Inference Mode (New images without labels) """
+    OVERLAP_THRESHOLD_ANALYSIS = 0.45
+    
     if not check_system_integrity(model_path, check_dataset=False):
         return
 
@@ -227,7 +257,8 @@ def run_inference_mode(model_path, source_folder):
     if os.path.exists(save_dir): shutil.rmtree(save_dir)
     os.makedirs(save_dir)
 
-    reporter = InferenceReportGenerator(save_dir)
+    reporter = InferenceReportGenerator(save_dir, overlap_threshold=OVERLAP_THRESHOLD_ANALYSIS)
+    overlaps_dir_path = reporter.overlaps_dir
     
     model = YOLO(model_path)
     images = glob.glob(os.path.join(source_folder, "*.*"))
@@ -239,8 +270,13 @@ def run_inference_mode(model_path, source_folder):
     print(f"Processing {len(images)} images...")
     for i, img_path in enumerate(images):
         if i >= LIMIT_IMAGES: break
+
+        filename = os.path.basename(img_path)
         
         try:
+            img_orig = cv2.imread(img_path)
+            h, w = img_orig.shape[:2]
+
             res = model.predict(img_path, conf=CONF_THRESHOLD, verbose=False)[0]
             
             pred_boxes = []
@@ -250,18 +286,28 @@ def run_inference_mode(model_path, source_folder):
                 pred_boxes.append(coords)
                 confidences.append(float(box.conf))
                 
-            reporter.update(pred_boxes, confidences)
+            problematic_pairs = reporter.update(pred_boxes, confidences, (h, w), filename)
             
-            filename = "PRED_" + os.path.basename(img_path)
-            res.save(os.path.join(save_dir, filename))
+            if problematic_pairs:
+                img_overlap_evidence = img_orig.copy()
+                img_overlap_evidence = draw_overlapping_pairs(
+                    img_overlap_evidence, 
+                    pred_boxes, 
+                    problematic_pairs, 
+                    confidences
+                )
+                evidence_path = os.path.join(overlaps_dir_path, f"OVERLAP_{filename}")
+                cv2.imwrite(evidence_path, img_overlap_evidence)
+            res_plotted = res.plot()
+            cv2.imwrite(os.path.join(save_dir, f"PRED_{filename}"), res_plotted)
             
         except Exception as e:
             print(f"Error processing {img_path}: {e}")
+            import traceback
+            traceback.print_exc()
             
     reporter.generate_plots()
     reporter.generate_html_report()
-    
-    print(f"✅ Results and report saved in: {save_dir}")
 
 
 def run_video_mode(model_path, video_path):
