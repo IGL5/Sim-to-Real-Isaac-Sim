@@ -12,6 +12,7 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
     *   **Camera:** Randomizes camera position, distance, and look-at targets with jitter.
     *   **Objects:** Randomly selects, places, and manages visibility of objects from a pool (e.g., cyclists).
 *   **Modular Architecture:** Cleanly organized codebase separating configuration, scene utilities, and content management.
+*   **Data Traceability:** Automatically generates a comprehensive `generation_metadata.json` for every run, tracking performance metrics (time per frame), content density (average objects/distractors per image), and domain randomization coverage (HDRs/Materials used).
 *   **Kitti Writer:** Exports data in the Kitti format for easy integration with standard computer vision pipelines.
 
 ## 📂 Project Structure
@@ -26,6 +27,7 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
 │   └── __init__.py
 ├── assets/                       # Objects, Distractors, Map and Textures
 ├── _output_data/                 # Generated dataset output (created automatically)
+│   └── generation_metadata.json  # Auto-generated traceability report
 └── YOLO/                         # YOLOv8 training and validation pipeline
 ```
 
@@ -39,9 +41,10 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
 Key settings can be modified in **`modules/config.py`**:
 
 *   **`WORLD_LIMITS`**: Define the valid area for object placement.
-*   **`OBJECTS_CONFIG`**: Configure object classes, pool sizes, visibility ranges, and physical properties (wheelbase, scale).
+*   **`OBJECTS_CONFIG` & `OBJECTS_BUDGET_RANGE`**: Configure main target classes, pool sizes, scale, and placement density.
+*   **`DISTRACTOR_CONFIG` & `DISTRACTOR_BUDGET_RANGE`**: Manage the density and types of background objects (vegetation, debris, etc.) to increase scene complexity.
 *   **`CAMERA_CONSTANTS`**: Adjust camera height, distance ranges, and jitter.
-*   **`CONFIG`**: Rendering settings (PathTracing vs RayTracedLighting).
+*   **`CONFIG`**: Rendering settings (PathTracing vs RayTracedLighting) and image resolution.
 
 ## 🏃 Usage
 
@@ -69,8 +72,8 @@ This repository includes a complete pipeline to train a YOLOv8 object detector u
 
 The pipeline includes:
 
-- Automatic ETL: Converts Isaac Sim data to YOLO format.
-- Training Management: Gets the best model based on validation metrics.
-- Audit Tools: Generate HTML reports with Confusion Matrices and Heatmaps to validate sim-to-real performance.
+- Automatic ETL: Converts Isaac Sim (Kitti) data to YOLO format and manages Train/Val/Test splits with session history tracking.
+- Training Management: Automates fine-tuning, handles early stopping, and logs hyperparameter history.
+- Interactive Auditing: Generates comprehensive, tabbed HTML reports (using Jinja2) containing Confusion Matrices, Heatmaps, confidence distributions, and Sim-to-Real metadata to validate model performance.
 
 👉 [Go to Training Documentation](YOLO/README.md)

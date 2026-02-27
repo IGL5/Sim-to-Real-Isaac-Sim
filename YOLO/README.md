@@ -12,14 +12,14 @@ This directory contains the complete toolkit for processing synthetic data gener
 
 - `visualize_results.py`: Audit and testing tool. Generates interactive HTML reports, confusion matrices, and prediction visualizations.
 
-- `modules/`: Contains auxiliary classes for reporting (`audit_reporter.py` and `inference_reporter.py`) and visualization tools (`core_visual_utils.py`).
+- `modules/`: Contains auxiliary classes for reporting (`audit_reporter.py`, `inference_reporter.py`), the visual utilities (`core_visual_utils.py`), the HTML rendering engine (`html_generator.py`) and the `templates/` directory with the base templates in Jinja2 for the interactive reports.
 
 ## ⚙️ Installation
 
 This pipeline requires specific Computer Vision and Data Science libraries. Install them with:
 
 ```bash
-pip install ultralytics opencv-python matplotlib seaborn pandas pyyaml
+pip install ultralytics opencv-python matplotlib seaborn pandas pyyaml jinja2
 ```
 
 Note: It is recommended to use a virtual environment or Conda to avoid interfering with the Isaac Sim environment if running on the same machine.
@@ -29,6 +29,8 @@ Note: It is recommended to use a virtual environment or Conda to avoid interferi
 ### Step 0: Clean Dataset (clean_dataset.py)
 
 This script automatically looks for data generated in the `../_output_data/` folder of the main repository and removes corrupted images.
+
+**Note:** This script also updates the `generation_metadata.json` to log exactly how many corrupted/flat images were removed, keeping full traceability.
 
 ### Step 1: Dataset Management (dataset_manager.py)
 
@@ -47,6 +49,8 @@ python dataset_manager.py
 ```bash
 python dataset_manager.py --append
 ```
+
+**Note:** It automatically compiles a master `dataset_metadata.json` tracking image splits (train/val/test) and merging session histories if using `--append`.
 
 ### Step 2: Training (train_YOLO.py)
 
@@ -77,6 +81,8 @@ python train_YOLO.py --patience 15
 ```bash
 python train_YOLO.py --select
 ```
+
+**Note:** Upon completion, it automatically generates a `training_metadata.json` inside the experiment's folder containing hyperparameters, hardware used, and exact training duration for future reference.
 
 ### Step 3: Audit and Visualization (visualize_results.py)
 
@@ -114,19 +120,17 @@ Processes an MP4 video and generates an output video with detections.
 python visualize_results.py --video assets/test_video.mp4
 ```
 
-## 📊 The HTML Reports
+## 📊 The Interactive HTML Reports
+
+Our visualization pipeline now uses a template-based architecture (Jinja2) to generate interactive, tabbed HTML reports that unify data from the Isaac Sim generation, the YOLO training, and the final inference.
 
 ### Audit Report (`audit_report/report.html`)
-If you run the audit mode, an `audit_report` folder will be generated. Open the `report.html` file in your browser to see:
-
-- **Metrics:** Precision, Recall, F1-Score, mAP@50, and mAP@50-95.
-- **Heatmap:** Does your model detect only in the center of the image or does it cover the edges well?
-- **Confidence Histogram:** Is the model too confident in its errors?
-- **Confusion Matrix & PR Curve:** Detailed statistical analysis of hits vs misses.
+- **Tab 1: Performance:** Precision, Recall, F1-Score, mAP metrics, Confusion Matrix, and PR Curves.
+- **Tab 2: Spatial Analysis:** Confidence distribution histograms and detection Heatmaps.
+- **Tab 3: Sim-to-Real Metadata:** Traceability of the dataset (generation cost, object density per frame, materials used) and the YOLO training hyperparameters and times.
 
 ### Inference Report (`audit_report/inference_report.html`)
-If you run the inference mode, it generates a report summarizing the AI's behavior on real, unlabeled images:
-
-- **Spatial Distribution Heatmap:** Analyzes where the object detections are concentrated.
-- **Confidence Distribution:** Evaluates the AI's certainty on the given unlabelled data.
-- **Suspicious Overlap Analysis:** Highlights overlapping bounding boxes with high IoU to detect potential duplication issues or confused predictions.
+Evaluates the AI's behavior on real, unlabeled images.
+- **Tab 1: Real World Inference:** Overall crowdness, spatial distribution heatmaps, and confidence evaluation.
+- **Tab 2: Overlap Analysis:** Gallery of suspicious overlapping bounding boxes (IoU > threshold) to detect potential duplication issues or confused predictions.
+- **Tab 3: Sim-to-Real Metadata:** Same as the audit report, maintaining context of the model's origins.
