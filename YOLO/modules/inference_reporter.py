@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import json
 from datetime import datetime
 from .core_visual_utils import calculate_iou_matrix
 from .html_generator import HTMLReportGenerator
@@ -93,7 +94,26 @@ class InferenceReportGenerator:
             "overlap_events": self.stats["overlap_events"]
         }
 
-        # 3. Instantiate the generator and create the HTML
+        # 3. Save inference metadata to JSON
+        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
+        
+        inference_metadata = {
+            "inference_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "stats": stats_dict,
+            "evaluation_params": {
+                "overlap_threshold": self.overlap_threshold
+            }
+        }
+        
+        inference_json_path = os.path.join(project_dir, experiment_name, "inference_metadata.json")
+        try:
+            with open(inference_json_path, "w", encoding='utf-8') as f:
+                json.dump(inference_metadata, f, indent=4)
+            print(f"💾 Inference stats saved at: {inference_json_path}")
+        except Exception as e:
+            print(f"⚠️ Could not save inference JSON: {e}")
+
+        # 4. Instantiate the generator and create the HTML
         templates_dir = os.path.join(os.getcwd(), "modules", "templates")
         project_dir = os.path.join(os.getcwd(), "cyclist_detector")
         dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")

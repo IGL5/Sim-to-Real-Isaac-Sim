@@ -1,8 +1,7 @@
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime
+import json
+import datetime
 from .core_visual_utils import calculate_iou_matrix
 from .html_generator import HTMLReportGenerator
 
@@ -75,6 +74,52 @@ class ReportGenerator:
         img_stats["FN"] = img_fn
         
         return img_stats
+
+    def generate_plots(self):
+        print("📊 Generating statistical plots...")
+
+        # 1. Confusion Matrix
+        plt.figure(figsize=(6, 5))
+        matrix = [[self.stats["TP"], self.stats["FP"]], [self.stats["FN"], 0]]
+        sns.heatmap(matrix, annot=True, fmt="d", cmap="Blues", cbar=False, 
+                    xticklabels=["Pred Pos", "Pred Neg"], yticklabels=["Real Pos", "Real Neg"])
+        plt.title("Confusion Matrix")
+        plt.savefig(os.path.join(self.plots_dir, "confusion_matrix.png"))
+        plt.close()
+
+        # 2. Confidence Histogram
+        plt.figure(figsize=(8, 5))
+        plt.hist(self.stats["confidences_TP"], bins=20, alpha=0.7, label='Hits (TP)', color='green')
+        plt.hist(self.stats["confidences_FP"], bins=20, alpha=0.7, label='Errors (FP)', color='red')
+        plt.title("Confidence Distribution")
+        plt.legend()
+        plt.savefig(os.path.join(self.plots_dir, "confidence_dist.png"))
+        plt.close()
+
+        # 3. Heatmap
+        if self.stats["bbox_centers"]:
+            centers = np.array(self.stats["bbox_centers"])
+            plt.figure(figsize=(8, 6))
+            plt.hexbin(centers[:, 0], centers[:, 1], gridsize=20, cmap='inferno', mincnt=1)
+            plt.colorbar(label='Detections')
+            plt.title("Detection Heatmap")
+            plt.gca().invert_yaxis() 
+            plt.savefig(os.path.join(self.plots_dir, "heatmap.png"))
+            plt.close()
+
+        # 4. Precision-Recall Curve
+        ap50, precisions, recalls = self.calculate_ap(0.5)
+        plt.figure(figsize=(8, 5))
+        plt.plot(recalls, precisions, color='blue', lw=2, label=f'PR Curve (mAP@50 = {ap50:.4f})')
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title('Precision-Recall Curve (IoU=0.50)')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.legend(loc="lower left")
+        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.savefig(os.path.join(self.plots_dir, "pr_curve.png"))
+        plt.close()
 
     def calculate_ap(self, iou_thresh):
         """ Calculate the Average Precision for a specific IoU threshold """
@@ -155,7 +200,26 @@ class ReportGenerator:
             "heatmap": "plots/heatmap.png"
         }
 
-        # 4. Instantiate the generator and create the HTML
+        # 4. Save audit metadata to JSON
+        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
+        
+        audit_metadata = {
+            "audit_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "metrics": metrics_dict,
+            "evaluation_params": {
+                "iou_threshold": self.iou_threshold
+            }
+        }
+        
+        audit_json_path = os.path.join(project_dir, experiment_name, "audit_metadata.json")
+        try:
+            with open(audit_json_path, "w", encoding='utf-8') as f:
+                json.dump(audit_metadata, f, indent=4)
+            print(f"💾 Audit metrics saved at: {audit_json_path}")
+        except Exception as e:
+            print(f"⚠️ Could not save audit JSON: {e}")
+
+        # 5. Instantiate the generator and create the HTML
         templates_dir = os.path.join(os.getcwd(), "modules", "templates")
         project_dir = os.path.join(os.getcwd(), "cyclist_detector")
         dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")
