@@ -2,7 +2,7 @@ import os
 import numpy as np
 import json
 import datetime
-from .core_visual_utils import calculate_iou_matrix, calculate_1d_stats, calculate_spatial_stats
+from . import core_visual_utils as cvu
 from .html_generator import HTMLReportGenerator
 from . import plot_generator
 
@@ -38,7 +38,7 @@ class ReportGenerator:
             cy_abs = (box[1] + box[3]) / 2
             self.stats["bbox_centers"].append((cx_abs/w, cy_abs/h))
 
-        iou_matrix = calculate_iou_matrix(pred_boxes, gt_boxes)
+        iou_matrix = cvu.calculate_iou_matrix(pred_boxes, gt_boxes)
 
         # Comparamos predicciones con la realidad
         for i, pred in enumerate(pred_boxes):
@@ -182,10 +182,10 @@ class ReportGenerator:
         }
 
         metrics_dict["confidence_stats"] = {
-            "True_Positives": calculate_1d_stats(self.stats["confidences_TP"]),
-            "False_Positives": calculate_1d_stats(self.stats["confidences_FP"])
+            "True_Positives": cvu.calculate_1d_stats(self.stats["confidences_TP"]),
+            "False_Positives": cvu.calculate_1d_stats(self.stats["confidences_FP"])
         }
-        metrics_dict["spatial_stats"] = calculate_spatial_stats(self.stats["bbox_centers"])
+        metrics_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers"])
 
         # 3. Pack plots paths (relative paths for the HTML)
         plots_dict = {

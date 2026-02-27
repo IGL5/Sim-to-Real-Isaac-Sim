@@ -87,8 +87,8 @@ def draw_boxes(img, boxes, color=(0, 255, 0), label="", confidences=None):
 
 def draw_overlapping_pairs(img, pred_boxes, pairs_indices, confidences=None):
     """
-    Dibuja SOLO los pares de cajas que se solapan para resaltarlos.
-    pairs_indices: Lista de tuplas [(idx1, idx2), (idx3, idx4)...]
+    Draws ONLY the overlapping pairs of boxes to highlight them.
+    pairs_indices: List of tuples [(idx1, idx2), (idx3, idx4)...]
     """
     alert_color = (0, 165, 255) 
     thickness = 3
@@ -134,10 +134,10 @@ def calculate_iou_matrix(boxesA, boxesB):
         xB = np.minimum(A[..., 2], B[..., 2])
         yB = np.minimum(A[..., 3], B[..., 3])
 
-        # Área de intersección
+        # Intersection area
         interArea = np.maximum(0, xB - xA) * np.maximum(0, yB - yA)
 
-        # Áreas individuales
+        # Individual areas
         boxAArea = (A[..., 2] - A[..., 0]) * (A[..., 3] - A[..., 1])
         boxBArea = (B[..., 2] - B[..., 0]) * (B[..., 3] - B[..., 1])
 

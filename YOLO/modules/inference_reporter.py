@@ -2,7 +2,7 @@ import os
 import numpy as np
 import json
 from datetime import datetime
-from .core_visual_utils import calculate_iou_matrix, calculate_1d_stats, calculate_spatial_stats
+from . import core_visual_utils as cvu
 from .html_generator import HTMLReportGenerator
 from . import plot_generator
 
@@ -36,7 +36,7 @@ class InferenceReportGenerator:
             self.stats["bbox_centers_norm"].append((cx_abs/w, cy_abs/h))
             
         # Overlapping / concentric detections (IoU > 0.45 in the same image)
-        iou_matrix = calculate_iou_matrix(pred_boxes, pred_boxes)
+        iou_matrix = cvu.calculate_iou_matrix(pred_boxes, pred_boxes)
         overlapping_pairs = np.argwhere(np.triu(iou_matrix, k=1) > self.overlap_threshold)
         
         problematic_pairs_indices = []
@@ -87,8 +87,8 @@ class InferenceReportGenerator:
             "overlap_events": self.stats["overlap_events"]
         }
 
-        stats_dict["confidence_stats"] = calculate_1d_stats(self.stats["confidences"])
-        stats_dict["spatial_stats"] = calculate_spatial_stats(self.stats["bbox_centers_norm"])
+        stats_dict["confidence_stats"] = cvu.calculate_1d_stats(self.stats["confidences"])
+        stats_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers_norm"])
 
         # 3. Save inference metadata to JSON
         project_dir = os.path.join(os.getcwd(), "cyclist_detector")
