@@ -3,6 +3,9 @@ import yaml
 from ultralytics import YOLO
 import torch
 import argparse
+import time
+import json
+from datetime import datetime
 
 # DEFAULT CONFIGURATION
 DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
@@ -125,6 +128,9 @@ def main():
     parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
+    start_time = time.time()
+    start_date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     device = check_gpu()
 
     # Model selection logic
@@ -182,10 +188,55 @@ def main():
     # 5. Export to ONNX (Ideal para Isaac Sim / ROS / TensorRT)
     try:
         print("\n📦 Exporting to ONNX...")
-        path = model.export(format="onnx", dynamic=True)
-        print(f"✅ Model exported for deployment: {path}")
+        onnx_path = model.export(format="onnx", dynamic=True)
+        print(f"✅ Model exported for deployment: {onnx_path}")
     except Exception as e:
         print(f"⚠️ Export to ONNX failed (non-critical): {e}")
+
+    # 6. Compile metadata
+    print("\n📝 Compiling training metadata...")
+    end_time = time.time()
+    duration_secs = end_time - start_time
+    duration_formatted = time.strftime("%H:%M:%S", time.gmtime(duration_secs))
+
+    training_metadata = {
+        "experiment_info": {
+            "project_name": PROJECT_NAME,
+            "experiment_name": experiment_name,
+            "start_date": start_date_str,
+            "duration_seconds": round(duration_secs, 2),
+            "duration_formatted": duration_formatted
+        },
+        "hardware": {
+            "device": "GPU" if device == 0 else "CPU"
+        },
+        "hyperparameters": {
+            "model_base": model_type,
+            "epochs_requested": epochs_to_run,
+            "patience": args.patience,
+            "img_size": IMG_SIZE,
+            "batch_size": BATCH_SIZE,
+            "workers": WORKERS
+        },
+        "metrics_test_set": {
+            "mAP50_95": round(float(metrics.box.map), 4),
+            "mAP50": round(float(metrics.box.map50), 4)
+        },
+        "artifacts": {
+            "best_weights": best_weight,
+            "onnx_model": onnx_path
+        }
+    }
+
+    # Save metadata
+    metadata_dir = os.path.join(PROJECT_NAME, experiment_name)
+    os.makedirs(metadata_dir, exist_ok=True)
+    metadata_path = os.path.join(metadata_dir, 'training_metadata.json')
+
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(training_metadata, f, indent=4)
+
+    print(f"💾 Training metadata saved at: {metadata_path}")
 
 
 if __name__ == '__main__':

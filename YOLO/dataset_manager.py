@@ -3,7 +3,7 @@ import cv2
 import shutil
 import random
 import argparse
-import time
+import json
 from datetime import datetime
 
 # --- CONFIG ---
@@ -189,6 +189,45 @@ def main():
     print("✅ PROCESSING COMPLETED")
     print(f"New files added: {c_train + c_val + c_test}")
     print(f"Dataset located in: {BASE_OUTPUT}")
+
+    # 6. Process JSON
+    source_meta_path = os.path.join(os.getcwd(), "..", "_output_data", "generation_metadata.json")
+    batch_meta = {"batch_id": batch_prefix} # Fallback if it doesn't exist
+    
+    if os.path.exists(source_meta_path):
+        with open(source_meta_path, 'r', encoding='utf-8') as f:
+            batch_meta.update(json.load(f))
+            
+    # Add the split data to the batch
+    batch_meta["yolo_split"] = {
+        "train": c_train,
+        "val": c_val,
+        "test": c_test,
+        "total_added": c_train + c_val + c_test
+    }
+
+    master_meta_path = os.path.join(BASE_OUTPUT, "dataset_metadata.json")
+    master_meta = {
+        "global_totals": {"train": 0, "val": 0, "test": 0, "total": 0},
+        "sessions": []
+    }
+
+    # If append mode
+    if args.append and os.path.exists(master_meta_path):
+        with open(master_meta_path, 'r', encoding='utf-8') as f:
+            master_meta = json.load(f)
+
+    master_meta["sessions"].append(batch_meta)
+    master_meta["global_totals"]["train"] += c_train
+    master_meta["global_totals"]["val"] += c_val
+    master_meta["global_totals"]["test"] += c_test
+    master_meta["global_totals"]["total"] += (c_train + c_val + c_test)
+
+    # Save Master Metadata
+    with open(master_meta_path, 'w', encoding='utf-8') as f:
+        json.dump(master_meta, f, indent=4)
+        
+    print(f"🧠 Master Metadata saved/updated in: {master_meta_path}")
 
 
 if __name__ == "__main__":

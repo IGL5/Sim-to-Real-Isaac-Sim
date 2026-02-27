@@ -2,6 +2,7 @@ import os
 import glob
 import argparse
 import cv2
+import json
 import numpy as np
 from pathlib import Path
 
@@ -13,8 +14,7 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
     ...
     """
     
-    # 1. Search recursively for all 'rgb' folders inside the data directory
-    # This works even if you have multiple cameras (DroneCamera, Camera2, etc.)
+    # Search recursively for all 'rgb' folders inside the data directory
     search_pattern = os.path.join(data_dir, "**", "rgb")
     rgb_folders = glob.glob(search_pattern, recursive=True)
     
@@ -29,13 +29,11 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
     total_kept = 0
 
     for rgb_folder in rgb_folders:
-        # rgb_folder es ej: "_output_data/DroneCamera/rgb"
-        camera_root = os.path.dirname(rgb_folder) # ej: "_output_data/DroneCamera"
+        camera_root = os.path.dirname(rgb_folder) 
         camera_name = os.path.basename(camera_root)
         
         print(f"\nProcessing camera: {camera_name}")
         
-        # List images png in the rgb folder
         png_files = sorted(glob.glob(os.path.join(rgb_folder, "*.png")))
         
         if not png_files:
@@ -45,7 +43,6 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
         print(f"  -> Analyzing {len(png_files)} images...")
 
         for rgb_path in png_files:
-            # Read image
             img = cv2.imread(rgb_path)
             
             is_bad = False
@@ -60,7 +57,6 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
                 # Criteria: Too dark OR Flat
                 if mean_val < threshold_mean or std_val < threshold_std:
                     is_bad = True
-                    # print(f"    Detected bad frame: {os.path.basename(rgb_path)} (Mean:{mean_val:.1f})")
 
             if is_bad:
                 if not dry_run:
@@ -75,30 +71,37 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
     print("\n--- FINAL SUMMARY ---")
     print(f"✅ Valid frames kept: {total_kept}")
     print(f"🗑️ Corrupted frames deleted: {total_deleted}")
+
     if dry_run:
         print("⚠️  DRY-RUN: No files were deleted.")
+    else:
+        metadata_path = os.path.join(data_dir, "generation_metadata.json")
+        if os.path.exists(metadata_path):
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                meta = json.load(f)
+            
+            meta["cleaning"] = {
+                "corrupted_deleted": total_deleted,
+                "valid_kept": total_kept
+            }
+            
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(meta, f, indent=4)
+            print(f"📝 Metadata updated with cleaning stats in: {metadata_path}")
+        else:
+            print("[WARN] Metadata file not found. Skipping metadata update.")
 
 
 def delete_hierarchical_frame(rgb_path, camera_root):
     """
     Deletes the frame identified by 'rgb_path' in ALL subfolders of 'camera_root'
     (rgb, depth, object_detection, etc.).
-    
-    Args:
-        rgb_path: Full path to the bad image (e.g: .../rgb/0.png)
-        camera_root: Root directory of the camera (e.g: .../DroneCamera)
     """
-    # Get the frame ID (file name without extension)
-    # ej: "0.png" -> stem es "0"
     frame_id = Path(rgb_path).stem
     
-    # List all data subfolders (rgb, depth, labels, etc.)
-    # Scan camera_root to see what folders exist
     subfolders = [f.path for f in os.scandir(camera_root) if f.is_dir()]
     
     for folder in subfolders:
-        # In each folder, look for files named "frame_id.*"
-        # This will cover 0.png, 0.txt, 0.npy, 0.json...
         target_pattern = os.path.join(folder, f"{frame_id}.*")
         matching_files = glob.glob(target_pattern)
         
