@@ -143,3 +143,28 @@ def calculate_iou_matrix(boxesA, boxesB):
         iou = interArea / (boxAArea + boxBArea - interArea + 1e-6)
 
         return iou
+
+# --- Statistics ---
+
+def calculate_1d_stats(arr):
+    """Calculates mean, median, and std for a 1D array/list."""
+    if not arr:
+        return {"mean": 0.0, "median": 0.0, "std": 0.0}
+    return {
+        "mean": round(float(np.mean(arr)), 4),
+        "median": round(float(np.median(arr)), 4),
+        "std": round(float(np.std(arr)), 4)
+    }
+
+def calculate_spatial_stats(centers):
+    """Calculates center of mass and dispersion for a list of 2D points [(x, y), ...]."""
+    if not centers:
+        return {"center_of_mass_x": 0.0, "center_of_mass_y": 0.0, "dispersion_x": 0.0, "dispersion_y": 0.0}
+    
+    c_arr = np.array(centers)
+    return {
+        "center_of_mass_x": round(float(np.mean(c_arr[:, 0])), 4),
+        "center_of_mass_y": round(float(np.mean(c_arr[:, 1])), 4),
+        "dispersion_x": round(float(np.std(c_arr[:, 0])), 4),
+        "dispersion_y": round(float(np.std(c_arr[:, 1])), 4)
+    }

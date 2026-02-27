@@ -1,10 +1,10 @@
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import json
 from datetime import datetime
-from .core_visual_utils import calculate_iou_matrix
+from .core_visual_utils import calculate_iou_matrix, calculate_1d_stats, calculate_spatial_stats
 from .html_generator import HTMLReportGenerator
+from . import plot_generator
 
 
 class InferenceReportGenerator:
@@ -56,26 +56,19 @@ class InferenceReportGenerator:
         
         # 1. Confidence Histogram
         if self.stats["confidences"]:
-            plt.figure(figsize=(8, 5))
-            plt.hist(self.stats["confidences"], bins=20, alpha=0.7, color='blue')
-            plt.title("Real World Confidence Distribution")
-            plt.xlabel("Confidence")
-            plt.ylabel("Frequency")
-            plt.savefig(os.path.join(self.plots_dir, "inference_conf_dist.png"))
-            plt.close()
+            plot_generator.plot_confidence_histogram(
+                confs_primary=self.stats["confidences"], label_primary='Detections', color_primary='blue',
+                output_path=os.path.join(self.plots_dir, "inference_conf_dist.png"),
+                title="Real World Confidence Distribution"
+            )
 
         # 2. Heatmap
-        if self.stats["bbox_centers_norm"]:
-            centers = np.array(self.stats["bbox_centers_norm"])
-            plt.figure(figsize=(8, 6))
-            plt.hexbin(centers[:, 0], centers[:, 1], gridsize=20, cmap='magma', mincnt=1, extent=[0, 1, 0, 1])
-            plt.colorbar(label='Detections')
-            plt.title("Normalized Detection Heatmap (All Resolutions)")
-            plt.gca().invert_yaxis()
-            plt.xlabel("Normalized Width (0.0 - 1.0)")
-            plt.ylabel("Normalized Height (0.0 - 1.0)")
-            plt.savefig(os.path.join(self.plots_dir, "inference_heatmap.png"))
-            plt.close()
+        plot_generator.plot_normalized_heatmap(
+            self.stats["bbox_centers_norm"],
+            os.path.join(self.plots_dir, "inference_heatmap.png"),
+            title="Normalized Detection Heatmap (All Resolutions)",
+            cmap='magma'
+        )
 
     def generate_html_report(self, experiment_name="yolov8_s_default"):
         """ Calculates final metrics and delegates HTML creation to Jinja2 """
@@ -93,6 +86,9 @@ class InferenceReportGenerator:
             "total_overlaps": total_overlaps,
             "overlap_events": self.stats["overlap_events"]
         }
+
+        stats_dict["confidence_stats"] = calculate_1d_stats(self.stats["confidences"])
+        stats_dict["spatial_stats"] = calculate_spatial_stats(self.stats["bbox_centers_norm"])
 
         # 3. Save inference metadata to JSON
         project_dir = os.path.join(os.getcwd(), "cyclist_detector")

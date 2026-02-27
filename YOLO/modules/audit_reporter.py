@@ -2,8 +2,9 @@ import os
 import numpy as np
 import json
 import datetime
-from .core_visual_utils import calculate_iou_matrix
+from .core_visual_utils import calculate_iou_matrix, calculate_1d_stats, calculate_spatial_stats
 from .html_generator import HTMLReportGenerator
+from . import plot_generator
 
 
 class ReportGenerator:
@@ -81,47 +82,33 @@ class ReportGenerator:
         print("📊 Generating statistical plots...")
 
         # 1. Confusion Matrix
-        plt.figure(figsize=(6, 5))
-        matrix = [[self.stats["TP"], self.stats["FP"]], [self.stats["FN"], 0]]
-        sns.heatmap(matrix, annot=True, fmt="d", cmap="Blues", cbar=False, 
-                    xticklabels=["Pred Pos", "Pred Neg"], yticklabels=["Real Pos", "Real Neg"])
-        plt.title("Confusion Matrix")
-        plt.savefig(os.path.join(self.plots_dir, "confusion_matrix.png"))
-        plt.close()
+        plot_generator.plot_confusion_matrix(
+            self.stats["TP"], self.stats["FP"], self.stats["FN"],
+            os.path.join(self.plots_dir, "confusion_matrix.png")
+        )
 
         # 2. Confidence Histogram
-        plt.figure(figsize=(8, 5))
-        plt.hist(self.stats["confidences_TP"], bins=20, alpha=0.7, label='Hits (TP)', color='green')
-        plt.hist(self.stats["confidences_FP"], bins=20, alpha=0.7, label='Errors (FP)', color='red')
-        plt.title("Confidence Distribution")
-        plt.legend()
-        plt.savefig(os.path.join(self.plots_dir, "confidence_dist.png"))
-        plt.close()
+        plot_generator.plot_confidence_histogram(
+            confs_primary=self.stats["confidences_TP"], label_primary='Hits (TP)', color_primary='green',
+            confs_secondary=self.stats["confidences_FP"], label_secondary='Errors (FP)', color_secondary='red',
+            output_path=os.path.join(self.plots_dir, "confidence_dist.png"),
+            title="Confidence Distribution"
+        )
 
         # 3. Heatmap
-        if self.stats["bbox_centers"]:
-            centers = np.array(self.stats["bbox_centers"])
-            plt.figure(figsize=(8, 6))
-            plt.hexbin(centers[:, 0], centers[:, 1], gridsize=20, cmap='inferno', mincnt=1, extent=[0, 1, 0, 1])
-            plt.colorbar(label='Detections')
-            plt.title("Detection Heatmap")
-            plt.gca().invert_yaxis() 
-            plt.savefig(os.path.join(self.plots_dir, "heatmap.png"))
-            plt.close()
+        plot_generator.plot_normalized_heatmap(
+            self.stats["bbox_centers"],
+            os.path.join(self.plots_dir, "heatmap.png"),
+            title="Normalized Detection Heatmap",
+            cmap='inferno'
+        )
 
         # 4. Precision-Recall Curve
         ap50, precisions, recalls = self.calculate_ap(0.5)
-        plt.figure(figsize=(8, 5))
-        plt.plot(recalls, precisions, color='blue', lw=2, label=f'PR Curve (mAP@50 = {ap50:.4f})')
-        plt.xlabel('Recall')
-        plt.ylabel('Precision')
-        plt.title('Precision-Recall Curve (IoU=0.50)')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.legend(loc="lower left")
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.savefig(os.path.join(self.plots_dir, "pr_curve.png"))
-        plt.close()
+        plot_generator.plot_pr_curve(
+            precisions, recalls, ap50,
+            os.path.join(self.plots_dir, "pr_curve.png")
+        )
 
     def calculate_ap(self, iou_thresh):
         """ Calculate the Average Precision for a specific IoU threshold """
@@ -193,6 +180,12 @@ class ReportGenerator:
             "fn": self.stats["FN"],
             "fp": self.stats["FP"]
         }
+
+        metrics_dict["confidence_stats"] = {
+            "True_Positives": calculate_1d_stats(self.stats["confidences_TP"]),
+            "False_Positives": calculate_1d_stats(self.stats["confidences_FP"])
+        }
+        metrics_dict["spatial_stats"] = calculate_spatial_stats(self.stats["bbox_centers"])
 
         # 3. Pack plots paths (relative paths for the HTML)
         plots_dict = {
