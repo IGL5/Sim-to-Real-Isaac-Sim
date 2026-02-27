@@ -200,17 +200,17 @@ def main():
         content.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
 
         # Randomize sky
-        if config.AVAILABLE_HDRS and dome_prim.IsValid():
+        if config.AVAILABLE_HDRS and dome_prim.IsValid() and config.RANDOMIZE_SKY:
             hdr_name = random.choice(config.AVAILABLE_HDRS)
             light_path = os.path.join(config.HDR_MAPS_DIR, hdr_name)
             
             hdr_intensity = random.uniform(config.HDR_INTENSITY_RANGE[0] * 1000, 
-                                         config.HDR_INTENSITY_RANGE[1] * 1000)
-            
+                                        config.HDR_INTENSITY_RANGE[1] * 1000)
+        
             content.setup_dome_light(stage, dome_light_path, light_path, hdr_intensity)
 
         # Randomize sun
-        if sun_prim.IsValid():
+        if config.RANDOMIZE_SKY and sun_prim.IsValid():
             elevation = random.uniform(15, 80)
             azimuth = random.uniform(0, 360)
             

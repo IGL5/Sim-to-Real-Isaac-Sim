@@ -55,7 +55,12 @@ def load_pbr_materials(stage):
         return []
 
     material_folders = [f.path for f in os.scandir(config.TEXTURES_ROOT_DIR) if f.is_dir()]
-    print(f"\n--- Found {len(material_folders)} texture folders ---")
+
+    material_folders.sort()
+    limit = min(max(config.MAX_PBR_MATERIALS, len(config.ENVIRONMENT_LOOKUP_KEYS)), len(material_folders))
+    material_folders = material_folders[:limit]
+
+    print(f"\n--- Found {len(material_folders)} texture folders (Limit: {limit}) ---")
     
     # 1. ROBUST CREATION
     for i, folder_path in enumerate(material_folders):
@@ -194,12 +199,14 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             # Apply changes to the shader attributes
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
-            shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
-            shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.7, 1.0))
-            shader.CreateInput("specular_level", Sdf.ValueTypeNames.Float).Set(random.uniform(0.1, 0.3))
+            
+            if config.RANDOMIZE_TERRAIN:
+                shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
+                shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.7, 1.0))
+                shader.CreateInput("specular_level", Sdf.ValueTypeNames.Float).Set(random.uniform(0.1, 0.3))
 
-            normal_strength = random.uniform(1.0, 2.0) 
-            shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
+                normal_strength = random.uniform(1.0, 2.0) 
+                shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
 
         # --- BIND ---
         for path in paths:
@@ -227,8 +234,12 @@ def discover_hdr_maps(directory):
     # Search for valid file extensions
     supported_extensions = ('.hdr', '.exr')
     files = [f for f in os.listdir(directory) if f.lower().endswith(supported_extensions)]
+
+    files.sort()
+    limit = min(max(config.MAX_HDR_MAPS, 1), len(files))
+    files = files[:limit]
     
-    print(f"\n--- Found {len(files)} HDR maps in local folder ---")
+    print(f"\n--- Found {len(files)} HDR maps in local folder (Limit: {limit}) ---")
         
     return files
 

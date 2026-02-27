@@ -57,6 +57,12 @@ ENVIRONMENT_LOOKUP_KEYS = [
     # "Lake"
 ]
 
+# --- DOMAIN RANDOMIZATION LIMITS ---
+MAX_PBR_MATERIALS = 1
+MAX_HDR_MAPS = 2
+RANDOMIZE_SKY = False
+RANDOMIZE_TERRAIN = False
+
 # ASSET POOLS
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
@@ -68,7 +74,7 @@ OBJECTS_CONFIG = {
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
-        "randomize_materials": ["frame"]    # List of prim names to randomize materials
+        # "randomize_materials": ["frame"]    # List of prim names to randomize materials
     },
 }
 
