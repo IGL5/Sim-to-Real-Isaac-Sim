@@ -3,7 +3,7 @@ import argparse
 
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", type=bool, default=False, help="Launch script headless, default is False")
-parser.add_argument("--height", type=int, default=816, help="Height of image") # 544
+parser.add_argument("--height", type=int, default=810, help="Height of image") # 540
 parser.add_argument("--width", type=int, default=1440, help="Width of image") # 960
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
 parser.add_argument("--distractors", type=str, default="None",

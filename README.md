@@ -61,7 +61,7 @@ Run the script using the Isaac Sim Python interpreter (typically found in your I
 | :--- | :--- | :--- |
 | `--num_frames` | Number of frames to generate | `1` |
 | `--width` | Image width | `1440` |
-| `--height` | Image height | `816` |
+| `--height` | Image height | `810` |
 | `--headless` | Run in headless mode (no UI) | `False` |
 | `--data_dir` | Directory to save output data | `./_output_data` |
 
