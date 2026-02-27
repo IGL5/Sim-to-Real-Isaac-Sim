@@ -93,7 +93,7 @@ def run_audit_mode(model_path, draw_all=False):
             confidences.append(float(box.conf))
 
         # Statistics
-        img_stats = reporter.update(pred_boxes, gt_boxes, confidences)
+        img_stats = reporter.update(pred_boxes, gt_boxes, confidences, (h, w))
 
         # Save and Organization Logic
         if i < cvu.LIMIT_IMAGES:
@@ -173,7 +173,7 @@ def run_inference_mode(model_path, source_folder):
                 print(f"⚠️ Warning: Could not read image {filename}. Skipping...")
                 continue
 
-            h, w = img_orig.shape[:2]
+            h, w, _ = img_orig.shape
 
             # Run YOLO inference
             res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]

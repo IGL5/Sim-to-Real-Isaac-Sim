@@ -21,19 +21,21 @@ class ReportGenerator:
         self.plots_dir = os.path.join(output_dir, "plots")
         os.makedirs(self.plots_dir, exist_ok=True)
 
-    def update(self, pred_boxes, gt_boxes, confidences):
+    def update(self, pred_boxes, gt_boxes, confidences, img_shape):
         """
         Receive the boxes of ONE image, calculate matchings and update statistics.
         """
+        h, w = img_shape
+
         matched_gt = set()
         self.stats["total_gt"] += len(gt_boxes)
         img_stats = {"TP": 0, "FP": 0, "FN": 0, "poor_bbox": 0}
         
         # Save centers for Heatmap
         for box in pred_boxes:
-            cx = (box[0] + box[2]) / 2
-            cy = (box[1] + box[3]) / 2
-            self.stats["bbox_centers"].append((cx, cy))
+            cx_abs = (box[0] + box[2]) / 2
+            cy_abs = (box[1] + box[3]) / 2
+            self.stats["bbox_centers"].append((cx_abs/w, cy_abs/h))
 
         iou_matrix = calculate_iou_matrix(pred_boxes, gt_boxes)
 
@@ -100,7 +102,7 @@ class ReportGenerator:
         if self.stats["bbox_centers"]:
             centers = np.array(self.stats["bbox_centers"])
             plt.figure(figsize=(8, 6))
-            plt.hexbin(centers[:, 0], centers[:, 1], gridsize=20, cmap='inferno', mincnt=1)
+            plt.hexbin(centers[:, 0], centers[:, 1], gridsize=20, cmap='inferno', mincnt=1, extent=[0, 1, 0, 1])
             plt.colorbar(label='Detections')
             plt.title("Detection Heatmap")
             plt.gca().invert_yaxis() 
