@@ -133,7 +133,6 @@ def run_audit_mode(model_path, draw_all=False):
 def run_inference_mode(model_path, source_folder):
     """ Inference Mode (New images without labels) """
     
-    # 1. Validate environment and source path
     if not cvu.check_system_integrity(model_path, check_dataset=False):
         return
 
@@ -143,7 +142,6 @@ def run_inference_mode(model_path, source_folder):
 
     print(f"--- 🌍 REAL INFERENCE MODE ---")
     
-    # 2. Setup output directories for results and overlaps
     save_dir = os.path.join(cvu.OUTPUT_DIR, "inference_real")
     if os.path.exists(save_dir): shutil.rmtree(save_dir)
     os.makedirs(save_dir)
@@ -151,7 +149,6 @@ def run_inference_mode(model_path, source_folder):
     short_dir = save_dir[save_dir.find("YOLO"):] if "YOLO" in save_dir else save_dir
     print(f"📂 Saving inference results in: {short_dir}")
 
-    # Initialize reporter for overlap analysis
     reporter = InferenceReportGenerator(save_dir, overlap_threshold=cvu.OVERLAP_THRESHOLD_ANALYSIS)
     overlaps_dir_path = reporter.overlaps_dir
     
@@ -164,7 +161,7 @@ def run_inference_mode(model_path, source_folder):
 
     print(f"Processing {len(images)} images...")
     
-    # 3. Process each image for detection and quality analysis
+    # Process each image for detection and quality analysis
     for i, img_path in enumerate(images):
         if i >= cvu.LIMIT_IMAGES: break
 
@@ -212,7 +209,7 @@ def run_inference_mode(model_path, source_folder):
             import traceback
             traceback.print_exc()
             
-    # 4. Finalize and generate the summary report
+    # Finalize and generate the summary report
     exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
     reporter.generate_plots()
     reporter.generate_html_report(exp_name)
