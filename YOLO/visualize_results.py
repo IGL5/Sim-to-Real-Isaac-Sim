@@ -125,13 +125,15 @@ def run_audit_mode(model_path, draw_all=False):
                         cv2.imwrite(os.path.join(path_fp, filename), img_drawn)
 
     # Generate final report
+    exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
     reporter.generate_plots()
-    reporter.generate_html_report()
+    reporter.generate_html_report(exp_name)
 
 
 def run_inference_mode(model_path, source_folder):
     """ Inference Mode (New images without labels) """
     
+    # 1. Validate environment and source path
     if not cvu.check_system_integrity(model_path, check_dataset=False):
         return
 
@@ -140,12 +142,16 @@ def run_inference_mode(model_path, source_folder):
         return
 
     print(f"--- 🌍 REAL INFERENCE MODE ---")
+    
+    # 2. Setup output directories for results and overlaps
     save_dir = os.path.join(cvu.OUTPUT_DIR, "inference_real")
     if os.path.exists(save_dir): shutil.rmtree(save_dir)
     os.makedirs(save_dir)
+    
     short_dir = save_dir[save_dir.find("YOLO"):] if "YOLO" in save_dir else save_dir
     print(f"📂 Saving inference results in: {short_dir}")
 
+    # Initialize reporter for overlap analysis
     reporter = InferenceReportGenerator(save_dir, overlap_threshold=cvu.OVERLAP_THRESHOLD_ANALYSIS)
     overlaps_dir_path = reporter.overlaps_dir
     
@@ -157,6 +163,8 @@ def run_inference_mode(model_path, source_folder):
         return
 
     print(f"Processing {len(images)} images...")
+    
+    # 3. Process each image for detection and quality analysis
     for i, img_path in enumerate(images):
         if i >= cvu.LIMIT_IMAGES: break
 
@@ -164,13 +172,13 @@ def run_inference_mode(model_path, source_folder):
         
         try:
             img_orig = cv2.imread(img_path)
-
             if img_orig is None:
                 print(f"⚠️ Warning: Could not read image {filename}. Skipping...")
                 continue
 
             h, w = img_orig.shape[:2]
 
+            # Run YOLO inference
             res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
             
             pred_boxes = []
@@ -180,8 +188,10 @@ def run_inference_mode(model_path, source_folder):
                 pred_boxes.append(coords)
                 confidences.append(float(box.conf))
                 
+            # Analyze predictions for overlapping boxes (potential double detections)
             problematic_pairs = reporter.update(pred_boxes, confidences, (h, w), filename)
             
+            # Save visual evidence if overlaps are found
             if problematic_pairs:
                 img_overlap_evidence = img_orig.copy()
                 img_overlap_evidence = cvu.draw_overlapping_pairs(
@@ -192,6 +202,8 @@ def run_inference_mode(model_path, source_folder):
                 )
                 evidence_path = os.path.join(overlaps_dir_path, f"OVERLAP_{filename}")
                 cv2.imwrite(evidence_path, img_overlap_evidence)
+            
+            # Save standard detection visualization
             res_plotted = res.plot()
             cv2.imwrite(os.path.join(save_dir, f"PRED_{filename}"), res_plotted)
             
@@ -200,8 +212,10 @@ def run_inference_mode(model_path, source_folder):
             import traceback
             traceback.print_exc()
             
+    # 4. Finalize and generate the summary report
+    exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
     reporter.generate_plots()
-    reporter.generate_html_report()
+    reporter.generate_html_report(exp_name)
 
 
 def run_video_mode(model_path, video_path):

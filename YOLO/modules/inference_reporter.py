@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 from .core_visual_utils import calculate_iou_matrix
+from .html_generator import HTMLReportGenerator
 
 
 class InferenceReportGenerator:
@@ -75,85 +76,29 @@ class InferenceReportGenerator:
             plt.savefig(os.path.join(self.plots_dir, "inference_heatmap.png"))
             plt.close()
 
-    def generate_html_report(self):
+    def generate_html_report(self, experiment_name="yolov8_s_default"):
+        """ Calculates final metrics and delegates HTML creation to Jinja2 """
+        print("📝 Compiling inference statistics for the report...")
+        
+        # 1. Summary calculations
         avg_detections = self.stats["total_detections"] / max(1, self.stats["total_images"])
         total_overlaps = sum(event["count"] for event in self.stats["overlap_events"])
 
-        overlap_gallery_html = ""
-        if not self.stats["overlap_events"]:
-             overlap_gallery_html = "<p>✅ No suspicious overlaps detected above threshold.</p>"
-        else:
-            for event in self.stats["overlap_events"]:
-                 img_rel_path = os.path.join("plots", "suspicious_overlaps_imgs", event["evidence_filename"])
-                 overlap_gallery_html += f"""
-                 <div class="card overlap-card">
-                    <p><strong>Source:</strong> {event['orig_filename']}</p>
-                    <p>Found <strong>{event['count']}</strong> risk pair(s)</p>
-                    <img src="{img_rel_path}" alt="Overlap Evidence">
-                 </div>
-                 """
+        # 2. Pack metrics for the template
+        stats_dict = {
+            "total_images": self.stats["total_images"],
+            "total_detections": self.stats["total_detections"],
+            "avg_detections": avg_detections,
+            "total_overlaps": total_overlaps,
+            "overlap_events": self.stats["overlap_events"]
+        }
+
+        # 3. Instantiate the generator and create the HTML
+        templates_dir = os.path.join(os.getcwd(), "modules", "templates")
+        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
+        dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")
         
-        html = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: sans-serif; background: #f4f4f9; padding: 20px; color: #333; }}
-                h1 {{ color: #2c3e50; }}
-                h2 {{ color: #e74c3c; margin-top: 40px; border-bottom: 2px solid #e74c3c; padding-bottom: 10px; }}
-                .container {{ display: flex; flex-wrap: wrap; gap: 20px; }}
-                .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex: 1; min-width: 200px; }}
-                .metric {{ font-size: 2em; font-weight: bold; color: #8e44ad; }}
-                .alert-metric {{ color: #e74c3c; }}
-                .plot-grid, .gallery-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-top: 20px; }}
-                .gallery-grid .overlap-card {{ min-width: 300px; border-left: 5px solid #e74c3c; }}
-
-                img {{ max-width: 100%; border-radius: 8px; margin-top: 10px; }}
-            </style>
-        </head>
-        <body>
-            <h1>🌍 Real Inference Analytics Report</h1>
-            <p>Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
-            
-            <div class="container">
-                <div class="card">
-                    <div>Images Processed</div>
-                    <div class="metric">{self.stats['total_images']}</div>
-                </div>
-                <div class="card">
-                    <div>Total Detections</div>
-                    <div class="metric">{self.stats['total_detections']}</div>
-                </div>
-                <div class="card">
-                    <div>Crowdness (Avg/Img)</div>
-                    <div class="metric">{avg_detections:.2f}</div>
-                </div>
-                <div class="card" style="background-color: #fdedec;">
-                    <div>Total Suspicious Pairs (IoU > {self.overlap_threshold})</div>
-                    <div class="metric alert-metric">{total_overlaps}</div>
-                </div>
-            </div>
-
-            <div class="plot-grid">
-                <div class="card">
-                    <h3>Confidence Distribution</h3>
-                    <img src="plots/inference_conf_dist.png">
-                </div>
-                <div class="card">
-                    <h3>Spatial Distribution (Heatmap)</h3>
-                    <p style="font-size:0.9em; color:#666;">Normalized to 1x1 frame regardless of resolution.</p>
-                    <img src="plots/inference_heatmap.png">
-                </div>
-            </div>
-
-            <h2>⚠️ Suspicious Overlap Analysis</h2>
-            <div class="gallery-grid">
-                {overlap_gallery_html}
-            </div>
-        </body>
-        </html>
-        """
+        generator = HTMLReportGenerator(templates_dir, project_dir, dataset_out_dir)
         
-        path = os.path.join(self.output_dir, "..", "inference_report.html")
-        with open(path, "w", encoding='utf-8') as f:
-            f.write(html)
-        print(f"✅ Real Inference HTML Report generated at: {path}")
+        output_path = os.path.join(self.output_dir, "..", "inference_report.html")
+        generator.generate_inference_html(output_path, experiment_name, stats_dict, self.overlap_threshold)

@@ -1,0 +1,77 @@
+{% extends "base_template.html" %}
+
+{% block tab_buttons %}
+<button class="tablinks active" onclick="openTab(event, 'Rendimiento')">🎯 Rendimiento Actual</button>
+<button class="tablinks" onclick="openTab(event, 'Analisis')">📊 Análisis Espacial</button>
+{% endblock %}
+
+{% block tab_contents %}
+<div id="Rendimiento" class="tabcontent" style="display:block;">
+    <div class="container">
+        <div class="card">
+            <div>Precision</div>
+            <div class="metric">{{ "%.2f"|format(metrics.precision * 100) }}%</div>
+        </div>
+        <div class="card">
+            <div>Recall</div>
+            <div class="metric">{{ "%.2f"|format(metrics.recall * 100) }}%</div>
+        </div>
+        <div class="card">
+            <div>F1-Score</div>
+            <div class="metric">{{ "%.2f"|format(metrics.f1) }}</div>
+        </div>
+        <div class="card">
+            <div>mAP@50 (Audit)</div>
+            <div class="metric map-metric">{{ "%.3f"|format(metrics.ap50) }}</div>
+        </div>
+        <div class="card">
+            <div>mAP@50-95</div>
+            <div class="metric map-metric">{{ "%.3f"|format(metrics.map_50_95) }}</div>
+        </div>
+    </div>
+    <div class="plot-grid">
+        <div class="card">
+            <h3>Matriz de Confusión</h3><img src="plots/confusion_matrix.png">
+        </div>
+        <div class="card">
+            <h3>Curva Precision-Recall</h3><img src="plots/pr_curve.png">
+        </div>
+    </div>
+    <div class="card" style="margin-top:20px;">
+        <h3>Numerical Detail</h3>
+        <table>
+            <tr>
+                <td>Total Real (GT)</td>
+                <td>{{ metrics.total_real }}</td>
+            </tr>
+            <tr>
+                <td>Total Predicted</td>
+                <td>{{ metrics.total_pred }}</td>
+            </tr>
+            <tr>
+                <td>TP (Hits)</td>
+                <td>{{ metrics.tp }}</td>
+            </tr>
+            <tr>
+                <td>FN (Missed)</td>
+                <td>{{ metrics.fn }}</td>
+            </tr>
+            <tr>
+                <td>FP (Invented)</td>
+                <td>{{ metrics.fp }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div id="Analisis" class="tabcontent">
+    <div class="plot-grid">
+        <div class="card">
+            <h3>Distribución de Confianzas</h3><img src="plots/confidence_dist.png">
+        </div>
+        <div class="card">
+            <h3>Heatmap de Detecciones</h3><img src="plots/heatmap.png">
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base_template.html" %}
+
+{% block tab_buttons %}
+<button class="tablinks active" onclick="openTab(event, 'Inferencia')">🌍 Inferencia Real</button>
+<button class="tablinks" onclick="openTab(event, 'Solapamientos')">⚠️ Solapamientos</button>
+{% endblock %}
+
+{% block tab_contents %}
+<div id="Inferencia" class="tabcontent" style="display:block;">
+    <div class="container">
+        <div class="card">
+            <div>Images Processed</div>
+            <div class="metric">{{ stats.total_images }}</div>
+        </div>
+        <div class="card">
+            <div>Total Detections</div>
+            <div class="metric">{{ stats.total_detections }}</div>
+        </div>
+        <div class="card">
+            <div>Crowdness (Avg/Img)</div>
+            <div class="metric">{{ "%.2f"|format(stats.avg_detections) }}</div>
+        </div>
+        <div class="card" style="background-color: #fdedec;">
+            <div>Total Suspicious Pairs (IoU > {{ overlap_thresh }})</div>
+            <div class="metric alert-metric">{{ stats.total_overlaps }}</div>
+        </div>
+    </div>
+    <div class="plot-grid">
+        <div class="card">
+            <h3>Confidence Distribution</h3><img src="plots/inference_conf_dist.png">
+        </div>
+        <div class="card">
+            <h3>Spatial Distribution (Heatmap)</h3>
+            <p style="font-size:0.9em; color:#666;">Normalized to 1x1 frame regardless of resolution.</p>
+            <img src="plots/inference_heatmap.png">
+        </div>
+    </div>
+</div>
+
+<div id="Solapamientos" class="tabcontent">
+    <h2>Evidencia de Solapamientos Sospechosos</h2>
+    <div class="plot-grid">
+        {% if not stats.overlap_events %}
+        <p>✅ No suspicious overlaps detected above threshold.</p>
+        {% else %}
+        {% for event in stats.overlap_events %}
+        <div class="card" style="border-left-color: #e74c3c;">
+            <p><strong>Source:</strong> {{ event.orig_filename }}</p>
+            <p>Found <strong>{{ event.count }}</strong> risk pair(s)</p>
+            <img src="plots/suspicious_overlaps_imgs/{{ event.evidence_filename }}" alt="Overlap Evidence">
+        </div>
+        {% endendfor %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

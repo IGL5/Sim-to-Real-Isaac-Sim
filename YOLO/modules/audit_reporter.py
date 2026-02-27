@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 from .core_visual_utils import calculate_iou_matrix
+from .html_generator import HTMLReportGenerator
+
 
 class ReportGenerator:
     def __init__(self, output_dir, iou_threshold=0.5):
@@ -110,53 +112,11 @@ class ReportGenerator:
         
         return ap, precisions, recalls
 
-    def generate_plots(self):
-        print("📊 Generating statistical plots...")
+    def generate_html_report(self, experiment_name="yolov8_s_default"):
+        """ Calculates final metrics and delegates HTML creation to Jinja2 """
+        print("📝 Compiling numerical metrics for the report...")
         
-        # 1. Confusion Matrix
-        plt.figure(figsize=(6, 5))
-        matrix = [[self.stats["TP"], self.stats["FP"]], [self.stats["FN"], 0]]
-        sns.heatmap(matrix, annot=True, fmt="d", cmap="Blues", cbar=False, 
-                    xticklabels=["Pred Pos", "Pred Neg"], yticklabels=["Real Pos", "Real Neg"])
-        plt.title("Confusion Matrix")
-        plt.savefig(os.path.join(self.plots_dir, "confusion_matrix.png"))
-        plt.close()
-
-        # 2. Confidence Histogram
-        plt.figure(figsize=(8, 5))
-        plt.hist(self.stats["confidences_TP"], bins=20, alpha=0.7, label='Hits (TP)', color='green')
-        plt.hist(self.stats["confidences_FP"], bins=20, alpha=0.7, label='Errors (FP)', color='red')
-        plt.title("Confidence Distribution")
-        plt.legend()
-        plt.savefig(os.path.join(self.plots_dir, "confidence_dist.png"))
-        plt.close()
-
-        # 3. Heatmap
-        if self.stats["bbox_centers"]:
-            centers = np.array(self.stats["bbox_centers"])
-            plt.figure(figsize=(8, 6))
-            plt.hexbin(centers[:, 0], centers[:, 1], gridsize=20, cmap='inferno', mincnt=1)
-            plt.colorbar(label='Detections')
-            plt.title("Detection Heatmap")
-            plt.gca().invert_yaxis() 
-            plt.savefig(os.path.join(self.plots_dir, "heatmap.png"))
-            plt.close()
-
-        # 4. Precision-Recall Curve
-        ap50, precisions, recalls = self.calculate_ap(0.5)
-        plt.figure(figsize=(8, 5))
-        plt.plot(recalls, precisions, color='blue', lw=2, label=f'PR Curve (mAP@50 = {ap50:.4f})')
-        plt.xlabel('Recall')
-        plt.ylabel('Precision')
-        plt.title('Precision-Recall Curve (IoU=0.50)')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.legend(loc="lower left")
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.savefig(os.path.join(self.plots_dir, "pr_curve.png"))
-        plt.close()
-
-    def generate_html_report(self):
+        # 1. Mathematical calculations
         total_pred = self.stats["TP"] + self.stats["FP"]
         total_real = self.stats["TP"] + self.stats["FN"]
         
@@ -173,74 +133,34 @@ class ReportGenerator:
             ap_sum += ap_t
         map_50_95 = ap_sum / len(thresholds)
 
-        html = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: sans-serif; background: #f4f4f9; padding: 20px; }}
-                h1 {{ color: #333; }}
-                .container {{ display: flex; flex-wrap: wrap; gap: 20px; }}
-                .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); flex: 1; min-width: 200px; }}
-                .metric {{ font-size: 2em; font-weight: bold; color: #2c3e50; }}
-                .map-metric {{ color: #1f618d; }}
-                
-                .plot-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }}
-                .plot-grid .card {{ min-width: 0; display: flex; justify-content: center; align-items: center; }}
-                
-                img {{ max-width: 100%; border-radius: 8px; margin-top: 10px; }}
-                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                td, th {{ padding: 10px; border-bottom: 1px solid #ddd; }}
-            </style>
-        </head>
-        <body>
-            <h1>🔎 YOLO Audit Report</h1>
-            <p>Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
-            
-            <div class="container">
-                <div class="card">
-                    <div>Precision</div>
-                    <div class="metric">{precision:.2%}</div>
-                </div>
-                <div class="card">
-                    <div>Recall</div>
-                    <div class="metric">{recall:.2%}</div>
-                </div>
-                <div class="card">
-                    <div>F1-Score</div>
-                    <div class="metric">{f1:.2f}</div>
-                </div>
-                <div class="card">
-                    <div>mAP@50</div>
-                    <div class="metric map-metric">{ap50:.3f}</div>
-                </div>
-                <div class="card">
-                    <div>mAP@50-95</div>
-                    <div class="metric map-metric">{map_50_95:.3f}</div>
-                </div>
-            </div>
+        # 2. Pack metrics for the template
+        metrics_dict = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "ap50": ap50,
+            "map_50_95": map_50_95,
+            "total_real": total_real,
+            "total_pred": total_pred,
+            "tp": self.stats["TP"],
+            "fn": self.stats["FN"],
+            "fp": self.stats["FP"]
+        }
 
-            <div class="plot-grid">
-                <div class="card"><img src="plots/confusion_matrix.png"></div>
-                <div class="card"><img src="plots/confidence_dist.png"></div>
-                <div class="card"><img src="plots/heatmap.png"></div>
-                <div class="card"><img src="plots/pr_curve.png"></div>
-            </div>
-            
-            <div class="card" style="margin-top:20px;">
-                <h3>Numerical Detail</h3>
-                <table>
-                    <tr><td>Total Real (GT)</td><td>{total_real}</td></tr>
-                    <tr><td>Total Predicted</td><td>{total_pred}</td></tr>
-                    <tr><td>TP (Hits)</td><td>{self.stats['TP']}</td></tr>
-                    <tr><td>FN (Missed)</td><td>{self.stats['FN']}</td></tr>
-                    <tr><td>FP (Invented)</td><td>{self.stats['FP']}</td></tr>
-                </table>
-            </div>
-        </body>
-        </html>
-        """
+        # 3. Pack plots paths (relative paths for the HTML)
+        plots_dict = {
+            "confusion_matrix": "plots/confusion_matrix.png",
+            "pr_curve": "plots/pr_curve.png",
+            "confidence_dist": "plots/confidence_dist.png",
+            "heatmap": "plots/heatmap.png"
+        }
+
+        # 4. Instantiate the generator and create the HTML
+        templates_dir = os.path.join(os.getcwd(), "modules", "templates")
+        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
+        dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")
         
-        path = os.path.join(self.output_dir, "report.html")
-        with open(path, "w", encoding='utf-8') as f:
-            f.write(html)
-        print(f"✅ HTML Report generated at: {path}")
+        generator = HTMLReportGenerator(templates_dir, project_dir, dataset_out_dir)
+        
+        output_path = os.path.join(self.output_dir, "report.html")
+        generator.generate_audit_html(output_path, experiment_name, metrics_dict, plots_dict)
