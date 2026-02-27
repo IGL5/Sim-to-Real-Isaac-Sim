@@ -51,8 +51,8 @@ Key settings can be modified in **`modules/config.py`**:
 Run the script using the Isaac Sim Python interpreter (typically found in your Isaac Sim installation folder):
 
 ```bash
-# Example from Isaac Sim root directory
-./python.sh path/to/synthetic_data_randomizer.py --num_frames 100 --width 1280 --height 720
+# Example from project folder
+C:\isaac-sim\python.bat .\synthetic_data_randomizer.py --num_frames 100 --width 1280 --height 720
 ```
 
 ### Command Line Arguments
