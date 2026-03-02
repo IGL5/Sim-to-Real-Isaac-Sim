@@ -101,7 +101,7 @@ class InferenceReportGenerator:
             }
         }
         
-        inference_json_path = os.path.join(self.output_dir, "inference_metadata.json")
+        inference_json_path = os.path.join(self.output_dir, "..", "inference_metadata.json")
         try:
             with open(inference_json_path, "w", encoding='utf-8') as f:
                 json.dump(inference_metadata, f, indent=4)
