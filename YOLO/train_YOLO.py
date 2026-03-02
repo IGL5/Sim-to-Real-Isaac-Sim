@@ -7,6 +7,7 @@ import time
 import json
 from datetime import datetime
 import pandas as pd
+import shutil
 
 # DEFAULT CONFIGURATION
 DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
@@ -251,14 +252,18 @@ def main():
     }
 
     # Save metadata
-    metadata_dir = os.path.join(PROJECT_NAME, experiment_name)
+    metadata_dir = os.path.join(PROJECT_NAME, experiment_name, 'metadata')
     os.makedirs(metadata_dir, exist_ok=True)
     metadata_path = os.path.join(metadata_dir, 'training_metadata.json')
 
     with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump(training_metadata, f, indent=4)
 
-    print(f"💾 Training metadata saved at: {metadata_path}")
+    dataset_meta_src = os.path.join(DATASET_ROOT, 'dataset_metadata.json')
+    if os.path.exists(dataset_meta_src):
+        shutil.copy2(dataset_meta_src, os.path.join(metadata_dir, 'dataset_metadata.json'))
+
+    print(f"💾 Training and Dataset metadata saved at: {metadata_path}")
 
 
 if __name__ == '__main__':

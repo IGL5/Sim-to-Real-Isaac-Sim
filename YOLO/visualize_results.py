@@ -39,7 +39,22 @@ def select_model_path():
     return path
 
 
-def run_audit_mode(model_path, draw_all=False):
+def save_evaluation_results(exp_name, mode):
+    """ Copies the temporary audit_report into a persistent iteration folder """
+    base_eval_dir = os.path.join(cvu.PROJECT_DIR, exp_name, "evaluations")
+    os.makedirs(base_eval_dir, exist_ok=True)
+    
+    # Find the next iteration number
+    existing_dirs = [d for d in os.listdir(base_eval_dir) if os.path.isdir(os.path.join(base_eval_dir, d))]
+    iter_num = len(existing_dirs) + 1
+    eval_dir = os.path.join(base_eval_dir, f"iter_{iter_num:03d}_{mode}")
+    
+    # Copy the entire workspace (HTML, Plots, JSON, Images)
+    shutil.copytree(cvu.OUTPUT_DIR, eval_dir)
+    print(f"\n📦 Persistent Evaluation saved at: {eval_dir}")
+
+
+def run_audit_mode(model_path, draw_all=False, save_persistently=False):
     """ Audit mode (Dataset Test with Labels) """
     if not cvu.check_system_integrity(model_path, check_dataset=True):
         return
@@ -129,8 +144,11 @@ def run_audit_mode(model_path, draw_all=False):
     reporter.generate_plots()
     reporter.generate_html_report(exp_name)
 
+    if save_persistently:
+        save_evaluation_results(exp_name, "audit")
 
-def run_inference_mode(model_path, source_folder):
+
+def run_inference_mode(model_path, source_folder, save_persistently=False):
     """ Inference Mode (New images without labels) """
     
     if not cvu.check_system_integrity(model_path, check_dataset=False):
@@ -214,6 +232,9 @@ def run_inference_mode(model_path, source_folder):
     reporter.generate_plots()
     reporter.generate_html_report(exp_name)
 
+    if save_persistently:
+        save_evaluation_results(exp_name, "inference")
+
 
 def run_video_mode(model_path, video_path):
     """ Video Mode """
@@ -249,6 +270,7 @@ if __name__ == "__main__":
     parser.add_argument('--draw_all', action='store_true', help="Audit: Save ALL images (hits and misses)")
     parser.add_argument('--source', type=str, default=None, help="Inference: Folder of new images (without labels)")
     parser.add_argument('--video', type=str, default=None, help="Video: Path to the MP4/AVI file")
+    parser.add_argument('--save', action='store_true', help="Persistently save this evaluation in the model's folder")
     
     args = parser.parse_args()
 
@@ -259,7 +281,7 @@ if __name__ == "__main__":
     if args.video:
         run_video_mode(selected_model_path, args.video)
     elif args.source:
-        run_inference_mode(selected_model_path, args.source)
+        run_inference_mode(selected_model_path, args.source, save_persistently=args.save)
     else:
         # Default: Audit the test dataset
-        run_audit_mode(selected_model_path, draw_all=args.draw_all)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save)

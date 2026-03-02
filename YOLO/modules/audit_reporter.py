@@ -198,7 +198,7 @@ class ReportGenerator:
             }
         }
         
-        audit_json_path = os.path.join(project_dir, experiment_name, "audit_metadata.json")
+        audit_json_path = os.path.join(self.output_dir, "audit_metadata.json")
         try:
             with open(audit_json_path, "w", encoding='utf-8') as f:
                 json.dump(audit_metadata, f, indent=4)

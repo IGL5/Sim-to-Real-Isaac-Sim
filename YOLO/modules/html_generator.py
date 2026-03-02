@@ -21,9 +21,9 @@ class HTMLReportGenerator:
 
     def _get_common_context(self, experiment_name, report_title):
         """Load JSONs for template base injection"""
-        dataset_meta_path = os.path.join(self.dataset_out_dir, "dataset_metadata.json")
-        train_meta_path = os.path.join(self.project_dir, experiment_name, "training_metadata.json")
-        
+        dataset_meta_path = os.path.join(self.project_dir, experiment_name, "metadata", "dataset_metadata.json")
+        train_meta_path = os.path.join(self.project_dir, experiment_name, "metadata", "training_metadata.json")
+            
         dataset_meta = self._load_json_safe(dataset_meta_path)
         train_meta = self._load_json_safe(train_meta_path)
 

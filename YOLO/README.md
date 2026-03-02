@@ -82,7 +82,7 @@ python train_YOLO.py --patience 15
 python train_YOLO.py --select
 ```
 
-**Note:** Upon completion, it automatically generates a `training_metadata.json` inside the experiment's folder containing hyperparameters, hardware used, and exact training duration for future reference.
+**Note:** Upon completion, it automatically creates a `metadata/` folder inside the experiment's directory. This acts as an MLOps vault, saving `training_metadata.json` (hyperparameters, hardware, best epoch, duration) and taking a persistent snapshot of `dataset_metadata.json` so you always know exactly what data this specific model was trained on, even if you generate new data later.
 
 ### Step 3: Audit and Visualization (visualize_results.py)
 
@@ -111,6 +111,20 @@ Test your model with new photos that do not have labels (e.g., real camera photo
 ```bash
 python visualize_results.py --source /path/to/my/real_photos
 ```
+
+#### 💾 **Persistent Saving (Experiment Tracking)**
+
+By default, all reports and plots are generated in a temporary `audit_report/` folder that gets overwritten next time you run a test. To permanently save an evaluation (HTML, JSON metrics, and plots) as an immutable record:
+
+```bash
+# For audit
+python visualize_results.py --draw_all --save
+
+# For real inference
+python visualize_results.py --source /path/to/my/real_photos --save
+```
+
+This creates an `evaluations/iter_xxx_audit/` (or `evaluations/iter_xxx_inference`) folder directly inside your model's directory, preserving its entire "medical history" for future comparison.
 
 #### 🎥 **Video Mode**
 
