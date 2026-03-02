@@ -1,12 +1,12 @@
 {% extends "base_template.html" %}
 
 {% block tab_buttons %}
-<button class="tablinks active" onclick="openTab(event, 'Inferencia')">🌍 Inferencia Real</button>
-<button class="tablinks" onclick="openTab(event, 'Solapamientos')">⚠️ Solapamientos</button>
+<button class="tablinks active" onclick="openTab(event, 'Inference')">🌍 Real Inference</button>
+<button class="tablinks" onclick="openTab(event, 'Overlaps')">⚠️ Suspicious Overlaps</button>
 {% endblock %}
 
 {% block tab_contents %}
-<div id="Inferencia" class="tabcontent" style="display:block;">
+<div id="Inference" class="tabcontent" style="display:block;">
     <div class="container">
         <div class="card">
             <div>Images Processed</div>
@@ -34,11 +34,36 @@
             <p style="font-size:0.9em; color:#666;">Normalized to 1x1 frame regardless of resolution.</p>
             <img src="plots/inference_heatmap.png">
         </div>
+        <div class="card">
+            <h3>Positional Bias</h3>
+            <p style="font-size:0.9em; color:#666;">Based on Center of Mass and Dispersion (Predictions)</p>
+            <div style="text-align: center;">
+                <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
+                    viewBox="0 0 100 100">
+                    <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
+
+                    <ellipse cx="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                        cy="{{ stats.spatial_stats.center_of_mass_y * 100 }}"
+                        rx="{{ stats.spatial_stats.dispersion_x * 100 }}"
+                        ry="{{ stats.spatial_stats.dispersion_y * 100 }}" fill="#e74c3c" opacity="0.4" />
+
+                    <line x1="{{ (stats.spatial_stats.center_of_mass_x * 100) - 5 }}"
+                        y1="{{ stats.spatial_stats.center_of_mass_y * 100 }}"
+                        x2="{{ (stats.spatial_stats.center_of_mass_x * 100) + 5 }}"
+                        y2="{{ stats.spatial_stats.center_of_mass_y * 100 }}" stroke="#c0392b" stroke-width="2" />
+                    <line x1="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                        y1="{{ (stats.spatial_stats.center_of_mass_y * 100) - 5 }}"
+                        x2="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                        y2="{{ (stats.spatial_stats.center_of_mass_y * 100) + 5 }}" stroke="#c0392b" stroke-width="2" />
+                </svg>
+            </div>
+        </div>
     </div>
 </div>
 
-<div id="Solapamientos" class="tabcontent">
-    <h2>Evidencia de Solapamientos Sospechosos</h2>
+<div id="Overlaps" class="tabcontent">
+    <h2>Suspicious Overlaps Evidence</h2>
     <div class="plot-grid">
         {% if not stats.overlap_events %}
         <p>✅ No suspicious overlaps detected above threshold.</p>

@@ -57,6 +57,58 @@
             animation: fadeEffect 1s;
         }
 
+        .progress-container {
+            width: 100%;
+            background-color: #e74c3c;
+            border-radius: 4px;
+            overflow: hidden;
+            height: 24px;
+            display: flex;
+            margin-top: 5px;
+        }
+
+        .progress-fill {
+            background-color: #2ecc71;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .progress-bg {
+            background-color: #e74c3c;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .eda-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .svg-box {
+            width: 100%;
+            max-width: 250px;
+            aspect-ratio: 1;
+            background: #ecf0f1;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto;
+        }
+
         @keyframes fadeEffect {
             from {
                 opacity: 0;
@@ -133,61 +185,112 @@
 
 <body>
     <h1>{{ report_title }} - {{ experiment_name }}</h1>
-    <p><strong>Fecha de Evaluación:</strong> {{ date }}</p>
+    <p><strong>Evaluation Date:</strong> {{ date }}</p>
 
     <div class="tab">
         {% block tab_buttons %}{% endblock %}
 
-        <button class="tablinks" onclick="openTab(event, 'Metadata')">⚙️ Origen de Datos (Sim-to-Real)</button>
+        <button class="tablinks" onclick="openTab(event, 'Metadata')">⚙️ Origin of Data (Sim-to-Real)</button>
     </div>
 
     {% block tab_contents %}{% endblock %}
 
     <div id="Metadata" class="tabcontent">
         <div class="container">
-            <div class="card" style="border-left-color: #2ecc71;">
-                <h3>🌍 Generación: Isaac Sim</h3>
+            <div class="card" style="border-left-color: #2ecc71; flex: 2;">
+                <h3>🌍 Generation: Isaac Sim</h3>
                 {% if dataset_meta %}
-                <table>
-                    <tr>
-                        <th>Imágenes Totales</th>
-                        <td>{{ dataset_meta.global_totals.total }}</td>
-                    </tr>
-                    <tr>
-                        <th>Split Train/Val/Test</th>
-                        <td>{{ dataset_meta.global_totals.train }} / {{ dataset_meta.global_totals.val }} / {{
-                            dataset_meta.global_totals.test }}</td>
-                    </tr>
-                </table>
-                <p><em>*Nota: Detalles de iteraciones disponibles en el JSON original.</em></p>
+
+                <h4>Dataset Distribution (Total: {{ dataset_meta.global_totals.total_images }} imgs)</h4>
+                <div style="margin-bottom: 15px;">
+                    {% for split in ['train', 'val', 'test'] %}
+                    {% set split_data = dataset_meta.global_totals[split] %}
+                    {% if split_data.images > 0 %}
+                    {% set obj_pct = ((split_data.images - split_data.backgrounds) / split_data.images * 100) | round(1)
+                    %}
+                    {% set bg_pct = (split_data.backgrounds / split_data.images * 100) | round(1) %}
+                    <strong>{{ split | capitalize }}</strong> ({{ split_data.images }} imgs | {{ split_data.objects }}
+                    objects)
+                    <div class="progress-container">
+                        <div class="progress-fill" style="width: {{ obj_pct }}%;">{{ obj_pct }}% Objects</div>
+                        <div class="progress-bg" style="width: {{ bg_pct }}%;">{{ bg_pct }}% Backgrounds</div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+
+                {% if latest_eda %}
+                <h4>Exploratory Data Analysis (EDA) - Last Session</h4>
+                <p style="font-size: 0.9em; color: #666;">The visual representations assume the normalized size of the
+                    image.</p>
+                <div class="eda-grid">
+                    <div style="text-align: center;">
+                        <strong>Bounding Box Area</strong>
+                        <p style="font-size: 0.8em; margin: 5px 0;">Media: {{ latest_eda.bbox_area.mean }} | Std: {{
+                            latest_eda.bbox_area.std }}</p>
+                        <svg class="svg-box" viewBox="0 0 100 100">
+                            <rect x="0" y="0" width="100" height="100" fill="none" stroke="#7f8c8d"
+                                stroke-dasharray="2,2" />
+                            <rect x="{{ 50 - visuals.area_max_side/2 }}" y="{{ 50 - visuals.area_max_side/2 }}"
+                                width="{{ visuals.area_max_side }}" height="{{ visuals.area_max_side }}" fill="#3498db"
+                                opacity="0.4" />
+                            <rect x="{{ 50 - visuals.area_min_side/2 }}" y="{{ 50 - visuals.area_min_side/2 }}"
+                                width="{{ visuals.area_min_side }}" height="{{ visuals.area_min_side }}"
+                                fill="#2980b9" />
+                        </svg>
+                    </div>
+
+                    <div style="text-align: center;">
+                        <strong>Aspect Ratio</strong>
+                        <p style="font-size: 0.8em; margin: 5px 0;">Media: {{ latest_eda.aspect_ratio.mean }} | Std: {{
+                            latest_eda.aspect_ratio.std }}</p>
+                        <svg class="svg-box" viewBox="0 0 100 100">
+                            <rect x="{{ 50 - visuals.ar_w/2 }}" y="{{ 50 - visuals.ar_h/2 }}" width="{{ visuals.ar_w }}"
+                                height="{{ visuals.ar_h }}" fill="#9b59b6" opacity="0.8" />
+                        </svg>
+                    </div>
+
+                    <div style="text-align: center;">
+                        <strong>Ground Truth Spatial Distribution</strong>
+                        <p style="font-size: 0.8em; margin: 5px 0;">Where do they appear in the photo?</p>
+                        <svg class="svg-box" viewBox="0 0 100 100">
+                            <rect x="0" y="0" width="100" height="100" fill="none" stroke="#7f8c8d" />
+                            <ellipse cx="{{ visuals.gt_cx }}" cy="{{ visuals.gt_cy }}" rx="{{ visuals.gt_rx }}"
+                                ry="{{ visuals.gt_ry }}" fill="#f1c40f" opacity="0.5" />
+                            <circle cx="{{ visuals.gt_cx }}" cy="{{ visuals.gt_cy }}" r="2" fill="#d35400" />
+                        </svg>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% else %}
-                <p>⚠️ No se encontró dataset_metadata.json</p>
+                <p>⚠️ No dataset_metadata.json found</p>
                 {% endif %}
             </div>
 
-            <div class="card" style="border-left-color: #9b59b6;">
-                <h3>🧠 Entrenamiento: YOLO</h3>
+            <div class="card" style="border-left-color: #9b59b6; flex: 1;">
+                <h3>🧠 Training: YOLO</h3>
                 {% if train_meta %}
                 <table>
                     <tr>
-                        <th>Modelo Base</th>
+                        <th>Base Model</th>
                         <td>{{ train_meta.hyperparameters.model_base }}</td>
                     </tr>
                     <tr>
-                        <th>Duración</th>
+                        <th>Duration</th>
                         <td>{{ train_meta.experiment_info.duration_formatted }}</td>
                     </tr>
                     <tr>
-                        <th>Épocas Solicitadas</th>
+                        <th>Requested Epochs</th>
                         <td>{{ train_meta.hyperparameters.epochs_requested }}</td>
                     </tr>
                     <tr>
-                        <th>mAP@50 (Test Entrenamiento)</th>
+                        <th>mAP@50 (Test Training)</th>
                         <td>{{ train_meta.metrics_test_set.mAP50 }}</td>
                     </tr>
                 </table>
                 {% else %}
-                <p>⚠️ No se encontró training_metadata.json</p>
+                <p>⚠️ No training_metadata.json found</p>
                 {% endif %}
             </div>
         </div>
@@ -203,7 +306,7 @@
             document.getElementById(tabName).style.display = "block";
             if (evt) { evt.currentTarget.className += " active"; }
         }
-        // Activar la primera pestaña por defecto al cargar (si existe)
+        // Activate the first tab by default when loading (if it exists)
         document.addEventListener("DOMContentLoaded", function () {
             var firstTab = document.querySelector(".tablinks.active");
             if (!firstTab) {
