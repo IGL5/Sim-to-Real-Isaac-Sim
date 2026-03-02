@@ -138,16 +138,13 @@ def process_pair(filename_base, subset_name, unique_prefix):
             
     return True, len(yolo_lines), bboxes_stats
 
-def process_subset(file_list, subset_name):
+def process_subset(file_list, subset_name, batch_prefix):
     count_imgs = 0
     count_objs = 0
     count_bgs = 0
     
     # Lists for EDA
-    all_areas = []
-    all_ars = []
-    all_cx = []
-    all_cy = []
+    all_areas, all_ars, all_cx, all_cy = [], [], [], []
     
     for fname in file_list:
         success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix)
@@ -232,13 +229,13 @@ def main():
 
     # 5. Process passing the prefix
     print("🚀 Processing Train...")
-    train_stats = process_subset(train_files, 'train')
+    train_stats = process_subset(train_files, 'train', batch_prefix)
     
     print("🚀 Processing Val...")
-    val_stats = process_subset(val_files, 'val')
+    val_stats = process_subset(val_files, 'val', batch_prefix)
     
     print("🚀 Processing Test...")
-    test_stats = process_subset(test_files, 'test')
+    test_stats = process_subset(test_files, 'test', batch_prefix)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
