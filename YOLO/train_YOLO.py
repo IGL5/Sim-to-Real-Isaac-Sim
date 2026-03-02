@@ -55,15 +55,16 @@ def create_yaml_config():
     if not os.path.exists(abs_path):
         raise FileNotFoundError(f"Dataset not found in: {abs_path}. Has the script 1 been executed?")
 
+    # Read classes from file
+    with open("classes.txt", "r") as f:
+        class_names = [line.strip() for line in f.readlines() if line.strip()]
+
     config = {
         'path': abs_path,
         'train': TRAIN_IMGS,
         'val': VAL_IMGS,
         'test': TEST_REL,
-
-        'names': {
-            0: 'bicycle'  # Class name
-        }
+        'names': {i: name for i, name in enumerate(class_names)}
     }
 
     yaml_path = os.path.join(abs_path, 'dataset_config.yaml')

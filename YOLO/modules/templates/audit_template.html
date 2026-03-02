@@ -67,7 +67,16 @@
 <div id="Analysis" class="tabcontent">
     <div class="plot-grid">
         <div class="card">
-            <h3>Confidence Distribution</h3><img src="plots/confidence_dist.png">
+            <h3>Confidence Distribution</h3>
+            <p style="font-size:0.9em; color:#666; margin-top: 0;">
+                <span style="color: #27ae60;"><strong>Hits (TP)</strong></span> -> Mean: {{
+                "%.2f"|format(metrics.confidence_stats.True_Positives.mean) }} | Std: {{
+                "%.2f"|format(metrics.confidence_stats.True_Positives.std) }}<br>
+                <span style="color: #c0392b;"><strong>Misses (FP)</strong></span> -> Mean: {{
+                "%.2f"|format(metrics.confidence_stats.False_Positives.mean) }} | Std: {{
+                "%.2f"|format(metrics.confidence_stats.False_Positives.std) }}
+            </p>
+            <img src="plots/confidence_dist.png" style="margin-top: 10px;">
         </div>
         <div class="card">
             <h3>Heatmap of Detections</h3><img src="plots/heatmap.png">

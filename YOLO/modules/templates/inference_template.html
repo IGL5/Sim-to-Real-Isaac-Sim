@@ -27,7 +27,12 @@
     </div>
     <div class="plot-grid">
         <div class="card">
-            <h3>Confidence Distribution</h3><img src="plots/inference_conf_dist.png">
+            <h3>Confidence Distribution</h3>
+            <p style="font-size:0.9em; color:#666; margin-top: 0;">
+                <span style="color: #2980b9;"><strong>Predictions</strong></span> -> Mean: {{
+                "%.2f"|format(stats.confidence_stats.mean) }} | Std: {{ "%.2f"|format(stats.confidence_stats.std) }}
+            </p>
+            <img src="plots/inference_conf_dist.png" style="margin-top: 10px;">
         </div>
         <div class="card">
             <h3>Spatial Distribution (Heatmap)</h3>

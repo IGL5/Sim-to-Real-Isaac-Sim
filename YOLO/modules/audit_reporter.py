@@ -187,15 +187,7 @@ class ReportGenerator:
         }
         metrics_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers"])
 
-        # 3. Pack plots paths (relative paths for the HTML)
-        plots_dict = {
-            "confusion_matrix": "plots/confusion_matrix.png",
-            "pr_curve": "plots/pr_curve.png",
-            "confidence_dist": "plots/confidence_dist.png",
-            "heatmap": "plots/heatmap.png"
-        }
-
-        # 4. Save audit metadata to JSON
+        # 3. Save audit metadata to JSON
         project_dir = os.path.join(os.getcwd(), "cyclist_detector")
         
         audit_metadata = {
@@ -214,7 +206,7 @@ class ReportGenerator:
         except Exception as e:
             print(f"⚠️ Could not save audit JSON: {e}")
 
-        # 5. Instantiate the generator and create the HTML
+        # 4. Instantiate the generator and create the HTML
         templates_dir = os.path.join(os.getcwd(), "modules", "templates")
         project_dir = os.path.join(os.getcwd(), "cyclist_detector")
         dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")
@@ -222,4 +214,4 @@ class ReportGenerator:
         generator = HTMLReportGenerator(templates_dir, project_dir, dataset_out_dir)
         
         output_path = os.path.join(self.output_dir, "report.html")
-        generator.generate_audit_html(output_path, experiment_name, metrics_dict, plots_dict)
+        generator.generate_audit_html(output_path, experiment_name, metrics_dict)

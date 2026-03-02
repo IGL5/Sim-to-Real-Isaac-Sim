@@ -18,7 +18,7 @@ class HTMLReportGenerator:
             except Exception as e:
                 print(f"⚠️ Error leyendo {filepath}: {e}")
         return None
-        
+
     def _get_common_context(self, experiment_name, report_title):
         """Load JSONs for template base injection"""
         dataset_meta_path = os.path.join(self.dataset_out_dir, "dataset_metadata.json")

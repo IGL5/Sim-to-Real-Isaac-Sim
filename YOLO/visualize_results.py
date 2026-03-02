@@ -68,7 +68,7 @@ def run_audit_mode(model_path, draw_all=False):
     reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD)
     model = YOLO(model_path)
     
-    image_files = glob.glob(os.path.join(cvu.DEFAULT_TEST_IMAGES, "*.*"))
+    image_files = [f for f in glob.glob(os.path.join(cvu.DEFAULT_TEST_IMAGES, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     print(f"📸 Processing {len(image_files)} images...")
 
     for i, img_path in enumerate(image_files):
@@ -153,16 +153,16 @@ def run_inference_mode(model_path, source_folder):
     overlaps_dir_path = reporter.overlaps_dir
     
     model = YOLO(model_path)
-    images = glob.glob(os.path.join(source_folder, "*.*"))
+    image_files = [f for f in glob.glob(os.path.join(source_folder, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     
-    if not images:
+    if not image_files:
         print("⚠️ No images found in the specified folder.")    
         return
 
-    print(f"Processing {len(images)} images...")
+    print(f"Processing {len(image_files)} images...")
     
     # Process each image for detection and quality analysis
-    for i, img_path in enumerate(images):
+    for i, img_path in enumerate(image_files):
         if i >= cvu.LIMIT_IMAGES: break
 
         filename = os.path.basename(img_path)
