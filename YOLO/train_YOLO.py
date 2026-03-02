@@ -6,6 +6,7 @@ import argparse
 import time
 import json
 from datetime import datetime
+import pandas as pd
 
 # DEFAULT CONFIGURATION
 DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
@@ -200,6 +201,24 @@ def main():
     duration_secs = end_time - start_time
     duration_formatted = time.strftime("%H:%M:%S", time.gmtime(duration_secs))
 
+    epochs_run = epochs_to_run
+    best_epoch = -1
+
+    results_csv_path = os.path.join(PROJECT_NAME, experiment_name, 'results.csv')
+    if os.path.exists(results_csv_path):
+        try:
+            df = pd.read_csv(results_csv_path)
+            epochs_run = len(df)
+        except Exception as e:
+            print(f"⚠️ Could not read results.csv: {e}")
+
+    if os.path.exists(best_weight):
+        try:
+            ckpt = torch.load(best_weight, map_location='cpu', weights_only=False)
+            best_epoch = ckpt.get('epoch', -1) + 1 
+        except Exception as e:
+            print(f"⚠️ Could not read best.pt: {e}")
+
     training_metadata = {
         "experiment_info": {
             "project_name": PROJECT_NAME,
@@ -214,6 +233,8 @@ def main():
         "hyperparameters": {
             "model_base": model_type,
             "epochs_requested": epochs_to_run,
+            "epochs_run": epochs_run,
+            "best_epoch": best_epoch,
             "patience": args.patience,
             "img_size": IMG_SIZE,
             "batch_size": BATCH_SIZE,

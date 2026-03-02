@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import json
-import datetime
+from datetime import datetime
 from . import core_visual_utils as cvu
 from .html_generator import HTMLReportGenerator
 from . import plot_generator

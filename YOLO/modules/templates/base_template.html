@@ -281,8 +281,13 @@
                         <td>{{ train_meta.experiment_info.duration_formatted }}</td>
                     </tr>
                     <tr>
-                        <th>Requested Epochs</th>
-                        <td>{{ train_meta.hyperparameters.epochs_requested }}</td>
+                        <th>Epochs (Requested / Run)</th>
+                        <td>{{ train_meta.hyperparameters.epochs_requested }} / {{ train_meta.hyperparameters.epochs_run
+                            }}</td>
+                    </tr>
+                    <tr>
+                        <th>Best Epoch</th>
+                        <td>{{ train_meta.hyperparameters.best_epoch }}</td>
                     </tr>
                     <tr>
                         <th>mAP@50 (Test Training)</th>

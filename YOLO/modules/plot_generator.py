@@ -13,15 +13,17 @@ def plot_confusion_matrix(tp, fp, fn, output_path):
 
 def plot_confidence_histogram(confs_primary, label_primary, color_primary, output_path, title, confs_secondary=None, label_secondary=None, color_secondary=None):
     plt.figure(figsize=(8, 5))
-    plt.hist(confs_primary, bins=20, alpha=0.7, label=label_primary, color=color_primary)
+    bins_fixed = np.linspace(0, 1, 21)
+    plt.hist(confs_primary, bins=bins_fixed, alpha=0.7, label=label_primary, color=color_primary)
     
     if confs_secondary is not None:
-        plt.hist(confs_secondary, bins=20, alpha=0.7, label=label_secondary, color=color_secondary)
+        plt.hist(confs_secondary, bins=bins_fixed, alpha=0.7, label=label_secondary, color=color_secondary)
         plt.legend()
         
     plt.title(title)
     plt.xlabel("Confidence")
     plt.ylabel("Frequency")
+    plt.xlim([0.0, 1.0])
     plt.savefig(output_path)
     plt.close()
 
