@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ report_title }}</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚁</text></svg>">
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -164,6 +166,157 @@
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #ecf0f1;
+            color: #2c3e50;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            border: 1px solid #bdc3c7;
+        }
+
+        .badge.success {
+            background: #d5f5e3;
+            border-color: #2ecc71;
+            color: #27ae60;
+        }
+
+        .badge.warning {
+            background: #fcf3cf;
+            border-color: #f1c40f;
+            color: #d35400;
+        }
+
+        .dr-list {
+            list-style: none;
+            padding-left: 0;
+            font-size: 0.9em;
+        }
+
+        .dr-list li {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .dr-list span.status {
+            float: right;
+            font-weight: bold;
+        }
+
+        .stacked-bar-item {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            overflow: hidden;
+            border-right: 1px solid rgba(255, 255, 255, 0.3);
+            transition: filter 0.2s;
+            cursor: help;
+        }
+
+        .stacked-bar-item:hover {
+            filter: brightness(1.2);
+        }
+
+        .sub-panel {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            background: #fff;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #eee;
+            margin-top: 10px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+        }
+
+        .stat-box {
+            text-align: center;
+            flex: 1;
+            border-right: 1px solid #eee;
+        }
+
+        .stat-box:last-child {
+            border-right: none;
+        }
+
+        .stat-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .stat-label {
+            font-size: 0.75em;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .status-pill {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            float: right;
+        }
+
+        .status-pill.active {
+            background-color: #d5f5e3;
+            color: #27ae60;
+            border: 1px solid #abebc6;
+        }
+
+        .status-pill.inactive {
+            background-color: #fdedec;
+            color: #c0392b;
+            border: 1px solid #f5b7b1;
+        }
+
+        .dr-item {
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #ddd;
+        }
+
+        .dr-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .dr-title {
+            font-weight: bold;
+            color: #34495e;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .dr-desc {
+            font-size: 0.85em;
+            color: #7f8c8d;
+            margin-top: 4px;
+            display: block;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -218,6 +371,177 @@
                     {% endif %}
                     {% endfor %}
                 </div>
+
+                {% if latest_session %}
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+                <h4>⏱️ Generation Performance</h4>
+                <div class="sub-panel">
+                    <div>
+                        <span class="badge">Resolución: {{ latest_session.config.width }}x{{
+                            latest_session.config.height }}</span>
+                        <span class="badge">Motor: {{ latest_session.config.renderer }}</span>
+                        <span class="badge warning">⏱️ {{ latest_session.performance.average_time_per_frame_seconds }}
+                            s/frame</span>
+                    </div>
+
+                    <div class="stat-row">
+                        <div class="stat-box">
+                            <span class="stat-value">{{ latest_session.performance.total_attempts }}</span>
+                            <span class="stat-label">Physics Attempts</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-value">{{ latest_session.performance.total_frames_generated }}</span>
+                            <span class="stat-label">Frames Generated</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-value" style="color: #3498db;">{{
+                                latest_session.performance.generation_efficiency_percent }}%</span>
+                            <span class="stat-label">Efficiency</span>
+                        </div>
+                        {% if latest_session.cleaning %}
+                        <div class="stat-box">
+                            <span class="stat-value" style="color: #27ae60;">{{ latest_session.cleaning.valid_kept
+                                }}</span>
+                            <span class="stat-label">Valid Kept</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-value" style="color: #c0392b;">{{
+                                latest_session.cleaning.corrupted_deleted }}</span>
+                            <span class="stat-label">Corrupted/Deleted</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="eda-grid">
+                    <div class="sub-panel">
+                        <h4 style="margin-top:0; border-bottom: 2px solid #eee; padding-bottom: 8px;">🎲 Domain
+                            Randomization</h4>
+
+                        <div class="dr-item">
+                            <div class="dr-title">
+                                <span>🌞 Sky & Lighting</span>
+                                {% if latest_session.domain_randomization.sky_active %}
+                                <span class="status-pill active">Active</span>
+                                {% else %}
+                                <span class="status-pill inactive">Inactive</span>
+                                {% endif %}
+                            </div>
+                            <span class="dr-desc">HDR Maps: <strong>{{
+                                    latest_session.domain_randomization.hdr_maps_available }}</strong> | Intensity
+                                Range: {{ latest_session.domain_randomization.hdr_intensity_range }}</span>
+                        </div>
+
+                        <div class="dr-item">
+                            <div class="dr-title">
+                                <span>⛰️ Terrain Materials</span>
+                                {% if latest_session.domain_randomization.terrain_active %}
+                                <span class="status-pill active">Active</span>
+                                {% else %}
+                                <span class="status-pill inactive">Inactive</span>
+                                {% endif %}
+                            </div>
+                            <span class="dr-desc">PBR Materials Loaded: <strong>{{
+                                    latest_session.domain_randomization.pbr_materials_loaded }}</strong></span>
+                        </div>
+
+                        <div class="dr-item">
+                            <div class="dr-title">
+                                <span>🚲 Target Textures</span>
+                                {% if latest_session.domain_randomization.object_materials_randomized %}
+                                <span class="status-pill active">Randomized</span>
+                                {% else %}
+                                <span class="status-pill inactive">Static</span>
+                                {% endif %}
+                            </div>
+                            <span class="dr-desc">Parts: {{
+                                latest_session.domain_randomization.object_materials_randomized | join(', ') |
+                                default('None', true) }}</span>
+                        </div>
+
+                        {% if latest_session.domain_randomization.distractor_materials_randomized is defined %}
+                        <div class="dr-item">
+                            <div class="dr-title">
+                                <span>🌳 Distractor Textures</span>
+                                {% if latest_session.domain_randomization.distractor_materials_randomized %}
+                                <span class="status-pill active">Randomized</span>
+                                {% else %}
+                                <span class="status-pill inactive">Static</span>
+                                {% endif %}
+                            </div>
+                            <span class="dr-desc">Types: {{
+                                latest_session.domain_randomization.distractor_materials_randomized | join(', ') |
+                                default('None', true) }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="sub-panel" style="text-align: center; display: flex; flex-direction: column;">
+                        <h4 style="margin-top:0; border-bottom: 2px solid #eee; padding-bottom: 8px;">🛰️ Spatial
+                            Coverage</h4>
+                        <p style="font-size: 0.8em; color: #7f8c8d; margin: 0 0 10px 0;">Distribution of objects
+                            relative to camera flight.</p>
+
+                        <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                            <svg class="svg-box" viewBox="0 0 100 100"
+                                style="border-radius: 50%; background: #fff; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); max-width: 200px;">
+                                <circle cx="50" cy="50" r="{{ visuals.cov_dist }}" fill="#ecf0f1" stroke="#bdc3c7" />
+                                <circle cx="50" cy="50" r="{{ visuals.cov_obj }}" fill="#3498db" opacity="0.3" />
+                                <circle cx="50" cy="50" r="{{ visuals.cov_cam }}" fill="none" stroke="#e74c3c"
+                                    stroke-dasharray="4,4" stroke-width="1.5" />
+
+                                <circle cx="50" cy="50" r="1" fill="#2c3e50" />
+
+                                <line x1="50" y1="50" x2="{{ 50 + visuals.cov_cam }}" y2="50" stroke="#e74c3c"
+                                    stroke-width="0.5" />
+                                <text x="{{ 50 + visuals.cov_cam/2 }}" y="48" font-size="4" fill="#c0392b"
+                                    text-anchor="middle">Cam Max</text>
+                            </svg>
+                        </div>
+
+                        <div
+                            style="font-size: 0.75em; text-align: left; margin-top: 15px; color: #666; display: flex; justify-content: space-between;">
+                            <span><span style="color:#bdc3c7;">⬤</span> Distractors</span>
+                            <span><span style="color:#3498db;">⬤</span> Targets</span>
+                            <span><span style="color:#e74c3c;">- -</span> Drone Limit</span>
+                        </div>
+                    </div>
+                </div>
+
+                {% if latest_session.theoretical_distribution %}
+                <div class="sub-panel">
+                    <h4 style="margin-top:0;">📊 Theoretical Scene Composition</h4>
+                    <p style="font-size: 0.85em; color: #666; margin-bottom: 8px;">Budget distribution based on
+                        selection weights and costs:</p>
+
+                    <div class="progress-container"
+                        style="height: 28px; border-radius: 4px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                        {% for cls_name, data in latest_session.theoretical_distribution.items() %}
+                        {% if data.percentage > 0 %}
+                        <div class="stacked-bar-item"
+                            style="width: {{ data.percentage }}%; 
+                                            background-color: {% if data.type == 'detectable' %}#3498db{% else %}#95a5a6{% endif %};"
+                            title="{{ cls_name|capitalize }}: {{ data.percentage }}% (Max expected: {{ data.expected_max_count }})">
+                            {% if data.percentage > 5 %}{{ cls_name|capitalize }} {{ data.percentage }}%{% endif %}
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    <div
+                        style="background: #fff; border: 1px solid #eee; border-radius: 4px; padding: 10px; margin-top: 10px; display: flex; justify-content: space-around; font-size: 0.85em;">
+                        <span><span style="color: #7f8c8d; text-transform: uppercase; font-size: 0.9em;">Detected
+                                Average:</span></span>
+                        <span>🎯 Targets: <strong style="font-size: 1.2em; color: #2c3e50;">{{
+                                latest_session.content_density.average_detectables_per_frame }}</strong>/img</span>
+                        <span>🌳 Distractors: <strong style="font-size: 1.2em; color: #2c3e50;">{{
+                                latest_session.content_density.average_distractors_per_frame }}</strong>/img</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% endif %}
 
                 {% if latest_eda %}
                 <h4>Exploratory Data Analysis (EDA) - Last Session</h4>
@@ -275,6 +599,10 @@
                     <tr>
                         <th>Base Model</th>
                         <td>{{ train_meta.hyperparameters.model_base }}</td>
+                    </tr>
+                    <tr>
+                        <th>Hardware</th>
+                        <td>{{ train_meta.hardware.device_name }}</td>
                     </tr>
                     <tr>
                         <th>Duration</th>

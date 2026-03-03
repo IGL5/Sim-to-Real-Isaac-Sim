@@ -5,6 +5,7 @@ import torch
 import argparse
 import time
 import json
+import platform
 from datetime import datetime
 import pandas as pd
 import shutil
@@ -40,11 +41,13 @@ def check_gpu():
     Checks if a GPU is available and returns the device.
     """
     if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
         print(f"✅ GPU detected: {torch.cuda.get_device_name(0)}")
-        return 0 # Uses GPU 0
+        return 0, gpu_name # Uses GPU 0
     else:
+        cpu_name = platform.processor() or "CPU"
         print("⚠️ GPU not detected. CPU will be used (it will be slower).")
-        return 'cpu'
+        return 'cpu', cpu_name
 
 
 def create_yaml_config():
@@ -134,7 +137,7 @@ def main():
     start_time = time.time()
     start_date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    device = check_gpu()
+    device, device_name = check_gpu()
 
     # Model selection logic
     model_type = None
@@ -229,7 +232,8 @@ def main():
             "duration_formatted": duration_formatted
         },
         "hardware": {
-            "device": "GPU" if device == 0 else "CPU"
+            "device": "GPU" if device == 0 else "CPU",
+            "device_name": device_name
         },
         "hyperparameters": {
             "model_base": model_type,

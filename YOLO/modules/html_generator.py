@@ -28,11 +28,24 @@ class HTMLReportGenerator:
         train_meta = self._load_json_safe(train_meta_path)
 
         latest_eda = None
+        latest_session = None
         visuals = {}
         
         if dataset_meta and "sessions" in dataset_meta and len(dataset_meta["sessions"]) > 0:
-            last_session = dataset_meta["sessions"][-1]
-            latest_eda = last_session.get("yolo_split", {}).get("train", {}).get("eda")
+            latest_session = dataset_meta["sessions"][-1]
+            latest_eda = latest_session.get("yolo_split", {}).get("train", {}).get("eda")
+
+            coverage = latest_session.get("spatial_coverage", {})
+            if coverage:
+                cam_max = coverage.get("camera_distance_range", [0, 0])[1]
+                dist_max = coverage.get("distractor_max_radius", 0)
+                obj_max = coverage.get("objects_max_radius", 0)
+                
+                abs_max = max(cam_max, dist_max, obj_max, 1.0)
+                
+                visuals["cov_cam"] = (cam_max / abs_max) * 50
+                visuals["cov_dist"] = (dist_max / abs_max) * 50
+                visuals["cov_obj"] = (obj_max / abs_max) * 50
             
         if latest_eda:
             # A) Calculate Area
@@ -65,6 +78,7 @@ class HTMLReportGenerator:
             "dataset_meta": dataset_meta,
             "train_meta": train_meta,
             "latest_eda": latest_eda,
+            "latest_session": latest_session,
             "visuals": visuals
         }
 
