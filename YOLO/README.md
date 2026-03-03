@@ -4,15 +4,22 @@ This directory contains the complete toolkit for processing synthetic data gener
 
 ## 📂 Directory Content
 
-- `dataset_manager.py`: ETL (Extract, Transform, Load). Converts labels from KITTI format to YOLO, manages folder structure (`train/val/test`), and allows adding data incrementally.
-
-- `clean_dataset.py`: Cleans the dataset by removing corrupted images.
-
-- `train_YOLO.py`: Training script. Automatically configures the environment for YOLOv8 and exports the final model to ONNX.
-
-- `visualize_results.py`: Audit and testing tool. Generates interactive HTML reports, confusion matrices, and prediction visualizations.
-
-- `modules/`: Contains auxiliary classes for reporting (`audit_reporter.py`, `inference_reporter.py`), the visual utilities (`core_visual_utils.py`), the HTML rendering engine (`html_generator.py`) and the `templates/` directory with the base templates in Jinja2 for the interactive reports.
+```text
+.
+├── dataset_manager.py          # ETL: Converts KITTI to YOLO & handles data splits
+├── train_YOLO.py               # Training pipeline (Auto-exports to ONNX)
+├── visualize_results.py        # Auditing, inference testing, and reporting tool
+├── compare_models.py           # Interactive Model Benchmarking CLI
+├── classes.txt                 # Defines classes and dynamically sets the project name
+└── modules/                    # Core logic, math, and rendering utilities
+    ├── core_visual_utils.py    # Central config and shared CV functions
+    ├── html_generator.py       # Jinja2 HTML rendering engine
+    ├── plot_generator.py       # Matplotlib / Seaborn wrappers
+    ├── audit_reporter.py       # Logic for test set evaluation
+    ├── inference_reporter.py   # Logic for real-world unlabelled data
+    ├── comparison_reporter.py  # Data prep for Chart.js interactive dashboard
+    └── templates/              # HTML/CSS Jinja2 templates for the reports
+```
 
 ## ⚙️ Installation
 
@@ -25,12 +32,6 @@ pip install ultralytics opencv-python matplotlib seaborn pandas pyyaml jinja2
 Note: It is recommended to use a virtual environment or Conda to avoid interfering with the Isaac Sim environment if running on the same machine.
 
 ## 🚀 Workflow
-
-### Step 0: Clean Dataset (clean_dataset.py)
-
-This script automatically looks for data generated in the `../_output_data/` folder of the main repository and removes corrupted images.
-
-**Note:** This script also updates the `generation_metadata.json` to log exactly how many corrupted/flat images were removed, keeping full traceability.
 
 ### Step 1: Dataset Management (dataset_manager.py)
 
@@ -81,6 +82,8 @@ python train_YOLO.py --patience 15
 ```bash
 python train_YOLO.py --select
 ```
+
+**💡 Pro Tip - Dynamic Project Naming:** The pipeline automatically reads the first line of your `classes.txt` to name your project folder. If your class is `bicycle`, it creates `bicycle_detector/`.
 
 **Note:** Upon completion, it automatically creates a `metadata/` folder inside the experiment's directory. This acts as an MLOps vault, saving `training_metadata.json` (hyperparameters, hardware, best epoch, duration) and taking a persistent snapshot of `dataset_metadata.json` so you always know exactly what data this specific model was trained on, even if you generate new data later.
 
@@ -134,6 +137,16 @@ Processes an MP4 video and generates an output video with detections.
 python visualize_results.py --video assets/test_video.mp4
 ```
 
+### Step 4: Model Benchmarking (compare_models.py)
+
+Once you have trained and audited multiple models (saving their `iter_xxx_audit` states), you can compare them side-by-side to track improvements and spot model drift.
+
+```bash
+python compare_models.py
+```
+
+This interactive CLI tool will automatically scan your project directory, find all valid evaluations, and ask you which iterations you want to compare. It then generates a fully interactive JavaScript dashboard.
+
 ## 📊 The Interactive HTML Reports
 
 Our visualization pipeline now uses a template-based architecture (Jinja2) to generate interactive, tabbed HTML reports that unify data from the Isaac Sim generation, the YOLO training, and the final inference.
@@ -148,3 +161,9 @@ Evaluates the AI's behavior on real, unlabeled images.
 - **Tab 1: Real World Inference:** Overall crowdness, spatial distribution heatmaps, and confidence evaluation.
 - **Tab 2: Overlap Analysis:** Gallery of suspicious overlapping bounding boxes (IoU > threshold) to detect potential duplication issues or confused predictions.
 - **Tab 3: Sim-to-Real Metadata:** Same as the audit report, maintaining context of the model's origins.
+
+### Comparison Report (`comparison_report/comparison_report.html`)
+An advanced, interactive frontend dashboard powered by **Chart.js** to benchmark multiple models simultaneously.
+- **Tab 1: General Trend:** Interactive line charts to track mAP, Precision, Recall, and generation time across sequential experiments. Click on legends to isolate metrics.
+- **Tab 2: 1vs1 Comparison:** Select any two specific model iterations from dropdown menus to instantly generate comparative grouped bar charts.
+- **Tab 3: Hyperparameter Matrix:** A data table cross-referencing all extraction metadata (Transfer Learning layers, Data Augmentation applied, Training hardware) against the final detection metrics.
