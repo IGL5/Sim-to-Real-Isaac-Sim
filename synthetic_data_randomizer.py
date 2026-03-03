@@ -297,6 +297,16 @@ def main():
     elapsed_total_seconds = time.time() - total_start_time
     
     safe_frames = frames_generated if frames_generated > 0 else 1
+
+    obj_mat_randomized = []
+    for k, v in config.OBJECTS_CONFIG.items():
+        if v.get('active', True) and v.get('randomize_materials'):
+            obj_mat_randomized.extend(v['randomize_materials'])
+
+    dist_mat_randomized = []
+    for k, v in config.DISTRACTOR_CONFIG.items():
+        if v.get('active', True) and v.get('randomize_materials'):
+            dist_mat_randomized.extend(v['randomize_materials'])
     
     metadata = {
         "generation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -321,9 +331,21 @@ def main():
             "total_detectables_spawned": track_total_detectables
         },
         "domain_randomization": {
+            "sky_active": config.RANDOMIZE_SKY,
+            "terrain_active": config.RANDOMIZE_TERRAIN,
+            "hdr_intensity_range": config.HDR_INTENSITY_RANGE,
             "hdr_maps_available": len(config.AVAILABLE_HDRS),
-            "pbr_materials_loaded": len(loaded_materials)
-        }
+            "pbr_materials_loaded": len(loaded_materials),
+            "object_materials_randomized": list(set(obj_mat_randomized)),
+            "distractor_materials_randomized": list(set(dist_mat_randomized))
+        },
+        "spatial_coverage": {
+            "camera_distance_range": config.CAMERA_DISTANCE_RANGE,
+            "camera_height_range": config.CAMERA_HEIGHT_RANGE,
+            "objects_max_radius": config.OBJECTS_MAX_RADIUS,
+            "distractor_max_radius": config.DISTRACTOR_MAX_RADIUS
+        },
+        "theoretical_distribution": content.calc_theoretical_distribution()
     }
 
     # Create the metadata file and save it

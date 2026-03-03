@@ -393,3 +393,45 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
         pools_paths[category] = created_objects
         
     return pools_paths
+
+
+def calc_theoretical_distribution():
+    dist_dict = {}
+    
+    # Objectives
+    obj_budget_max = config.OBJECTS_BUDGET_RANGE[1]
+    active_objs = {k: v for k, v in config.OBJECTS_CONFIG.items() if v.get('active', True)}
+    total_obj_weight = sum(v.get('selection_weight', 1) for v in active_objs.values())
+    
+    for k, v in active_objs.items():
+        if total_obj_weight > 0:
+            prob = v.get('selection_weight', 1) / total_obj_weight
+            avg_cost = v.get('cost_units', 1.0)
+            # Max objects = (Total budget * % of being selected) / Cost of object
+            expected_count = (obj_budget_max * prob) / avg_cost if avg_cost > 0 else 0
+            dist_dict[k] = {"type": "detectable", "expected_max_count": expected_count}
+            
+    # Distractors
+    dist_budget_max = config.DISTRACTOR_BUDGET_RANGE[1]
+    active_dists = {k: v for k, v in config.DISTRACTOR_CONFIG.items() if v.get('active', True)}
+    total_dist_weight = sum(v.get('selection_weight', 1) for v in active_dists.values())
+    
+    for k, v in active_dists.items():
+        if total_dist_weight > 0:
+            prob = v.get('selection_weight', 1) / total_dist_weight
+            avg_cost = v.get('cost_units', 1.0)
+            expected_count = (dist_budget_max * prob) / avg_cost if avg_cost > 0 else 0
+            dist_dict[k] = {"type": "distractor", "expected_max_count": expected_count}
+            
+    # Normalize to percentages (0-100%)
+    total_expected = sum(item["expected_max_count"] for item in dist_dict.values())
+    for k in dist_dict:
+        if total_expected > 0:
+            dist_dict[k]["percentage"] = round((dist_dict[k]["expected_max_count"] / total_expected) * 100, 2)
+        else:
+            dist_dict[k]["percentage"] = 0.0
+        
+        # Round max count for JSON
+        dist_dict[k]["expected_max_count"] = round(dist_dict[k]["expected_max_count"], 1)
+            
+    return dist_dict
