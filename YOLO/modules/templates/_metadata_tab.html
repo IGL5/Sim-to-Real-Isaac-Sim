@@ -1,0 +1,279 @@
+<div id="Metadata" class="tabcontent">
+    <div class="container">
+        <div class="card" style="border-left-color: #2ecc71; flex: 2;">
+            <h3>🌍 Generation: Isaac Sim</h3>
+            {% if dataset_meta %}
+
+            <h4>Dataset Distribution (Total: {{ dataset_meta.global_totals.total_images }} imgs)</h4>
+            <div style="margin-bottom: 15px;">
+                {% for split in ['train', 'val', 'test'] %}
+                {% set split_data = dataset_meta.global_totals[split] %}
+                {% if split_data.images > 0 %}
+                {% set obj_pct = ((split_data.images - split_data.backgrounds) / split_data.images * 100) | round(1)
+                %}
+                {% set bg_pct = (split_data.backgrounds / split_data.images * 100) | round(1) %}
+                <strong>{{ split | capitalize }}</strong> ({{ split_data.images }} imgs | {{ split_data.objects }}
+                objects)
+                <div class="progress-container">
+                    <div class="progress-fill" style="width: {{ obj_pct }}%;">{{ obj_pct }}% Objects</div>
+                    <div class="progress-bg" style="width: {{ bg_pct }}%;">{{ bg_pct }}% Backgrounds</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            {% if latest_session %}
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+            <h4>⏱️ Generation Performance</h4>
+            <div class="sub-panel">
+                <div>
+                    <span class="badge">Resolución: {{ latest_session.config.width }}x{{
+                        latest_session.config.height }}</span>
+                    <span class="badge">Motor: {{ latest_session.config.renderer }}</span>
+                    <span class="badge warning">⏱️ {{ latest_session.performance.average_time_per_frame_seconds }}
+                        s/frame</span>
+                </div>
+
+                <div class="stat-row">
+                    <div class="stat-box">
+                        <span class="stat-value">{{ latest_session.performance.total_attempts }}</span>
+                        <span class="stat-label">Physics Attempts</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">{{ latest_session.performance.total_frames_generated }}</span>
+                        <span class="stat-label">Frames Generated</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value" style="color: #3498db;">{{
+                            latest_session.performance.generation_efficiency_percent }}%</span>
+                        <span class="stat-label">Efficiency</span>
+                    </div>
+                    {% if latest_session.cleaning %}
+                    <div class="stat-box">
+                        <span class="stat-value" style="color: #27ae60;">{{ latest_session.cleaning.valid_kept
+                            }}</span>
+                        <span class="stat-label">Valid Kept</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value" style="color: #c0392b;">{{
+                            latest_session.cleaning.corrupted_deleted }}</span>
+                        <span class="stat-label">Corrupted/Deleted</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="eda-grid">
+                <div class="sub-panel">
+                    <h4 style="margin-top:0; border-bottom: 2px solid #eee; padding-bottom: 8px;">🎲 Domain
+                        Randomization</h4>
+
+                    <div class="dr-item">
+                        <div class="dr-title">
+                            <span>🌞 Sky & Lighting</span>
+                            {% if latest_session.domain_randomization.sky_active %}
+                            <span class="status-pill active">Active</span>
+                            {% else %}
+                            <span class="status-pill inactive">Inactive</span>
+                            {% endif %}
+                        </div>
+                        <span class="dr-desc">HDR Maps: <strong>{{
+                                latest_session.domain_randomization.hdr_maps_available }}</strong> | Intensity
+                            Range: {{ latest_session.domain_randomization.hdr_intensity_range }}</span>
+                    </div>
+
+                    <div class="dr-item">
+                        <div class="dr-title">
+                            <span>⛰️ Terrain Materials</span>
+                            {% if latest_session.domain_randomization.terrain_active %}
+                            <span class="status-pill active">Active</span>
+                            {% else %}
+                            <span class="status-pill inactive">Inactive</span>
+                            {% endif %}
+                        </div>
+                        <span class="dr-desc">PBR Materials Loaded: <strong>{{
+                                latest_session.domain_randomization.pbr_materials_loaded }}</strong></span>
+                    </div>
+
+                    <div class="dr-item">
+                        <div class="dr-title">
+                            <span>🚲 Target Textures</span>
+                            {% if latest_session.domain_randomization.object_materials_randomized %}
+                            <span class="status-pill active">Randomized</span>
+                            {% else %}
+                            <span class="status-pill inactive">Static</span>
+                            {% endif %}
+                        </div>
+                        <span class="dr-desc">Parts: {{
+                            latest_session.domain_randomization.object_materials_randomized | join(', ') |
+                            default('None', true) }}</span>
+                    </div>
+
+                    {% if latest_session.domain_randomization.distractor_materials_randomized is defined %}
+                    <div class="dr-item">
+                        <div class="dr-title">
+                            <span>🌳 Distractor Textures</span>
+                            {% if latest_session.domain_randomization.distractor_materials_randomized %}
+                            <span class="status-pill active">Randomized</span>
+                            {% else %}
+                            <span class="status-pill inactive">Static</span>
+                            {% endif %}
+                        </div>
+                        <span class="dr-desc">Types: {{
+                            latest_session.domain_randomization.distractor_materials_randomized | join(', ') |
+                            default('None', true) }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="sub-panel" style="text-align: center; display: flex; flex-direction: column;">
+                    <h4 style="margin-top:0; border-bottom: 2px solid #eee; padding-bottom: 8px;">🛰️ Spatial
+                        Coverage</h4>
+                    <p style="font-size: 0.8em; color: #7f8c8d; margin: 0 0 10px 0;">Distribution of objects
+                        relative to camera flight.</p>
+
+                    <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+                        <svg class="svg-box" viewBox="0 0 100 100"
+                            style="border-radius: 50%; background: #fff; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); max-width: 200px;">
+                            <circle cx="50" cy="50" r="{{ visuals.cov_dist }}" fill="#ecf0f1" stroke="#bdc3c7" />
+                            <circle cx="50" cy="50" r="{{ visuals.cov_obj }}" fill="#3498db" opacity="0.3" />
+                            <circle cx="50" cy="50" r="{{ visuals.cov_cam }}" fill="none" stroke="#e74c3c"
+                                stroke-dasharray="4,4" stroke-width="1.5" />
+
+                            <circle cx="50" cy="50" r="1" fill="#2c3e50" />
+
+                            <line x1="50" y1="50" x2="{{ 50 + visuals.cov_cam }}" y2="50" stroke="#e74c3c"
+                                stroke-width="0.5" />
+                            <text x="{{ 50 + visuals.cov_cam/2 }}" y="48" font-size="4" fill="#c0392b"
+                                text-anchor="middle">Cam Max</text>
+                        </svg>
+                    </div>
+
+                    <div
+                        style="font-size: 0.75em; text-align: left; margin-top: 15px; color: #666; display: flex; justify-content: space-between;">
+                        <span><span style="color:#bdc3c7;">⬤</span> Distractors</span>
+                        <span><span style="color:#3498db;">⬤</span> Targets</span>
+                        <span><span style="color:#e74c3c;">- -</span> Drone Limit</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if latest_session.theoretical_distribution %}
+            <div class="sub-panel">
+                <h4 style="margin-top:0;">📊 Theoretical Scene Composition</h4>
+                <p style="font-size: 0.85em; color: #666; margin-bottom: 8px;">Budget distribution based on
+                    selection weights and costs:</p>
+
+                <div class="progress-container"
+                    style="height: 28px; border-radius: 4px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                    {% for cls_name, data in latest_session.theoretical_distribution.items() %}
+                    {% if data.percentage > 0 %}
+                    <div class="stacked-bar-item"
+                        style="width: {{ data.percentage }}%; 
+                                        background-color: {% if data.type == 'detectable' %}#3498db{% else %}#95a5a6{% endif %};"
+                        title="{{ cls_name|capitalize }}: {{ data.percentage }}% (Max expected: {{ data.expected_max_count }})">
+                        {% if data.percentage > 5 %}{{ cls_name|capitalize }} {{ data.percentage }}%{% endif %}
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+
+                <div
+                    style="background: #fff; border: 1px solid #eee; border-radius: 4px; padding: 10px; margin-top: 10px; display: flex; justify-content: space-around; font-size: 0.85em;">
+                    <span><span style="color: #7f8c8d; text-transform: uppercase; font-size: 0.9em;">Detected
+                            Average:</span></span>
+                    <span>🎯 Targets: <strong style="font-size: 1.2em; color: #2c3e50;">{{
+                            latest_session.content_density.average_detectables_per_frame }}</strong>/img</span>
+                    <span>🌳 Distractors: <strong style="font-size: 1.2em; color: #2c3e50;">{{
+                            latest_session.content_density.average_distractors_per_frame }}</strong>/img</span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% endif %}
+
+            {% if latest_eda %}
+            <h4>Exploratory Data Analysis (EDA) - Last Session</h4>
+            <p style="font-size: 0.9em; color: #666;">The visual representations assume the normalized size of the
+                image.</p>
+            <div class="eda-grid">
+                <div style="text-align: center;">
+                    <strong>Bounding Box Area</strong>
+                    <p style="font-size: 0.8em; margin: 5px 0;">Media: {{ latest_eda.bbox_area.mean }} | Std: {{
+                        latest_eda.bbox_area.std }}</p>
+                    <svg class="svg-box" viewBox="0 0 100 100">
+                        <rect x="0" y="0" width="100" height="100" fill="none" stroke="#7f8c8d"
+                            stroke-dasharray="2,2" />
+                        <rect x="{{ 50 - visuals.area_max_side/2 }}" y="{{ 50 - visuals.area_max_side/2 }}"
+                            width="{{ visuals.area_max_side }}" height="{{ visuals.area_max_side }}" fill="#3498db"
+                            opacity="0.4" />
+                        <rect x="{{ 50 - visuals.area_min_side/2 }}" y="{{ 50 - visuals.area_min_side/2 }}"
+                            width="{{ visuals.area_min_side }}" height="{{ visuals.area_min_side }}" fill="#2980b9" />
+                    </svg>
+                </div>
+
+                <div style="text-align: center;">
+                    <strong>Aspect Ratio</strong>
+                    <p style="font-size: 0.8em; margin: 5px 0;">Media: {{ latest_eda.aspect_ratio.mean }} | Std: {{
+                        latest_eda.aspect_ratio.std }}</p>
+                    <svg class="svg-box" viewBox="0 0 100 100">
+                        <rect x="{{ 50 - visuals.ar_w/2 }}" y="{{ 50 - visuals.ar_h/2 }}" width="{{ visuals.ar_w }}"
+                            height="{{ visuals.ar_h }}" fill="#9b59b6" opacity="0.8" />
+                    </svg>
+                </div>
+
+                <div style="text-align: center;">
+                    <strong>Ground Truth Spatial Distribution</strong>
+                    <p style="font-size: 0.8em; margin: 5px 0;">Where do they appear in the photo?</p>
+                    <svg class="svg-box" viewBox="0 0 100 100">
+                        <rect x="0" y="0" width="100" height="100" fill="none" stroke="#7f8c8d" />
+                        <ellipse cx="{{ visuals.gt_cx }}" cy="{{ visuals.gt_cy }}" rx="{{ visuals.gt_rx }}"
+                            ry="{{ visuals.gt_ry }}" fill="#f1c40f" opacity="0.5" />
+                        <circle cx="{{ visuals.gt_cx }}" cy="{{ visuals.gt_cy }}" r="2" fill="#d35400" />
+                    </svg>
+                </div>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <p>⚠️ No dataset_metadata.json found</p>
+            {% endif %}
+        </div>
+
+        <div class="card" style="border-left-color: #9b59b6; flex: 1;">
+            <h3>🧠 Training: YOLO</h3>
+            {% if train_meta %}
+            <table>
+                <tr>
+                    <th>Base Model</th>
+                    <td>{{ train_meta.hyperparameters.model_base }}</td>
+                </tr>
+                <tr>
+                    <th>Hardware</th>
+                    <td>{{ train_meta.hardware.device_name }}</td>
+                </tr>
+                <tr>
+                    <th>Duration</th>
+                    <td>{{ train_meta.experiment_info.duration_formatted }}</td>
+                </tr>
+                <tr>
+                    <th>Epochs (Requested / Run)</th>
+                    <td>{{ train_meta.hyperparameters.epochs_requested }} / {{ train_meta.hyperparameters.epochs_run
+                        }}</td>
+                </tr>
+                <tr>
+                    <th>Best Epoch</th>
+                    <td>{{ train_meta.hyperparameters.best_epoch }}</td>
+                </tr>
+                <tr>
+                    <th>mAP@50 (Test Training)</th>
+                    <td>{{ train_meta.metrics_test_set.mAP50 }}</td>
+                </tr>
+            </table>
+            {% else %}
+            <p>⚠️ No training_metadata.json found</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
