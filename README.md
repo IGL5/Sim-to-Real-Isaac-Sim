@@ -12,7 +12,8 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
     *   **Camera:** Randomizes camera position, distance, and look-at targets with jitter.
     *   **Objects:** Randomly selects, places, and manages visibility of objects from a pool (e.g., cyclists).
 *   **Modular Architecture:** Cleanly organized codebase separating configuration, scene utilities, and content management.
-*   **Data Traceability:** Automatically generates a comprehensive `generation_metadata.json` for every run, tracking performance metrics (time per frame), content density (average objects/distractors per image), and domain randomization coverage (HDRs/Materials used).
+*   **Data Traceability & Analytics:** Automatically generates a comprehensive `generation_metadata.json` for every run, tracking performance metrics, theoretical object distribution, spatial coverage (camera limits vs object placement), and domain randomization coverage.
+*   **Data Quality Control:** Includes an automated cleaning tool (`clean_dataset.py`) to mathematically detect and purge corrupted, completely flat, or excessively dark frames before they reach the AI.
 *   **Kitti Writer:** Exports data in the Kitti format for easy integration with standard computer vision pipelines.
 
 ## 📂 Project Structure
@@ -20,6 +21,7 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
 ```text
 .
 ├── synthetic_data_randomizer.py  # Main entry point script
+├── clean_dataset.py              # Automated quality control and purge script
 ├── modules/                      # Modularized Python logic
 │   ├── config.py                 # Configuration settings & CLI args
 │   ├── scene_utils.py            # Physics, camera, and positioning helpers
@@ -27,6 +29,7 @@ A synthetic data generation tool leveraging **Nvidia Isaac Sim Replicator** to b
 │   └── __init__.py
 ├── assets/                       # Objects, Distractors, Map and Textures
 ├── _output_data/                 # Generated dataset output (created automatically)
+│   ├── CameraName/               # Camera folders
 │   └── generation_metadata.json  # Auto-generated traceability report
 └── YOLO/                         # YOLOv8 training and validation pipeline
 ```
@@ -66,14 +69,28 @@ C:\isaac-sim\python.bat .\synthetic_data_randomizer.py --num_frames 100 --width 
 | `--data_dir` | Directory to save output data | `./_output_data` |
 
 
+### 🧹 Cleaning the Dataset (Optional but Recommended)
+
+Before passing the data to any AI pipeline, you can automatically purge corrupted, completely flat, or dark frames. This will also update the `generation_metadata.json`.
+
+```bash
+# Preview what would be deleted without actually deleting anything
+python clean_dataset.py --dir _output_data --dry
+
+# Execute the actual cleanup
+python clean_dataset.py --dir _output_data
+```
+
+
 ## 🧠 Model Training (YOLOv8)
 
 This repository includes a complete pipeline to train a YOLOv8 object detector using the generated synthetic data. The training tools are located in the YOLO/ directory.
 
 The pipeline includes:
 
-- Automatic ETL: Converts Isaac Sim (Kitti) data to YOLO format and manages Train/Val/Test splits with session history tracking.
-- Training Management: Automates fine-tuning, handles early stopping, and logs hyperparameter history.
-- Interactive Auditing: Generates comprehensive, tabbed HTML reports (using Jinja2) containing Confusion Matrices, Heatmaps, confidence distributions, and Sim-to-Real metadata to validate model performance.
+- **Automatic ETL:** Converts Isaac Sim (Kitti) data to YOLO format and manages Train/Val/Test splits with session history tracking.
+- **Training Management:** Automates fine-tuning, handles early stopping, and logs hyperparameter history.
+- **Interactive Auditing:** Generates comprehensive, tabbed HTML reports (using Jinja2) containing Confusion Matrices, Heatmaps, confidence distributions, and Sim-to-Real metadata to validate model performance.
+- **Model Benchmarking:** A built-in CLI tool to compare multiple experiments side-by-side, generating a dynamic and interactive JavaScript dashboard (Chart.js) to track metric improvements and model drift.
 
 👉 [Go to Training Documentation](YOLO/README.md)
