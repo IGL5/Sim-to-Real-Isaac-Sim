@@ -4,7 +4,6 @@ import cv2
 
 # --- CONFIGURATION ---
 # Base directory where experiments are saved
-PROJECT_DIR = os.path.join(os.getcwd(), "cyclist_detector")
 DEFAULT_EXP_NAME = "yolov8_s_default"
 
 # Default paths (Test Dataset)
@@ -19,6 +18,22 @@ CONF_THRESHOLD = 0.4
 IOU_THRESHOLD = 0.5
 LIMIT_IMAGES = 100
 OVERLAP_THRESHOLD_ANALYSIS = 0.5
+
+def get_dynamic_project_name():
+    """Reads classes.txt to automatically name the folder (e.g: 'cyclist_detector')"""
+    classes_path = os.path.join(os.getcwd(), "classes.txt")
+    try:
+        with open(classes_path, "r", encoding='utf-8') as f:
+            first_class = f.readline().strip().replace(" ", "_")
+            if first_class:
+                return f"{first_class}_detector"
+    except Exception:
+        pass
+    # Backup name in case the file is accidentally deleted
+    return "cyclist_detector" 
+
+PROJECT_NAME = get_dynamic_project_name()
+PROJECT_DIR = os.path.join(os.getcwd(), PROJECT_NAME)
 
 # --- UTILITIES ---
 

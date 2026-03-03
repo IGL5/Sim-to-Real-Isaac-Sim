@@ -121,7 +121,5 @@ if __name__ == "__main__":
     
     if os.path.exists(args.dir):
         clean_dataset(args.dir, dry_run=args.dry, threshold_mean=args.thresh_mean)
-    elif os.path.exists("../" + args.dir):
-        clean_dataset("../" + args.dir, dry_run=args.dry, threshold_mean=args.thresh_mean)
     else:
         print(f"The directory {args.dir} does not exist.")

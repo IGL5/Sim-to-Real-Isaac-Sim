@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 def plot_confusion_matrix(tp, fp, fn, output_path):
+    """ Draws a confusion matrix """
     plt.figure(figsize=(6, 5))
     matrix = [[tp, fp], [fn, 0]]
     sns.heatmap(matrix, annot=True, fmt="d", cmap="Blues", cbar=False, 
@@ -12,6 +13,7 @@ def plot_confusion_matrix(tp, fp, fn, output_path):
     plt.close()
 
 def plot_confidence_histogram(confs_primary, label_primary, color_primary, output_path, title, confs_secondary=None, label_secondary=None, color_secondary=None):
+    """ Draws a confidence histogram """
     plt.figure(figsize=(8, 5))
     bins_fixed = np.linspace(0, 1, 21)
     plt.hist(confs_primary, bins=bins_fixed, alpha=0.7, label=label_primary, color=color_primary)
@@ -28,6 +30,7 @@ def plot_confidence_histogram(confs_primary, label_primary, color_primary, outpu
     plt.close()
 
 def plot_normalized_heatmap(centers, output_path, title="Normalized Detection Heatmap", cmap='inferno'):
+    """ Draws a normalized detection heatmap """
     if not centers:
         return
         
@@ -43,6 +46,7 @@ def plot_normalized_heatmap(centers, output_path, title="Normalized Detection He
     plt.close()
 
 def plot_pr_curve(precisions, recalls, ap50, output_path):
+    """ Draws a Precision-Recall curve """
     plt.figure(figsize=(8, 5))
     plt.plot(recalls, precisions, color='blue', lw=2, label=f'PR Curve (mAP@50 = {ap50:.4f})')
     plt.xlabel('Recall')

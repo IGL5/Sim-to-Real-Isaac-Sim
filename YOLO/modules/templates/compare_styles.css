@@ -1,0 +1,93 @@
+.compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.compare-table th,
+.compare-table td {
+    padding: 12px 15px;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+}
+
+.compare-table th {
+    background-color: #34495e;
+    color: white;
+    font-weight: bold;
+    font-size: 1.1em;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.compare-table th:last-child {
+    border-right: none;
+}
+
+.compare-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.compare-table td {
+    border-right: 1px solid #eee;
+}
+
+.compare-table td:last-child {
+    border-right: none;
+}
+
+.compare-table td:first-child {
+    font-weight: bold;
+    text-align: left;
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    border-right: 2px solid #bdc3c7;
+    width: 25%;
+}
+
+.versus-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.vs-select {
+    padding: 10px;
+    font-size: 1.1em;
+    border-radius: 6px;
+    border: 2px solid #bdc3c7;
+    font-weight: bold;
+    color: #2c3e50;
+    min-width: 250px;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+.vs-select:focus {
+    border-color: #3498db;
+}
+
+.vs-badge {
+    background: #e74c3c;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 1.2em;
+    font-style: italic;
+}
+
+.chart-container {
+    position: relative;
+    height: 400px;
+    width: 100%;
+    padding: 15px;
+}

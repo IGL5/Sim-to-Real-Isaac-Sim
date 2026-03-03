@@ -102,3 +102,17 @@ class HTMLReportGenerator:
         with open(output_path, "w", encoding='utf-8') as f:
             f.write(html_content)
         print(f"✅ Inference HTML Report generated at: {output_path}")
+
+    def generate_comparison_html(self, output_path, comparison_data, chart_data):
+        template = self.env.get_template('compare_template.html')
+        context = {
+            "report_title": "Benchmark: Model Comparison",
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "data": comparison_data,
+            "models": list(comparison_data.keys()),
+            "chart_data": chart_data
+        }
+        
+        html_content = template.render(context)
+        with open(output_path, "w", encoding='utf-8') as f:
+            f.write(html_content)

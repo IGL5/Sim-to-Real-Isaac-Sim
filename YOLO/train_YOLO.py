@@ -9,6 +9,7 @@ import platform
 from datetime import datetime
 import pandas as pd
 import shutil
+import modules.core_visual_utils as cvu
 
 # DEFAULT CONFIGURATION
 DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
@@ -19,7 +20,7 @@ TEST_REL  = "images/test"
 
 TRAIN_LABELS = "labels"
 
-PROJECT_NAME = "cyclist_detector"
+PROJECT_NAME = cvu.PROJECT_NAME
 DEFAULT_EXP_NAME = "yolov8_s_default"
 
 # Model type
