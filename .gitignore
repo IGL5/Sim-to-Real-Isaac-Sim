@@ -214,6 +214,6 @@ assets/
 YOLO/*.pt
 YOLO/runs/
 YOLO/dataset_yolo_output/
-YOLO/cyclist_detector/
+YOLO/*_detector/
 YOLO/audit_report/
 YOLO/real_images/
