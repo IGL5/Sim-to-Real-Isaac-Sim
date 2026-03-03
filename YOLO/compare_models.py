@@ -1,13 +1,14 @@
 import os
 import glob
 import json
+import modules.core_visual_utils as cvu
 
 try:
     from modules.comparison_reporter import ComparisonReporter
 except ImportError:
     print("\n[WARNING] The module modules/comparison_reporter.py was not found.")
 
-PROJECT_DIR = "cyclist_detector"
+PROJECT_DIR = cvu.PROJECT_DIR
 
 def get_available_models():
     """Returns a list of model names in the project directory."""

@@ -188,8 +188,6 @@ class ReportGenerator:
         metrics_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers"])
 
         # 3. Save audit metadata to JSON
-        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
-        
         audit_metadata = {
             "audit_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "metrics": metrics_dict,
@@ -208,7 +206,7 @@ class ReportGenerator:
 
         # 4. Instantiate the generator and create the HTML
         templates_dir = os.path.join(os.getcwd(), "modules", "templates")
-        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
+        project_dir = cvu.PROJECT_DIR
         dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")
         
         generator = HTMLReportGenerator(templates_dir, project_dir, dataset_out_dir)

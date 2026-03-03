@@ -91,8 +91,6 @@ class InferenceReportGenerator:
         stats_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers_norm"])
 
         # 3. Save inference metadata to JSON
-        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
-        
         inference_metadata = {
             "inference_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "stats": stats_dict,
@@ -111,7 +109,7 @@ class InferenceReportGenerator:
 
         # 4. Instantiate the generator and create the HTML
         templates_dir = os.path.join(os.getcwd(), "modules", "templates")
-        project_dir = os.path.join(os.getcwd(), "cyclist_detector")
+        project_dir = cvu.PROJECT_DIR
         dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")
         
         generator = HTMLReportGenerator(templates_dir, project_dir, dataset_out_dir)

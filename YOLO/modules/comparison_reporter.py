@@ -2,11 +2,12 @@ import os
 import json
 from . import plot_generator
 from .html_generator import HTMLReportGenerator
+import core_visual_utils as cvu
 
 class ComparisonReporter:
     def __init__(self, models_dict):
         self.models_dict = models_dict
-        self.project_dir = os.path.join(os.getcwd(), "cyclist_detector")
+        self.project_dir = cvu.PROJECT_DIR
         self.output_dir = os.path.join(os.getcwd(), "comparison_report")
         self.plots_dir = os.path.join(self.output_dir, "plots")
         os.makedirs(self.plots_dir, exist_ok=True)
