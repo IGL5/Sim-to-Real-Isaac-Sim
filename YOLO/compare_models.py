@@ -1,30 +1,31 @@
 import os
 import glob
 import json
+
 try:
     from modules.comparison_reporter import ComparisonReporter
 except ImportError:
-    print("\n[WARNING] El módulo modules/comparison_reporter.py no se ha encontrado.")
+    print("\n[WARNING] The module modules/comparison_reporter.py was not found.")
 
 PROJECT_DIR = "cyclist_detector"
 
 def get_available_models():
-    """Devuelve una lista con los nombres de las carpetas dentro del proyecto."""
+    """Returns a list of model names in the project directory."""
     if not os.path.exists(PROJECT_DIR):
         return []
     return [d for d in os.listdir(PROJECT_DIR) if os.path.isdir(os.path.join(PROJECT_DIR, d))]
 
 def find_audits_for_model(model_name):
     """
-    Busca archivos audit_metadata.json en la raíz del modelo y en iteraciones guardadas.
-    Devuelve una lista de diccionarios con la ruta, la fecha y la carpeta contenedora.
+    Searches for audit_metadata.json files in the root of the model and in saved iterations.
+    Returns ONLY valid audits.
     """
     model_dir = os.path.join(PROJECT_DIR, model_name)
     
-    # 1. Buscar en la raíz (auditoría temporal / última)
+    # 1. Search in the root (temporary / last audit)
     base_audit = os.path.join(model_dir, "audit_metadata.json")
     
-    # 2. Buscar en las evaluaciones persistentes (iter_xxx)
+    # 2. Search in the persistent evaluations (iter_xxx)
     eval_audits = glob.glob(os.path.join(model_dir, "evaluations", "*", "audit_metadata.json"))
     
     all_audits = []
@@ -32,9 +33,9 @@ def find_audits_for_model(model_name):
         all_audits.append(base_audit)
     all_audits.extend(eval_audits)
     
-    # 3. Leer los JSON para extraer la fecha exacta de la auditoría
+    # 3. Read the JSONs to verify validity and extract the date
     audit_info = []
-    for path in set(all_audits): # set para evitar duplicados accidentales
+    for path in set(all_audits): # set to avoid accidental duplicates
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -47,85 +48,118 @@ def find_audits_for_model(model_name):
                     "folder": parent_folder
                 })
         except Exception:
-            pass
+            pass # If the JSON is corrupt, we ignore it automatically
             
-    # Ordenar de más reciente a más antigua
+    # Sort from most recent to oldest
     audit_info.sort(key=lambda x: x["date"], reverse=True)
     return audit_info
 
+
 def main():
-    print("--- ⚖️  MODEL BENCHMARKING (COMPARACIÓN) ---")
+    print("--- ⚖️  MODEL BENCHMARKING (COMPARATION) ---")
     available_models = get_available_models()
     
     if not available_models:
-        print(f"❌ No se encontraron modelos en la carpeta '{PROJECT_DIR}'.")
+        print(f"❌ No models found in the '{PROJECT_DIR}' directory.")
         return
         
-    # 1. Mostrar modelos disponibles
-    print("\n📂 Modelos disponibles:")
-    for m in available_models:
-        print(f"  - {m}")
+    # 1. Show available models NUMERATED
+    print("\n📂 Available models:")
+    for i, m in enumerate(available_models):
+        print(f"  [{i+1}] {m}")
         
-    print("\n✏️  Introduce los nombres de los modelos que deseas comparar separados por comas.")
-    print("   (Ejemplo: yolov8_s_default, yolov8_n_custom)")
+    print("\n✏️  Introduce the NUMBERS of the models you want to compare separated by commas.")
+    print("   (Example: 1, 3)")
     
-    # 2. Recoger Input del usuario
-    user_input = input("-> Modelos: ").strip()
+    # 2. Get Input numeric from user
+    user_input = input("-> Selections: ").strip()
     if not user_input:
-        print("Operación cancelada.")
+        print("Operation cancelled.")
         return
         
-    # Limpiar espacios en blanco alrededor de las comas
-    selected_models = [m.strip() for m in user_input.split(',')]
-    
+    # Process and validate numbers
+    selected_models = []
+    for part in user_input.split(','):
+        part = part.strip()
+        if part.isdigit():
+            idx = int(part) - 1
+            if 0 <= idx < len(available_models):
+                selected_models.append(available_models[idx])
+            else:
+                print(f"  ⚠️  [IGNORED] The number {part} is out of range.")
+        else:
+            print(f"  ⚠️  [IGNORED] '{part}' is not a valid number.")
+            
     final_audits_to_compare = {}
     
-    print("\n🔍 Verificando auditorías...")
-    # 3. Lógica de validación y resolución de conflictos
+    print("\n🔍 Verifying audits...")
+    
+    # 3. Validation logic
     for model_name in selected_models:
-        if model_name not in available_models:
-            print(f"  ⚠️  [IGNORADO] El modelo '{model_name}' no existe.")
-            continue
-            
         audits = find_audits_for_model(model_name)
         
         if len(audits) == 0:
-            print(f"  ❌ [DESCARTADO] '{model_name}': No tiene ninguna auditoría (audit_metadata.json).")
-        elif len(audits) == 1:
-            print(f"  ✅ [ACEPTADO] '{model_name}': 1 auditoría encontrada ({audits[0]['folder']}).")
-            final_audits_to_compare[model_name] = audits[0]["path"]
+            print(f"  ❌ [DISCARDED] '{model_name}': No valid audits found.")
+            continue
+            
+        selected_audit = None
+        
+        if len(audits) == 1:
+            print(f"  ✅ [ACCEPTED] '{model_name}': 1 audit found ({audits[0]['folder']}).")
+            selected_audit = audits[0]
         else:
-            print(f"  ⚠️  [ATENCIÓN] '{model_name}': ¡Múltiples auditorías encontradas!")
+            print(f"  ⚠️  [ATTENTION] '{model_name}': ¡Multiple valid audits found!")
             for i, aud in enumerate(audits):
-                print(f"      [{i+1}] Carpeta: {aud['folder']} | Fecha: {aud['date']}")
+                print(f"      [{i+1}] Folder: {aud['folder']} | Date: {aud['date']}")
             
             choice = -1
             while choice < 1 or choice > len(audits):
                 try:
-                    choice = int(input(f"      ¿Cuál deseas usar para '{model_name}'? [1-{len(audits)}]: "))
+                    choice = int(input(f"      Select an option [1-{len(audits)}]: "))
                 except ValueError:
                     pass
             
             selected_audit = audits[choice-1]
-            print(f"  ✅ [ACEPTADO] '{model_name}': Seleccionada la opción {choice} ({selected_audit['folder']}).")
-            final_audits_to_compare[model_name] = selected_audit["path"]
+            print(f"  ✅ [ACCEPTED] '{model_name}': Selected option {choice} ({selected_audit['folder']}).")
 
-    # 4. Comprobación final
+        # Generate a unique label for the plots
+        if selected_audit['folder'] == model_name:
+            label = f"{model_name} (Last)"
+        else:
+            label = f"{model_name} ({selected_audit['folder']})"
+            
+        # If the user selects the same audit twice, we number it
+        base_label = label
+        counter = 2
+        while label in final_audits_to_compare:
+            label = f"{base_label} v{counter}"
+            counter += 1
+            
+        # Save the audit path and the real folder name
+        final_audits_to_compare[label] = {
+            "path": selected_audit["path"],
+            "model_root_name": model_name
+        }
+
+    # 4. Final check
     if len(final_audits_to_compare) < 2:
-        print("\n🛑 ERROR: Necesitas al menos 2 modelos con auditorías válidas para poder comparar.")
-        print("Por favor, realiza auditorías en tus modelos o selecciona otros.")
+        print("\n🛑 ERROR: Need at least 2 models with valid audits to compare.")
+        print("Please run audits on your models or select others.")
         return
         
-    print("\n🎉 ¡Selección completada con éxito!")
-    print("Resumen de archivos listos para comparar:")
+    print("\n🎉 Selection completed successfully!")
+    print("Summary of files ready to compare:")
     for m, path in final_audits_to_compare.items():
         print(f"  - {m} -> {path}")
         
-    print("\n🚀 Pasando datos al motor de comparación...")
+    print("\n🚀 Passing data to comparison engine...")
     
-    # 5. Llamada al módulo de generación
-    reporter = ComparisonReporter(final_audits_to_compare)
-    reporter.generate_comparison()
+    # 5. Call to the generation module
+    try:
+        reporter = ComparisonReporter(final_audits_to_compare)
+        reporter.generate_comparison()
+    except NameError:
+        pass
 
 if __name__ == "__main__":
     main()

@@ -19,18 +19,22 @@ class ComparisonReporter:
         return None
 
     def load_all_data(self):
-        for model_name, audit_path in self.models_dict.items():
+        for display_label, info in self.models_dict.items():
+            audit_path = info["path"]
+            real_model_name = info["model_root_name"] # Real model name
+            
             audit_meta = self._load_json(audit_path)
             
-            # Load the rest of the metadata in the model's "vault"
-            model_root = os.path.join(self.project_dir, model_name)
+            # Search for the rest of metadata in the "vault" using the real model name
+            model_root = os.path.join(self.project_dir, real_model_name)
             train_meta_path = os.path.join(model_root, "metadata", "training_metadata.json")
             dataset_meta_path = os.path.join(model_root, "metadata", "dataset_metadata.json")
             
             train_meta = self._load_json(train_meta_path)
             dataset_meta = self._load_json(dataset_meta_path)
 
-            self.data[model_name] = {
+            # Save all under the "display_label" for proper HTML display
+            self.data[display_label] = {
                 "audit": audit_meta,
                 "train": train_meta,
                 "dataset": dataset_meta
