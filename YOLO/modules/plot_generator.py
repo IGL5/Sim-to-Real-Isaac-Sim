@@ -58,37 +58,3 @@ def plot_pr_curve(precisions, recalls, ap50, output_path):
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(output_path)
     plt.close()
-
-def plot_comparison_bar(labels, data_lists, data_labels, output_path, title):
-    """ Draws a grouped bar chart comparing several models """
-    x = np.arange(len(labels))
-    width = 0.8 / len(data_lists)
-    
-    fig, ax = plt.subplots(figsize=(max(8, len(labels)*2.5), 6))
-    
-    for i, data in enumerate(data_lists):
-        offset = (i - len(data_lists)/2 + 0.5) * width
-        ax.bar(x + offset, data, width, label=data_labels[i], alpha=0.8)
-        
-    ax.set_ylabel('Valor (0.0 - 1.0)')
-    ax.set_title(title)
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=15, ha='right')
-    ax.set_ylim([0.0, 1.05])
-    ax.legend(loc='lower right')
-    ax.grid(axis='y', linestyle='--', alpha=0.7)
-    
-    fig.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
-
-def plot_simple_bar(labels, data, ylabel, output_path, title):
-    """ Draws a simple bar chart """
-    plt.figure(figsize=(max(6, len(labels)*2), 5))
-    sns.barplot(x=labels, y=data, hue=labels, palette="viridis", legend=False)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.xticks(rotation=15, ha='right')
-    plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()

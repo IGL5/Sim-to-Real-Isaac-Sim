@@ -7,58 +7,11 @@
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         {% include 'styles.css' %}
-
-        .compare-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            background: #fff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .compare-table th,
-        .compare-table td {
-            padding: 12px 15px;
-            text-align: center;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .compare-table th {
-            background-color: #34495e;
-            color: white;
-            font-weight: bold;
-            font-size: 1.1em;
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .compare-table th:last-child {
-            border-right: none;
-        }
-
-        .compare-table tbody tr:hover {
-            background-color: #f8f9fa;
-        }
-
-        .compare-table td {
-            border-right: 1px solid #eee;
-        }
-
-        .compare-table td:last-child {
-            border-right: none;
-        }
-
-        .compare-table td:first-child {
-            font-weight: bold;
-            text-align: left;
-            background-color: #ecf0f1;
-            color: #2c3e50;
-            border-right: 2px solid #bdc3c7;
-            width: 25%;
-        }
+        {% include 'compare_styles.css' %}
     </style>
 </head>
 
@@ -67,23 +20,57 @@
     <p><strong>Date of Evaluation:</strong> {{ date }}</p>
 
     <div class="tab">
-        <button class="tablinks active" onclick="openTab(event, 'Dashboard')">📊 Visual Dashboard</button>
-        <button class="tablinks" onclick="openTab(event, 'Matrix')">📋 Hyperparameter Matrix</button>
+        <button class="tablinks active" onclick="openTab(event, 'Trend')">📈 General Trend</button>
+        <button class="tablinks" onclick="openTab(event, 'Versus')">🥊 1vs1 Comparison</button>
+        <button class="tablinks" onclick="openTab(event, 'Matrix')">📋 Data Matrix</button>
     </div>
 
-    <div id="Dashboard" class="tabcontent" style="display:block;">
+    <div id="Trend" class="tabcontent" style="display:block;">
+        <p style="color: #7f8c8d; margin-bottom: 20px;">Visualize the performance evolution through all the
+            models selected. <i>(Tip: Click on the legend to hide metrics).</i></p>
         <div class="plot-grid">
             <div class="card" style="border-left-color: #9b59b6;">
-                <h3>Detection Performance</h3>
-                <img src="plots/compare_metrics.png" alt="Detection Performance">
+                <h3>Performance Evolution</h3>
+                <div class="chart-container">
+                    <canvas id="trendPerformanceChart"></canvas>
+                </div>
+            </div>
+            <div class="card" style="border-left-color: #27ae60;">
+                <h3>Generation Cost Evolution</h3>
+                <div class="chart-container">
+                    <canvas id="trendTimeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="Versus" class="tabcontent">
+        <div class="versus-header">
+            <div>
+                <label style="display:block; margin-bottom:5px; font-size:0.9em; color:#7f8c8d;">Model A
+                    (Blue)</label>
+                <select id="modelA_select" class="vs-select" onchange="updateVersusCharts()"></select>
+            </div>
+            <div class="vs-badge">VS</div>
+            <div>
+                <label style="display:block; margin-bottom:5px; font-size:0.9em; color:#7f8c8d;">Model B
+                    (Red)</label>
+                <select id="modelB_select" class="vs-select" onchange="updateVersusCharts()"></select>
+            </div>
+        </div>
+
+        <div class="plot-grid">
+            <div class="card" style="border-left-color: #34495e;">
+                <h3>Detection Comparison</h3>
+                <div class="chart-container">
+                    <canvas id="vsMetricsChart"></canvas>
+                </div>
             </div>
             <div class="card" style="border-left-color: #f1c40f;">
-                <h3>AI Confidence (Confidence)</h3>
-                <img src="plots/compare_confidence.png" alt="AI Confidence (Confidence)">
-            </div>
-            <div class="card" style="border-left-color: #e74c3c;">
-                <h3>Synthetic Data Generation Cost</h3>
-                <img src="plots/compare_time.png" alt="Synthetic Data Generation Cost">
+                <h3>Confidence Comparison (AI Safety)</h3>
+                <div class="chart-container">
+                    <canvas id="vsConfChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -93,38 +80,19 @@
             <thead>
                 <tr>
                     <th>Metric / Attribute</th>
-                    {% for m in models %}
-                    <th>{{ m }}</th>
-                    {% endfor %}
+                    {% for m in models %}<th>{{ m }}</th>{% endfor %}
                 </tr>
             </thead>
             <tbody>
                 <tr>
                     <td>mAP@50</td>
-                    {% for m in models %}
-                    <td style="font-size: 1.2em; font-weight: bold; color: #2980b9;">{{
-                        "%.3f"|format(data[m].audit.metrics.ap50) }}</td>
-                    {% endfor %}
-                </tr>
-                <tr>
-                    <td>F1-Score</td>
-                    {% for m in models %}
-                    <td>{{ "%.2f"|format(data[m].audit.metrics.f1) }}</td>
-                    {% endfor %}
+                    {% for m in models %}<td style="font-size: 1.2em; font-weight: bold; color: #2980b9;">{{
+                        "%.3f"|format(data[m].audit.metrics.ap50) }}</td>{% endfor %}
                 </tr>
                 <tr>
                     <td>Precision / Recall</td>
-                    {% for m in models %}
-                    <td>{{ "%.1f"|format(data[m].audit.metrics.precision * 100) }}% / {{
-                        "%.1f"|format(data[m].audit.metrics.recall * 100) }}%</td>
-                    {% endfor %}
-                </tr>
-
-                <tr>
-                    <td>Base Model (YOLO)</td>
-                    {% for m in models %}
-                    <td>{{ data[m].train.hyperparameters.model_base if data[m].train else 'N/A' }}</td>
-                    {% endfor %}
+                    {% for m in models %}<td>{{ "%.1f"|format(data[m].audit.metrics.precision * 100) }}% / {{
+                        "%.1f"|format(data[m].audit.metrics.recall * 100) }}%</td>{% endfor %}
                 </tr>
                 <tr>
                     <td>Transfer Learning (Frozen Layers)</td>
@@ -140,38 +108,110 @@
                     {% endfor %}
                 </tr>
                 <tr>
-                    <td>Optimal Epoch / Requested Epochs</td>
-                    {% for m in models %}
-                    <td>
-                        {% if data[m].train %}
-                        <strong>{{ data[m].train.hyperparameters.best_epoch }}</strong> / {{
-                        data[m].train.hyperparameters.epochs_requested }}
-                        {% else %}
-                        N/A
-                        {% endif %}
-                    </td>
-                    {% endfor %}
-                </tr>
-                <tr>
-                    <td>Data Augmentation: Mosaic</td>
-                    {% for m in models %}
-                    <td>{{ data[m].train.data_augmentation.mosaic if data[m].train and data[m].train.data_augmentation
-                        else 'N/A' }}</td>
-                    {% endfor %}
-                </tr>
-
-                <tr>
                     <td>Training Hardware</td>
-                    {% for m in models %}
-                    <td style="font-size: 0.9em; color: #7f8c8d;">{{ data[m].train.hardware.device_name if data[m].train
-                        else 'N/A' }}</td>
-                    {% endfor %}
+                    {% for m in models %}<td style="font-size: 0.9em; color: #7f8c8d;">{{
+                        data[m].train.hardware.device_name if data[m].train else 'N/A' }}</td>{% endfor %}
                 </tr>
             </tbody>
         </table>
     </div>
 
     <script>
+        const rawData = {{ chart_data | tojson }};
+
+        let vsMetricsChart = null;
+        let vsConfChart = null;
+
+        Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+        Chart.defaults.color = '#7f8c8d';
+
+        window.onload = function () {
+            initTrendCharts();
+            initVersusSelectors();
+            initVersusCharts();
+        };
+
+        // TREND GRAPHS (LINES)
+        function initTrendCharts() {
+            const ctxPerf = document.getElementById('trendPerformanceChart').getContext('2d');
+            new Chart(ctxPerf, {
+                type: 'line',
+                data: {
+                    labels: rawData.labels,
+                    datasets: [
+                        { label: 'mAP@50', data: rawData.map50, borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 },
+                        { label: 'Precision', data: rawData.precision, borderColor: '#3498db', borderDash: [5, 5], tension: 0.3, borderWidth: 2, hidden: true },
+                        { label: 'Recall', data: rawData.recall, borderColor: '#e67e22', borderDash: [5, 5], tension: 0.3, borderWidth: 2, hidden: true }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1.05 } }, plugins: { tooltip: { mode: 'index', intersect: false } } }
+            });
+
+            const ctxTime = document.getElementById('trendTimeChart').getContext('2d');
+            new Chart(ctxTime, {
+                type: 'line',
+                data: {
+                    labels: rawData.labels,
+                    datasets: [{ label: 'Segundos / Frame', data: rawData.gen_time, borderColor: '#27ae60', backgroundColor: 'rgba(39, 174, 96, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        // 1VS1 GRAPHS (BARS)
+        function initVersusSelectors() {
+            const selA = document.getElementById('modelA_select');
+            const selB = document.getElementById('modelB_select');
+
+            rawData.labels.forEach((label, index) => {
+                selA.options.add(new Option(label, index));
+                selB.options.add(new Option(label, index));
+            });
+
+            // If there are at least 2 models, select the 1st and 2nd by default
+            if (rawData.labels.length > 1) { selB.selectedIndex = 1; }
+        }
+
+        function initVersusCharts() {
+            const ctxMetrics = document.getElementById('vsMetricsChart').getContext('2d');
+            vsMetricsChart = new Chart(ctxMetrics, {
+                type: 'bar',
+                data: { labels: ['mAP@50', 'Precision', 'Recall'], datasets: [] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1.05 } } }
+            });
+
+            const ctxConf = document.getElementById('vsConfChart').getContext('2d');
+            vsConfChart = new Chart(ctxConf, {
+                type: 'bar',
+                data: { labels: ['Aciertos (TP Mean)', 'Fallos (FP Mean)'], datasets: [] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1.05 } } }
+            });
+
+            updateVersusCharts(); // Load initial data
+        }
+
+        function updateVersusCharts() {
+            const idxA = document.getElementById('modelA_select').value;
+            const idxB = document.getElementById('modelB_select').value;
+            const nameA = rawData.labels[idxA];
+            const nameB = rawData.labels[idxB];
+
+            // 1. Update Metrics Graph
+            vsMetricsChart.data.datasets = [
+                { label: nameA, data: [rawData.map50[idxA], rawData.precision[idxA], rawData.recall[idxA]], backgroundColor: '#3498db', borderRadius: 4 },
+                { label: nameB, data: [rawData.map50[idxB], rawData.precision[idxB], rawData.recall[idxB]], backgroundColor: '#e74c3c', borderRadius: 4 }
+            ];
+            vsMetricsChart.update();
+
+            // 2. Update Confidence Graph
+            vsConfChart.data.datasets = [
+                { label: nameA, data: [rawData.conf_tp[idxA], rawData.conf_fp[idxA]], backgroundColor: '#3498db', borderRadius: 4 },
+                { label: nameB, data: [rawData.conf_tp[idxB], rawData.conf_fp[idxB]], backgroundColor: '#e74c3c', borderRadius: 4 }
+            ];
+            vsConfChart.update();
+        }
+
+        // Standard tab logic
         function openTab(evt, tabName) {
             var i, tabcontent, tablinks;
             tabcontent = document.getElementsByClassName("tabcontent");
