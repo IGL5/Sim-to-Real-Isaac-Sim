@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{{ report_title }}</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
+
+    <style>
+        {% include 'styles.css' %}
+
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .compare-table th,
+        .compare-table td {
+            padding: 12px 15px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .compare-table th {
+            background-color: #34495e;
+            color: white;
+            font-weight: bold;
+            font-size: 1.1em;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .compare-table th:last-child {
+            border-right: none;
+        }
+
+        .compare-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .compare-table td {
+            border-right: 1px solid #eee;
+        }
+
+        .compare-table td:last-child {
+            border-right: none;
+        }
+
+        .compare-table td:first-child {
+            font-weight: bold;
+            text-align: left;
+            background-color: #ecf0f1;
+            color: #2c3e50;
+            border-right: 2px solid #bdc3c7;
+            width: 25%;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>{{ report_title }}</h1>
+    <p><strong>Date of Evaluation:</strong> {{ date }}</p>
+
+    <div class="tab">
+        <button class="tablinks active" onclick="openTab(event, 'Dashboard')">📊 Visual Dashboard</button>
+        <button class="tablinks" onclick="openTab(event, 'Matrix')">📋 Hyperparameter Matrix</button>
+    </div>
+
+    <div id="Dashboard" class="tabcontent" style="display:block;">
+        <div class="plot-grid">
+            <div class="card" style="border-left-color: #9b59b6;">
+                <h3>Detection Performance</h3>
+                <img src="plots/compare_metrics.png" alt="Detection Performance">
+            </div>
+            <div class="card" style="border-left-color: #f1c40f;">
+                <h3>AI Confidence (Confidence)</h3>
+                <img src="plots/compare_confidence.png" alt="AI Confidence (Confidence)">
+            </div>
+            <div class="card" style="border-left-color: #e74c3c;">
+                <h3>Synthetic Data Generation Cost</h3>
+                <img src="plots/compare_time.png" alt="Synthetic Data Generation Cost">
+            </div>
+        </div>
+    </div>
+
+    <div id="Matrix" class="tabcontent">
+        <table class="compare-table">
+            <thead>
+                <tr>
+                    <th>Metric / Attribute</th>
+                    {% for m in models %}
+                    <th>{{ m }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>mAP@50</td>
+                    {% for m in models %}
+                    <td style="font-size: 1.2em; font-weight: bold; color: #2980b9;">{{
+                        "%.3f"|format(data[m].audit.metrics.ap50) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td>F1-Score</td>
+                    {% for m in models %}
+                    <td>{{ "%.2f"|format(data[m].audit.metrics.f1) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td>Precision / Recall</td>
+                    {% for m in models %}
+                    <td>{{ "%.1f"|format(data[m].audit.metrics.precision * 100) }}% / {{
+                        "%.1f"|format(data[m].audit.metrics.recall * 100) }}%</td>
+                    {% endfor %}
+                </tr>
+
+                <tr>
+                    <td>Base Model (YOLO)</td>
+                    {% for m in models %}
+                    <td>{{ data[m].train.hyperparameters.model_base if data[m].train else 'N/A' }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td>Transfer Learning (Frozen Layers)</td>
+                    {% for m in models %}
+                    <td>
+                        {% if data[m].train and data[m].train.hyperparameters.freeze_layers > 0 %}
+                        <span style="color: #27ae60; font-weight:bold;">Yes ({{
+                            data[m].train.hyperparameters.freeze_layers }})</span>
+                        {% else %}
+                        <span style="color: #c0392b;">No (Full fine-tuning)</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td>Optimal Epoch / Requested Epochs</td>
+                    {% for m in models %}
+                    <td>
+                        {% if data[m].train %}
+                        <strong>{{ data[m].train.hyperparameters.best_epoch }}</strong> / {{
+                        data[m].train.hyperparameters.epochs_requested }}
+                        {% else %}
+                        N/A
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td>Data Augmentation: Mosaic</td>
+                    {% for m in models %}
+                    <td>{{ data[m].train.data_augmentation.mosaic if data[m].train and data[m].train.data_augmentation
+                        else 'N/A' }}</td>
+                    {% endfor %}
+                </tr>
+
+                <tr>
+                    <td>Training Hardware</td>
+                    {% for m in models %}
+                    <td style="font-size: 0.9em; color: #7f8c8d;">{{ data[m].train.hardware.device_name if data[m].train
+                        else 'N/A' }}</td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) { tabcontent[i].style.display = "none"; }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(" active", ""); }
+            document.getElementById(tabName).style.display = "block";
+            if (evt) { evt.currentTarget.className += " active"; }
+        }
+    </script>
+</body>
+
+</html>
