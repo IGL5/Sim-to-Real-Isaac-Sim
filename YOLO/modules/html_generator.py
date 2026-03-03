@@ -84,7 +84,7 @@ class HTMLReportGenerator:
 
     def generate_audit_html(self, output_path, experiment_name, metrics):
         template = self.env.get_template('audit_template.html')
-        context = self._get_common_context(experiment_name, "🔎 YOLO Audit Report")
+        context = self._get_common_context(experiment_name, "YOLO Audit Report")
         context["metrics"] = metrics
         
         html_content = template.render(context)
@@ -94,7 +94,7 @@ class HTMLReportGenerator:
 
     def generate_inference_html(self, output_path, experiment_name, stats, overlap_thresh):
         template = self.env.get_template('inference_template.html')
-        context = self._get_common_context(experiment_name, "🌍 Real Inference Report")
+        context = self._get_common_context(experiment_name, "Real Inference Report")
         context["stats"] = stats
         context["overlap_thresh"] = overlap_thresh
         

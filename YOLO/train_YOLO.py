@@ -33,7 +33,7 @@ DEFAULT_EPOCHS = 50
 IMG_SIZE = 640
 BATCH_SIZE = 16
 WORKERS = 4
-
+FREEZE_LAYERS = 10
 
 
 def check_gpu():
@@ -178,7 +178,7 @@ def main():
         save=True,                  # Save the best model
         exist_ok=True,              # If the experiment already exists, it will be overwritten.
         verbose=True,               # Show training progress
-        freeze=10                   # Freeze the first 10 layers
+        freeze=FREEZE_LAYERS        # Freeze the first 10 layers
     )
 
     print("\n--- Training completed ---")
@@ -223,6 +223,24 @@ def main():
         except Exception as e:
             print(f"⚠️ Could not read best.pt: {e}")
 
+    args_yaml_path = os.path.join(PROJECT_NAME, experiment_name, 'args.yaml')
+    aug_data = {}
+    if os.path.exists(args_yaml_path):
+        try:
+            with open(args_yaml_path, 'r', encoding='utf-8') as f:
+                yolo_args = yaml.safe_load(f)
+                aug_data = {
+                    "mosaic": yolo_args.get("mosaic", 1.0),
+                    "mixup": yolo_args.get("mixup", 0.0),
+                    "degrees": yolo_args.get("degrees", 0.0),
+                    "translate": yolo_args.get("translate", 0.1),
+                    "scale": yolo_args.get("scale", 0.5),
+                    "fliplr": yolo_args.get("fliplr", 0.5),
+                    "hsv_s": yolo_args.get("hsv_s", 0.7)
+                }
+        except Exception as e:
+            print(f"⚠️ Could not parse args.yaml: {e}")
+
     training_metadata = {
         "experiment_info": {
             "project_name": PROJECT_NAME,
@@ -241,10 +259,12 @@ def main():
             "epochs_run": epochs_run,
             "best_epoch": best_epoch,
             "patience": args.patience,
+            "freeze_layers": FREEZE_LAYERS,
             "img_size": IMG_SIZE,
             "batch_size": BATCH_SIZE,
             "workers": WORKERS
         },
+        "data_augmentation": aug_data,
         "metrics_test_set": {
             "mAP50_95": round(float(metrics.box.map), 4),
             "mAP50": round(float(metrics.box.map50), 4)

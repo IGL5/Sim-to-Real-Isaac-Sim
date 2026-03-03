@@ -258,6 +258,30 @@
                     <td>{{ train_meta.experiment_info.duration_formatted }}</td>
                 </tr>
                 <tr>
+                    <th>Transfer Learning</th>
+                    <td>
+                        {% if train_meta.hyperparameters.freeze_layers > 0 %}
+                            <span style="color: #27ae60;"><strong>Yes</strong> (Frozen layers: {{ train_meta.hyperparameters.freeze_layers }})</span>
+                        {% else %}
+                            <span style="color: #c0392b;"><strong>No</strong> (Full Fine-Tuning)</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>Data Augmentation (2D)</th>
+                    <td style="line-height: 2.2;">
+                        {% if train_meta.data_augmentation %}
+                            <span class="badge">Mosaic: {{ train_meta.data_augmentation.mosaic }}</span>
+                            <span class="badge">Mixup: {{ train_meta.data_augmentation.mixup }}</span>
+                            <span class="badge">Flip LR: {{ train_meta.data_augmentation.fliplr }}</span>
+                            <span class="badge">Scale: {{ train_meta.data_augmentation.scale }}</span>
+                            <span class="badge">Color HSV: {{ train_meta.data_augmentation.hsv_s }}</span>
+                        {% else %}
+                            <span style="color: #7f8c8d;">Data not found in args.yaml</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
                     <th>Epochs (Requested / Run)</th>
                     <td>{{ train_meta.hyperparameters.epochs_requested }} / {{ train_meta.hyperparameters.epochs_run
                         }}</td>
