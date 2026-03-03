@@ -85,7 +85,7 @@ def plot_comparison_bar(labels, data_lists, data_labels, output_path, title):
 def plot_simple_bar(labels, data, ylabel, output_path, title):
     """ Draws a simple bar chart """
     plt.figure(figsize=(max(6, len(labels)*2), 5))
-    sns.barplot(x=labels, y=data, palette="viridis")
+    sns.barplot(x=labels, y=data, hue=labels, palette="viridis", legend=False)
     plt.ylabel(ylabel)
     plt.title(title)
     plt.xticks(rotation=15, ha='right')

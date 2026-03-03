@@ -217,3 +217,4 @@ YOLO/dataset_yolo_output/
 YOLO/*_detector/
 YOLO/audit_report/
 YOLO/real_images/
+YOLO/comparison_report/

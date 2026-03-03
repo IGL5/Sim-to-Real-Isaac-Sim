@@ -1,12 +1,14 @@
 import os
 import glob
 import json
-import modules.core_visual_utils as cvu
+import sys
 
 try:
+    import modules.core_visual_utils as cvu
     from modules.comparison_reporter import ComparisonReporter
 except ImportError:
-    print("\n[WARNING] The module modules/comparison_reporter.py was not found.")
+    print("\n[ERROR] The module 'comparison_reporter.py' or 'core_visual_utils.py' was not found.\n")
+    sys.exit(1)
 
 PROJECT_DIR = cvu.PROJECT_DIR
 
@@ -150,8 +152,9 @@ def main():
         
     print("\n🎉 Selection completed successfully!")
     print("Summary of files ready to compare:")
+    shorten = lambda p: p[p.find("YOLO"):] if "YOLO" in p else p
     for m, path in final_audits_to_compare.items():
-        print(f"  - {m} -> {path}")
+        print(f"  - {m} -> {shorten(path['path'])}")
         
     print("\n🚀 Passing data to comparison engine...")
     

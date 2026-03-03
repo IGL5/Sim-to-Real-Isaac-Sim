@@ -2,7 +2,7 @@ import os
 import json
 from . import plot_generator
 from .html_generator import HTMLReportGenerator
-import core_visual_utils as cvu
+from . import core_visual_utils as cvu
 
 class ComparisonReporter:
     def __init__(self, models_dict):
