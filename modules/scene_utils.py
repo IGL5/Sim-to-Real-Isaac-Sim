@@ -279,6 +279,7 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
     """
     Master Orchestrator.
     Handles: Selection (Budget) -> Unique Assignment (Stack) -> Placement -> Cleanup.
+    Randomizes materials if needed.
     """
     # 1. Budget and Theoretical Selection
     budget = random.uniform(budget_range[0], budget_range[1])
