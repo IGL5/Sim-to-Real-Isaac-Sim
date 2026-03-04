@@ -24,7 +24,7 @@ from modules import scene_utils
 from modules import content
 
 # Increase subframes if shadows/ghosting appears of moving objects
-rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
+rep.settings.carb_settings("/omni/replicator/RTSubframes", config.RT_SUBFRAMES)
 
 def main():
     # --- 1. LOAD MAP & SKY ---
@@ -274,7 +274,7 @@ def main():
             track_empty_target_frames += 1
 
         # F. SHOOT
-        rep.orchestrator.step(delta_time=0.0, rt_subframes=64)
+        rep.orchestrator.step(delta_time=0.0, rt_subframes=config.RT_SUBFRAMES)
         rep.BackendDispatch.wait_until_done()
 
         # Calculate frame duration
@@ -314,7 +314,8 @@ def main():
             "width": config.CONFIG["width"],
             "height": config.CONFIG["height"],
             "renderer": config.CONFIG["renderer"],
-            "world_limits": config.WORLD_LIMITS
+            "world_limits": config.WORLD_LIMITS,
+            "rt_subframes": config.RT_SUBFRAMES
         },
         "performance": {
             "total_frames_requested": config.CONFIG["num_frames"],
