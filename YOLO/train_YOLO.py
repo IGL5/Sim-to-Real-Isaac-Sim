@@ -132,6 +132,7 @@ def main():
     # Options
     parser.add_argument('--epochs', type=int, default=None, help="Override number of epochs")
     parser.add_argument('--patience', type=int, default=15, help="Override patience")
+    parser.add_argument('--freeze', type=int, default=10, help="Override freeze layers")
     parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
@@ -151,6 +152,7 @@ def main():
 
     # Define epochs
     epochs_to_run = args.epochs if args.epochs else DEFAULT_EPOCHS
+    freeze_layers = args.freeze if args.freeze else FREEZE_LAYERS
 
     print(f"🚀 Starting training: {model_type} | Epochs: {epochs_to_run} | Exp: {experiment_name}")
 
@@ -179,7 +181,7 @@ def main():
         save=True,                  # Save the best model
         exist_ok=True,              # If the experiment already exists, it will be overwritten.
         verbose=True,               # Show training progress
-        freeze=FREEZE_LAYERS        # Freeze the first 10 layers
+        freeze=freeze_layers        # Freeze the first 10 layers
     )
 
     print("\n--- Training completed ---")
@@ -260,7 +262,7 @@ def main():
             "epochs_run": epochs_run,
             "best_epoch": best_epoch,
             "patience": args.patience,
-            "freeze_layers": FREEZE_LAYERS,
+            "freeze_layers": freeze_layers,
             "img_size": IMG_SIZE,
             "batch_size": BATCH_SIZE,
             "workers": WORKERS
