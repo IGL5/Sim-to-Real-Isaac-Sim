@@ -31,6 +31,7 @@ DEFAULT_MODEL = 'yolov8s.pt'
 
 # Training params
 DEFAULT_EPOCHS = 50
+DEFAULT_PATIENCE = 15
 IMG_SIZE = 640
 BATCH_SIZE = 16
 WORKERS = 4
@@ -150,9 +151,9 @@ def main():
     parser = argparse.ArgumentParser(description="YOLO Training Tool")
     
     # Options
-    parser.add_argument('--epochs', type=int, default=None, help="Override number of epochs")
-    parser.add_argument('--patience', type=int, default=15, help="Override patience")
-    parser.add_argument('--freeze', type=int, default=10, help="Override freeze layers")
+    parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS, help="Override number of epochs")
+    parser.add_argument('--patience', type=int, default=DEFAULT_PATIENCE, help="Override patience")
+    parser.add_argument('--freeze', type=int, default=FREEZE_LAYERS, help="Override freeze layers")
     parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
@@ -170,11 +171,7 @@ def main():
         model_type = DEFAULT_MODEL
         experiment_name = DEFAULT_EXP_NAME
 
-    # Define epochs
-    epochs_to_run = args.epochs if args.epochs else DEFAULT_EPOCHS
-    freeze_layers = args.freeze if args.freeze else FREEZE_LAYERS
-
-    print(f"🚀 Starting training: {model_type} | Epochs: {epochs_to_run} | Exp: {experiment_name}")
+    print(f"🚀 Starting training: {model_type} | Epochs: {args.epochs} | Exp: {experiment_name}")
 
     # 1. Create the treasure map (YAML)
     yaml_file = create_yaml_config()
@@ -190,7 +187,7 @@ def main():
     # 3. Train
     model.train(
         data=yaml_file,
-        epochs=epochs_to_run, 
+        epochs=args.epochs, 
         imgsz=IMG_SIZE,
         batch=BATCH_SIZE,
         workers=WORKERS,
@@ -201,7 +198,7 @@ def main():
         save=True,                  # Save the best model
         exist_ok=True,              # If the experiment already exists, it will be overwritten.
         verbose=True,               # Show training progress
-        freeze=freeze_layers        # Freeze the first 10 layers
+        freeze=args.freeze        # Freeze the first 10 layers
     )
 
     print("\n--- Training completed ---")
@@ -228,7 +225,7 @@ def main():
     duration_secs = end_time - start_time
     duration_formatted = time.strftime("%H:%M:%S", time.gmtime(duration_secs))
 
-    epochs_run = epochs_to_run
+    epochs_run = args.epochs
     best_epoch = -1
 
     results_csv_path = os.path.join(PROJECT_NAME, experiment_name, 'results.csv')
@@ -278,11 +275,11 @@ def main():
         },
         "hyperparameters": {
             "model_base": model_type,
-            "epochs_requested": epochs_to_run,
+            "epochs_requested": args.epochs,
             "epochs_run": epochs_run,
             "best_epoch": best_epoch,
             "patience": args.patience,
-            "freeze_layers": freeze_layers,
+            "freeze_layers": args.freeze,
             "img_size": IMG_SIZE,
             "batch_size": BATCH_SIZE,
             "workers": WORKERS
