@@ -28,7 +28,7 @@ MAP_NAME = "Environment_variable.usd"
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
 MATERIAL_SCALE_FLAT = (0.6, 1.0)
 MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
-RT_SUBFRAMES = 64
+RT_SUBFRAMES = 32
 
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 

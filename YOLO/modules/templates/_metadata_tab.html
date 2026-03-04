@@ -30,6 +30,7 @@
                 <div>
                     <span class="badge">Resolución: {{ latest_session.config.width }}x{{
                         latest_session.config.height }}</span>
+                    <span class="badge">Subframes: {{ latest_session.config.rt_subframes }}</span>
                     <span class="badge">Motor: {{ latest_session.config.renderer }}</span>
                     <span class="badge warning">⏱️ {{ latest_session.performance.average_time_per_frame_seconds }}
                         s/frame</span>
