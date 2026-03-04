@@ -44,11 +44,17 @@ class ComparisonReporter:
         chart_data = {
             "labels": labels,
             "map50": [],
+            "map50_95": [],
             "precision": [],
             "recall": [],
+            "f1": [],
             "conf_tp": [],
             "conf_fp": [],
-            "gen_time": []
+            "gen_time": [],
+            "fps": [],
+            "inf_time": [],
+            "nms_time": [],
+            "pre_time": []
         }
         
         for m in labels:
@@ -57,12 +63,20 @@ class ComparisonReporter:
             metrics = audit.get("metrics") or {}
             
             chart_data["map50"].append(metrics.get("ap50", 0))
+            chart_data["map50_95"].append(metrics.get("ap50_95", 0))
             chart_data["precision"].append(metrics.get("precision", 0))
             chart_data["recall"].append(metrics.get("recall", 0))
+            chart_data["f1"].append(metrics.get("f1", 0))
             
             conf_stats = metrics.get("confidence_stats") or {}
             chart_data["conf_tp"].append(conf_stats.get("True_Positives", {}).get("mean", 0))
             chart_data["conf_fp"].append(conf_stats.get("False_Positives", {}).get("mean", 0))
+
+            speed_stats = metrics.get("speed_stats") or {}
+            chart_data["fps"].append(speed_stats.get("fps", 0))
+            chart_data["inf_time"].append(speed_stats.get("inference_ms", 0))
+            chart_data["nms_time"].append(speed_stats.get("postprocess_ms", 0))
+            chart_data["pre_time"].append(speed_stats.get("preprocess_ms", 0))
             
             ds_meta = self.data[m].get("dataset") or {}
             t = 0.0
