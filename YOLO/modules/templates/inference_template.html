@@ -24,6 +24,11 @@
             <div>Total Suspicious Pairs (IoU > {{ overlap_thresh }})</div>
             <div class="metric alert-metric">{{ stats.total_overlaps }}</div>
         </div>
+        <div class="card" style="background-color: #ebf5fb; border-left-color: #2980b9;">
+            <div>Real-World Speed</div>
+            <div class="metric" style="color: #2980b9;">{{ "%.1f"|format(stats.speed_stats.fps) }} <span
+                    style="font-size: 0.5em;">FPS</span></div>
+        </div>
     </div>
     <div class="plot-grid">
         <div class="card">
@@ -62,6 +67,25 @@
                         x2="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
                         y2="{{ (stats.spatial_stats.center_of_mass_y * 100) + 5 }}" stroke="#c0392b" stroke-width="2" />
                 </svg>
+            </div>
+        </div>
+    </div>
+    <div class="card" style="margin-top:20px;">
+        <h3>⚡ Inference Performance (Real Hardware)</h3>
+        <div style="display: flex; justify-content: space-around; text-align: center;">
+            <div>
+                <span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Pure Inference</span>
+                <div style="font-size: 1.2em; font-weight: bold;">{{ stats.speed_stats.inference_ms }} ms</div>
+            </div>
+            <div>
+                <span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Non-Maximum
+                    Suppression</span>
+                <div style="font-size: 1.2em; font-weight: bold;">{{ stats.speed_stats.postprocess_ms }} ms</div>
+            </div>
+            <div>
+                <span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Total Latency</span>
+                <div style="font-size: 1.2em; font-weight: bold; color: #e67e22;">{{ stats.speed_stats.total_ms }} ms
+                </div>
             </div>
         </div>
     </div>

@@ -28,6 +28,11 @@
             <div>mAP@50-95</div>
             <div class="metric map-metric">{{ "%.3f"|format(metrics.map_50_95) }}</div>
         </div>
+        <div class="card" style="background-color: #f4fdf4; border-left-color: #27ae60;">
+            <div>Inference Speed</div>
+            <div class="metric" style="color: #27ae60;">{{ "%.1f"|format(metrics.speed_stats.fps) }} <span
+                    style="font-size: 0.5em;">FPS</span></div>
+        </div>
     </div>
     <div class="plot-grid">
         <div class="card">
@@ -59,6 +64,27 @@
             <tr>
                 <td>FP (Invented)</td>
                 <td>{{ metrics.fp }}</td>
+            </tr>
+        </table>
+    </div>
+    <div class="card" style="margin-top:20px;">
+        <h3>Numerical & Timing Detail</h3>
+        <table>
+            <tr style="border-top: 2px solid #eee;">
+                <td><strong>Latency: Pre-process</strong></td>
+                <td>{{ metrics.speed_stats.preprocess_ms }} ms</td>
+            </tr>
+            <tr>
+                <td><strong>Latency: Inference (NN)</strong></td>
+                <td style="color: #2980b9; font-weight: bold;">{{ metrics.speed_stats.inference_ms }} ms</td>
+            </tr>
+            <tr>
+                <td><strong>Latency: NMS (Post-process)</strong></td>
+                <td>{{ metrics.speed_stats.postprocess_ms }} ms</td>
+            </tr>
+            <tr style="background-color: #f9f9f9;">
+                <td><strong>Total Latency per Frame</strong></td>
+                <td><strong>{{ metrics.speed_stats.total_ms }} ms</strong></td>
             </tr>
         </table>
     </div>
