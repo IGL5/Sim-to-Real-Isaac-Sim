@@ -256,10 +256,30 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
     return valid_results
 
 
+def randomize_precalculated_shaders(stage, shader_paths):
+    """
+    Applies a random tint directly to pre-calculated shader paths.
+    """
+    if not shader_paths: return
+    
+    color_val = Gf.Vec3f(
+        random.uniform(0.05, 1.0),
+        random.uniform(0.05, 1.0),
+        random.uniform(0.05, 1.0)
+    )
+    
+    for spath in shader_paths:
+        shader_prim = stage.GetPrimAtPath(spath)
+        if shader_prim.IsValid():
+            shader = UsdShade.Shader(shader_prim)
+            shader.CreateInput("base_color_factor", Sdf.ValueTypeNames.Color3f).Set(color_val)
+
+
 def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[]):
     """
     Master Orchestrator.
     Handles: Selection (Budget) -> Unique Assignment (Stack) -> Placement -> Cleanup.
+    Randomizes materials if needed.
     """
     # 1. Budget and Theoretical Selection
     budget = random.uniform(budget_range[0], budget_range[1])
@@ -283,17 +303,19 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
     candidates_specs = []
     paths_candidates = []
     keys_candidates = []
+    shaders_candidates = []
     
     for key in chosen_keys:
         # Skip if no stock or pool is empty (Dynamic pruning)
         if not working_pools.get(key):
             continue
             
-        path = working_pools[key].pop()
+        obj_data = working_pools[key].pop()
         cfg = config_map[key]
         
         candidates_specs.append({'radius': cfg['radius'], 'wheelbase': cfg.get('wheelbase')})
-        paths_candidates.append(path)
+        paths_candidates.append(obj_data["path"])
+        shaders_candidates.append(obj_data["shaders"])
         keys_candidates.append(key)
         
     # 4. Calculate Poses (Mathematics)
@@ -306,7 +328,7 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
 
     for (pos, rot, original_idx) in results:
         path = paths_candidates[original_idx]
-        
+        shaders = shaders_candidates[original_idx]
         key = keys_candidates[original_idx]
         cfg = config_map[key]
         
@@ -314,14 +336,18 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         scale = random.uniform(s_min, s_max)
         
         update_prim_pose_and_visibility(stage, path, pos, rot, scale, visible=True)
+
+        if "randomize_materials" in cfg and cfg["randomize_materials"]:
+            randomize_precalculated_shaders(stage, shaders)
         
         # Register success
         new_obstacles.append( (pos[0], pos[1], cfg['radius']) )
         successfully_placed_paths.add(path)
         
     # 6. Clean up unused objects
-    for key, pool in pools_paths_map.items():
-        for path in pool:
+    for key, pool_list in pools_paths_map.items():
+        for obj_data in pool_list:
+            path = obj_data["path"]
             if path not in successfully_placed_paths:
                 update_prim_pose_and_visibility(stage, path, None, None, None, visible=False)
 
@@ -374,7 +400,7 @@ def validate_placement_config(config_map, budget_max, container_radius, context_
     and selection probabilities.
     
     Returns:
-        (is_safe, message): Boolean and string with the diagnosis.
+        (level, message): Level string and string with the diagnosis.
     """
     total_weight = 0
     weighted_area_sum = 0
@@ -423,13 +449,13 @@ def validate_placement_config(config_map, budget_max, container_radius, context_
            f"(Req: {required_area:.0f}m² / Disp: {available_area:.0f}m²)")
     
     if fill_ratio > 1.0:
-        return False, f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
+        return "red", f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
     elif fill_ratio > packing_limit_warn:
-        return False, f"🟠 {msg} -> CRITICAL (High probability of failure)"
+        return "orange", f"🟠 {msg} -> CRITICAL (High probability of failure)"
     elif fill_ratio > packing_limit_safe:
-        return True, f"🟡 {msg} -> DENSE (May have some warnings)"
+        return "yellow", f"🟡 {msg} -> DENSE (May have some warnings)"
     else:
-        return True, f"🟢 {msg} -> OK"
+        return "green", f"🟢 {msg} -> OK"
 
 
 def update_camera_pose(stage, cam_path, eye, target):

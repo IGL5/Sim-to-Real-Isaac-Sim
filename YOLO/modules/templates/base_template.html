@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{{ report_title }}</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚁</text></svg>">
+    <style>
+        {% include 'styles.css' %}
+    </style>
+</head>
+
+<body>
+    <h1>{{ report_title }} - {{ experiment_name }}</h1>
+    <p><strong>Evaluation Date:</strong> {{ date }}</p>
+
+    <div class="tab">
+        {% block tab_buttons %}{% endblock %}
+
+        <button class="tablinks" onclick="openTab(event, 'Metadata')">⚙️ Origin of Data (Sim-to-Real)</button>
+    </div>
+
+    {% block tab_contents %}{% endblock %}
+
+    {% include '_metadata_tab.html' %}
+
+    <script>
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) { tabcontent[i].style.display = "none"; }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) { tablinks[i].className = tablinks[i].className.replace(" active", ""); }
+            document.getElementById(tabName).style.display = "block";
+            if (evt) { evt.currentTarget.className += " active"; }
+        }
+        // Activate the first tab by default when loading (if it exists)
+        document.addEventListener("DOMContentLoaded", function () {
+            var firstTab = document.querySelector(".tablinks.active");
+            if (!firstTab) {
+                firstTab = document.querySelector(".tablinks");
+                if (firstTab) firstTab.click();
+            }
+        });
+    </script>
+</body>
+
+</html>

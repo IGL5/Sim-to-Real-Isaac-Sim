@@ -4,31 +4,34 @@ This directory contains the complete toolkit for processing synthetic data gener
 
 ## 📂 Directory Content
 
-- `dataset_manager.py`: ETL (Extract, Transform, Load). Converts labels from KITTI format to YOLO, manages folder structure (`train/val/test`), and allows adding data incrementally.
-
-- `clean_dataset.py`: Cleans the dataset by removing corrupted images.
-
-- `train_YOLO.py`: Training script. Automatically configures the environment for YOLOv8 and exports the final model to ONNX.
-
-- `visualize_results.py`: Audit and testing tool. Generates interactive HTML reports, confusion matrices, and prediction visualizations.
-
-- `report_utils.py`: Auxiliary library for mathematical calculations (IoU, metrics) and graph generation.
+```text
+.
+├── dataset_manager.py          # ETL: Converts KITTI to YOLO & handles data splits
+├── train_YOLO.py               # Training pipeline (Auto-exports to ONNX)
+├── visualize_results.py        # Auditing, inference testing, and reporting tool
+├── compare_models.py           # Interactive Model Benchmarking CLI
+├── classes.txt                 # Defines classes and dynamically sets the project name
+└── modules/                    # Core logic, math, and rendering utilities
+    ├── core_visual_utils.py    # Central config and shared CV functions
+    ├── html_generator.py       # Jinja2 HTML rendering engine
+    ├── plot_generator.py       # Matplotlib / Seaborn wrappers
+    ├── audit_reporter.py       # Logic for test set evaluation
+    ├── inference_reporter.py   # Logic for real-world unlabelled data
+    ├── comparison_reporter.py  # Data prep for Chart.js interactive dashboard
+    └── templates/              # HTML/CSS Jinja2 templates for the reports
+```
 
 ## ⚙️ Installation
 
 This pipeline requires specific Computer Vision and Data Science libraries. Install them with:
 
 ```bash
-pip install ultralytics opencv-python matplotlib seaborn pandas pyyaml
+pip install ultralytics opencv-python matplotlib seaborn pandas pyyaml jinja2
 ```
 
 Note: It is recommended to use a virtual environment or Conda to avoid interfering with the Isaac Sim environment if running on the same machine.
 
 ## 🚀 Workflow
-
-### Step 0: Clean Dataset (clean_dataset.py)
-
-This script automatically looks for data generated in the `../_output_data/` folder of the main repository and removes corrupted images.
 
 ### Step 1: Dataset Management (dataset_manager.py)
 
@@ -47,6 +50,8 @@ python dataset_manager.py
 ```bash
 python dataset_manager.py --append
 ```
+
+**Note:** It automatically compiles a master `dataset_metadata.json` tracking image splits (train/val/test) and merging session histories if using `--append`.
 
 ### Step 2: Training (train_YOLO.py)
 
@@ -78,6 +83,10 @@ python train_YOLO.py --patience 15
 python train_YOLO.py --select
 ```
 
+**💡 Pro Tip - Dynamic Project Naming:** The pipeline automatically reads the first line of your `classes.txt` to name your project folder. If your class is `bicycle`, it creates `bicycle_detector/`.
+
+**Note:** Upon completion, it automatically creates a `metadata/` folder inside the experiment's directory. This acts as an MLOps vault, saving `training_metadata.json` (hyperparameters, hardware, best epoch, duration) and taking a persistent snapshot of `dataset_metadata.json` so you always know exactly what data this specific model was trained on, even if you generate new data later.
+
 ### Step 3: Audit and Visualization (visualize_results.py)
 
 Once the model is trained, use this tool to understand what is happening.
@@ -86,13 +95,13 @@ Once the model is trained, use this tool to understand what is happening.
 
 Analyzes images from the test set (which have real labels) and compares them with the AI's prediction.
 
-- **See only errors:** Generates separate folders for False Negatives (missed) and False Positives (invented).
+- **See only errors:** Generates separate folders for False Negatives (missed, `audit_missed_FN`), False Positives (invented, `audit_invented_FP`), and Poor Bounding Boxes (`audit_poor_bbox`).
 
 ```bash
 python visualize_results.py
 ```
 
-- **See all (Full Report):** Generates images with Green boxes (Ground Truth) and Blue boxes (AI + Confidence). Creates an HTML report with a heatmap and metrics.
+- **See all (Full Report):** Generates images with Green boxes (Ground Truth) and Blue boxes (AI + Confidence). Creates a complete HTML report (`report.html`) with heatmaps, PR Curves, metrics, etc.
 
 ```bash
 python visualize_results.py --draw_all
@@ -100,11 +109,25 @@ python visualize_results.py --draw_all
 
 #### 🌍 **Inference Mode (Real World)**
 
-Test your model with new photos that do not have labels (e.g., real camera photos).
+Test your model with new photos that do not have labels (e.g., real camera photos). Evaluates inference confidence, detects bounding box overlaps, and generates an `inference_report.html`.
 
 ```bash
 python visualize_results.py --source /path/to/my/real_photos
 ```
+
+#### 💾 **Persistent Saving (Experiment Tracking)**
+
+By default, all reports and plots are generated in a temporary `audit_report/` folder that gets overwritten next time you run a test. To permanently save an evaluation (HTML, JSON metrics, and plots) as an immutable record:
+
+```bash
+# For audit
+python visualize_results.py --draw_all --save
+
+# For real inference
+python visualize_results.py --source /path/to/my/real_photos --save
+```
+
+This creates an `evaluations/iter_xxx_audit/` (or `evaluations/iter_xxx_inference`) folder directly inside your model's directory, preserving its entire "medical history" for future comparison.
 
 #### 🎥 **Video Mode**
 
@@ -114,12 +137,33 @@ Processes an MP4 video and generates an output video with detections.
 python visualize_results.py --video assets/test_video.mp4
 ```
 
-## 📊 The HTML Report (audit_report/)
+### Step 4: Model Benchmarking (compare_models.py)
 
-If you run the audit mode, an `audit_report` folder will be generated. Open the `report.html` file in your browser to see:
+Once you have trained and audited multiple models (saving their `iter_xxx_audit` states), you can compare them side-by-side to track improvements and spot model drift.
 
-- **Precision/Recall/F1:** Industrial quality metrics.
+```bash
+python compare_models.py
+```
 
-- **Heatmap:** Does your model detect only in the center of the image or does it cover the edges well?
+This interactive CLI tool will automatically scan your project directory, find all valid evaluations, and ask you which iterations you want to compare. It then generates a fully interactive JavaScript dashboard.
 
-- **Confidence Histogram:** Is the model too confident in its errors?
+## 📊 The Interactive HTML Reports
+
+Our visualization pipeline now uses a template-based architecture (Jinja2) to generate interactive, tabbed HTML reports that unify data from the Isaac Sim generation, the YOLO training, and the final inference.
+
+### Audit Report (`audit_report/report.html`)
+- **Tab 1: Performance:** Precision, Recall, F1-Score, mAP metrics, Confusion Matrix, and PR Curves.
+- **Tab 2: Spatial Analysis:** Confidence distribution histograms and detection Heatmaps.
+- **Tab 3: Sim-to-Real Metadata:** Traceability of the dataset (generation cost, object density per frame, materials used) and the YOLO training hyperparameters and times.
+
+### Inference Report (`audit_report/inference_report.html`)
+Evaluates the AI's behavior on real, unlabeled images.
+- **Tab 1: Real World Inference:** Overall crowdness, spatial distribution heatmaps, and confidence evaluation.
+- **Tab 2: Overlap Analysis:** Gallery of suspicious overlapping bounding boxes (IoU > threshold) to detect potential duplication issues or confused predictions.
+- **Tab 3: Sim-to-Real Metadata:** Same as the audit report, maintaining context of the model's origins.
+
+### Comparison Report (`comparison_report/comparison_report.html`)
+An advanced, interactive frontend dashboard powered by **Chart.js** to benchmark multiple models simultaneously.
+- **Tab 1: General Trend:** Interactive line charts to track mAP, Precision, Recall, and generation time across sequential experiments. Click on legends to isolate metrics.
+- **Tab 2: 1vs1 Comparison:** Select any two specific model iterations from dropdown menus to instantly generate comparative grouped bar charts.
+- **Tab 3: Hyperparameter Matrix:** A data table cross-referencing all extraction metadata (Transfer Learning layers, Data Augmentation applied, Training hardware) against the final detection metrics.

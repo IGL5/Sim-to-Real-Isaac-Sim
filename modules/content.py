@@ -55,7 +55,12 @@ def load_pbr_materials(stage):
         return []
 
     material_folders = [f.path for f in os.scandir(config.TEXTURES_ROOT_DIR) if f.is_dir()]
-    print(f"\n--- Found {len(material_folders)} texture folders ---")
+
+    material_folders.sort()
+    limit = min(max(config.MAX_PBR_MATERIALS, len(config.ENVIRONMENT_LOOKUP_KEYS)), len(material_folders))
+    material_folders = material_folders[:limit]
+
+    print(f"\n--- Found {len(material_folders)} texture folders (Limit: {limit}) ---")
     
     # 1. ROBUST CREATION
     for i, folder_path in enumerate(material_folders):
@@ -194,12 +199,14 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             # Apply changes to the shader attributes
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
-            shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
-            shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.7, 1.0))
-            shader.CreateInput("specular_level", Sdf.ValueTypeNames.Float).Set(random.uniform(0.1, 0.3))
+            
+            if config.RANDOMIZE_TERRAIN:
+                shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
+                shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.7, 1.0))
+                shader.CreateInput("specular_level", Sdf.ValueTypeNames.Float).Set(random.uniform(0.1, 0.3))
 
-            normal_strength = random.uniform(1.5, 2.5) 
-            shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
+                normal_strength = random.uniform(1.0, 2.0) 
+                shader.CreateInput("bump_factor", Sdf.ValueTypeNames.Float).Set(normal_strength)
 
         # --- BIND ---
         for path in paths:
@@ -227,8 +234,12 @@ def discover_hdr_maps(directory):
     # Search for valid file extensions
     supported_extensions = ('.hdr', '.exr')
     files = [f for f in os.listdir(directory) if f.lower().endswith(supported_extensions)]
+
+    files.sort()
+    limit = min(max(config.MAX_HDR_MAPS, 1), len(files))
+    files = files[:limit]
     
-    print(f"\n--- Found {len(files)} HDR maps in local folder ---")
+    print(f"\n--- Found {len(files)} HDR maps in local folder (Limit: {limit}) ---")
         
     return files
 
@@ -317,7 +328,8 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
             continue
             
         target_pool_size = cfg["pool_size"]
-        created_paths = []
+        created_objects = [] 
+        target_mat_names = cfg.get("randomize_materials", [])
         
         # Fill list to meet pool size
         assets_to_use = []
@@ -357,10 +369,77 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                 
                 # Hide
                 UsdGeom.Imageable(prim).MakeInvisible()
-                created_paths.append(found_path)
+
+                shader_paths = []
+                if not target_mat_names:
+                    return shader_paths
+                    
+                root_prim = stage.GetPrimAtPath(found_path)
+                if not root_prim.IsValid():
+                    return shader_paths
+
+                for p in Usd.PrimRange(root_prim):
+                    if not p.IsA(UsdShade.Material):
+                        continue
+                        
+                    mat_name = p.GetName().lower()
+                    if not any(target.lower() in mat_name for target in target_mat_names):
+                        continue
+                        
+                    for child in p.GetChildren():
+                        if child.IsA(UsdShade.Shader) and "Tex" not in child.GetName():
+                            shader_paths.append(str(child.GetPath()))
+
+                # Save info
+                created_objects.append({
+                    "path": found_path,
+                    "shaders": shader_paths
+                })
             else:
                 print(f"[ERROR] Path not found for {prim_name}")
 
-        pools_paths[category] = created_paths
+        pools_paths[category] = created_objects
         
     return pools_paths
+
+
+def calc_theoretical_distribution():
+    dist_dict = {}
+    
+    # Objectives
+    obj_budget_max = config.OBJECTS_BUDGET_RANGE[1]
+    active_objs = {k: v for k, v in config.OBJECTS_CONFIG.items() if v.get('active', True)}
+    total_obj_weight = sum(v.get('selection_weight', 1) for v in active_objs.values())
+    
+    for k, v in active_objs.items():
+        if total_obj_weight > 0:
+            prob = v.get('selection_weight', 1) / total_obj_weight
+            avg_cost = v.get('cost_units', 1.0)
+            # Max objects = (Total budget * % of being selected) / Cost of object
+            expected_count = (obj_budget_max * prob) / avg_cost if avg_cost > 0 else 0
+            dist_dict[k] = {"type": "detectable", "expected_max_count": expected_count}
+            
+    # Distractors
+    dist_budget_max = config.DISTRACTOR_BUDGET_RANGE[1]
+    active_dists = {k: v for k, v in config.DISTRACTOR_CONFIG.items() if v.get('active', True)}
+    total_dist_weight = sum(v.get('selection_weight', 1) for v in active_dists.values())
+    
+    for k, v in active_dists.items():
+        if total_dist_weight > 0:
+            prob = v.get('selection_weight', 1) / total_dist_weight
+            avg_cost = v.get('cost_units', 1.0)
+            expected_count = (dist_budget_max * prob) / avg_cost if avg_cost > 0 else 0
+            dist_dict[k] = {"type": "distractor", "expected_max_count": expected_count}
+            
+    # Normalize to percentages (0-100%)
+    total_expected = sum(item["expected_max_count"] for item in dist_dict.values())
+    for k in dist_dict:
+        if total_expected > 0:
+            dist_dict[k]["percentage"] = round((dist_dict[k]["expected_max_count"] / total_expected) * 100, 2)
+        else:
+            dist_dict[k]["percentage"] = 0.0
+        
+        # Round max count for JSON
+        dist_dict[k]["expected_max_count"] = round(dist_dict[k]["expected_max_count"], 1)
+            
+    return dist_dict

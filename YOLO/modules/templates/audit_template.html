@@ -1,0 +1,112 @@
+{% extends "base_template.html" %}
+
+{% block tab_buttons %}
+<button class="tablinks active" onclick="openTab(event, 'Performance')">🎯 Current Performance</button>
+<button class="tablinks" onclick="openTab(event, 'Analysis')">📊 Spatial Analysis</button>
+{% endblock %}
+
+{% block tab_contents %}
+<div id="Performance" class="tabcontent" style="display:block;">
+    <div class="container">
+        <div class="card">
+            <div>Precision</div>
+            <div class="metric">{{ "%.2f"|format(metrics.precision * 100) }}%</div>
+        </div>
+        <div class="card">
+            <div>Recall</div>
+            <div class="metric">{{ "%.2f"|format(metrics.recall * 100) }}%</div>
+        </div>
+        <div class="card">
+            <div>F1-Score</div>
+            <div class="metric">{{ "%.2f"|format(metrics.f1) }}</div>
+        </div>
+        <div class="card">
+            <div>mAP@50 (Audit)</div>
+            <div class="metric map-metric">{{ "%.3f"|format(metrics.ap50) }}</div>
+        </div>
+        <div class="card">
+            <div>mAP@50-95</div>
+            <div class="metric map-metric">{{ "%.3f"|format(metrics.map_50_95) }}</div>
+        </div>
+    </div>
+    <div class="plot-grid">
+        <div class="card">
+            <h3>Confusion Matrix</h3><img src="plots/confusion_matrix.png">
+        </div>
+        <div class="card">
+            <h3>Precision-Recall Curve</h3><img src="plots/pr_curve.png">
+        </div>
+    </div>
+    <div class="card" style="margin-top:20px;">
+        <h3>Numerical Detail</h3>
+        <table>
+            <tr>
+                <td>Total Real (GT)</td>
+                <td>{{ metrics.total_real }}</td>
+            </tr>
+            <tr>
+                <td>Total Predicted</td>
+                <td>{{ metrics.total_pred }}</td>
+            </tr>
+            <tr>
+                <td>TP (Hits)</td>
+                <td>{{ metrics.tp }}</td>
+            </tr>
+            <tr>
+                <td>FN (Missed)</td>
+                <td>{{ metrics.fn }}</td>
+            </tr>
+            <tr>
+                <td>FP (Invented)</td>
+                <td>{{ metrics.fp }}</td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div id="Analysis" class="tabcontent">
+    <div class="plot-grid">
+        <div class="card">
+            <h3>Confidence Distribution</h3>
+            <p style="font-size:0.9em; color:#666; margin-top: 0;">
+                <span style="color: #27ae60;"><strong>Hits (TP)</strong></span> -> Mean: {{
+                "%.2f"|format(metrics.confidence_stats.True_Positives.mean) }} | Std: {{
+                "%.2f"|format(metrics.confidence_stats.True_Positives.std) }}<br>
+                <span style="color: #c0392b;"><strong>Misses (FP)</strong></span> -> Mean: {{
+                "%.2f"|format(metrics.confidence_stats.False_Positives.mean) }} | Std: {{
+                "%.2f"|format(metrics.confidence_stats.False_Positives.std) }}
+            </p>
+            <img src="plots/confidence_dist.png" style="margin-top: 10px;">
+        </div>
+        <div class="card">
+            <h3>Heatmap of Detections</h3><img src="plots/heatmap.png">
+        </div>
+        <div class="card">
+            <h3>Positional Bias</h3>
+            <p style="font-size:0.9em; color:#666;">Based on Center of Mass and Dispersión (Predictions)</p>
+            <div style="text-align: center;">
+                <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
+                    viewBox="0 0 100 100">
+                    <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
+
+                    <ellipse cx="{{ metrics.spatial_stats.center_of_mass_x * 100 }}"
+                        cy="{{ metrics.spatial_stats.center_of_mass_y * 100 }}"
+                        rx="{{ metrics.spatial_stats.dispersion_x * 100 }}"
+                        ry="{{ metrics.spatial_stats.dispersion_y * 100 }}" fill="#e74c3c" opacity="0.4" />
+
+                    <line x1="{{ (metrics.spatial_stats.center_of_mass_x * 100) - 5 }}"
+                        y1="{{ metrics.spatial_stats.center_of_mass_y * 100 }}"
+                        x2="{{ (metrics.spatial_stats.center_of_mass_x * 100) + 5 }}"
+                        y2="{{ metrics.spatial_stats.center_of_mass_y * 100 }}" stroke="#c0392b" stroke-width="2" />
+                    <line x1="{{ metrics.spatial_stats.center_of_mass_x * 100 }}"
+                        y1="{{ (metrics.spatial_stats.center_of_mass_y * 100) - 5 }}"
+                        x2="{{ metrics.spatial_stats.center_of_mass_x * 100 }}"
+                        y2="{{ (metrics.spatial_stats.center_of_mass_y * 100) + 5 }}" stroke="#c0392b"
+                        stroke-width="2" />
+                </svg>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

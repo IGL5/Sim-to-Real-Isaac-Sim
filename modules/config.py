@@ -3,7 +3,7 @@ import argparse
 
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", type=bool, default=False, help="Launch script headless, default is False")
-parser.add_argument("--height", type=int, default=816, help="Height of image") # 544
+parser.add_argument("--height", type=int, default=810, help="Height of image") # 540
 parser.add_argument("--width", type=int, default=1440, help="Width of image") # 960
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
 parser.add_argument("--distractors", type=str, default="None",
@@ -26,8 +26,9 @@ CONFIG = {"renderer": "PathTracing", "headless": args.headless,
 # GENERAL CONSTANTS
 MAP_NAME = "Environment_variable.usd"
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
-MATERIAL_SCALE_FLAT = (0.4, 0.8)
-MATERIAL_SCALE_MOUNTAIN = (0.03, 0.05)
+MATERIAL_SCALE_FLAT = (0.6, 1.0)
+MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
+RT_SUBFRAMES = 32
 
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
 
@@ -41,7 +42,7 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (0.5, 7.0)
+OBJECTS_BUDGET_RANGE = (2.0, 2.0) # (0.5, 7.0)
 OBJECTS_MAX_RADIUS = 3.0
 
 # DISTRACTOR BUDGET
@@ -57,17 +58,24 @@ ENVIRONMENT_LOOKUP_KEYS = [
     # "Lake"
 ]
 
+# --- DOMAIN RANDOMIZATION LIMITS ---
+MAX_PBR_MATERIALS = 2
+MAX_HDR_MAPS = 1
+RANDOMIZE_SKY = False
+RANDOMIZE_TERRAIN = False
+
 # ASSET POOLS
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "bicycle": {
-        "active": True,
-        "pool_size": 15,
-        "radius": 0.8,              # Radius of safety (bicycle + person)
-        "cost_units": 2.0,          # High cost (main character)
-        "selection_weight": 100,    # Always want to appear if there's space
-        "wheelbase": 0.6,           # For incline calculation (None if not applicable)
-        "scale_range": (1.0, 1.0)   # Fixed scale for rigorous datasets
+        "active": True,                     # Enable this object type
+        "pool_size": 1,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        # "randomize_materials": ["frame"]    # List of prim names to randomize materials
     },
 }
 
@@ -75,39 +83,39 @@ OBJECTS_CONFIG = {
 # Keys must match folder names in assets/objects/distractors/
 DISTRACTOR_CONFIG = {
     "vegetation": {
-        "active": True,
+        "active": False,
         "pool_size": 25,
         "spawn_radius": (5.0, 25.0),
-        "radius": 0.5,          # Physical radius (m)
-        "cost_units": 2.0,      # Cost units (large)
-        "selection_weight": 50, # Medium Frecuency 
+        "radius": 0.5,
+        "cost_units": 2.0,
+        "selection_weight": 50,
         "scale_range": (0.7, 1.5)
     },
     "trees": {
-        "active": True,
+        "active": False,
         "pool_size": 20,
         "spawn_radius": (5.0, 25.0),
-        "radius": 2.0,          # Physical radius (m)
-        "cost_units": 5.0,      # Cost units (large)
-        "selection_weight": 20, # Medium Frecuency 
+        "radius": 2.0,
+        "cost_units": 5.0,
+        "selection_weight": 20,
         "scale_range": (0.6, 1.2)
     },
     "debris": {
-        "active": True,
-        "pool_size": 50, # Increase pool for variety
+        "active": False,
+        "pool_size": 50,
         "spawn_radius": (2.0, 15.0),
-        "radius": 0.5,          # Physical radius (m)
-        "cost_units": 0.5,      # Cost units (small)
-        "selection_weight": 50, # High Frecuency 
+        "radius": 0.5,
+        "cost_units": 0.5,
+        "selection_weight": 50,
         "scale_range": (0.3, 1.0)
     },
     "manmade": {
-        "active": True,
+        "active": False,
         "pool_size": 30,
         "spawn_radius": (10.0, 40.0),
         "radius": 1.0,
         "cost_units": 2.0,
-        "selection_weight": 20, # Low Frecuency 
+        "selection_weight": 20,
         "scale_range": (0.8, 1.2)
     }
 }

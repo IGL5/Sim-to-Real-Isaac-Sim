@@ -4,6 +4,8 @@ import math
 import time
 import carb
 import traceback
+import json
+from datetime import datetime
 
 # --- MODULES ---
 from modules import config
@@ -22,7 +24,7 @@ from modules import scene_utils
 from modules import content
 
 # Increase subframes if shadows/ghosting appears of moving objects
-rep.settings.carb_settings("/omni/replicator/RTSubframes", 64)
+rep.settings.carb_settings("/omni/replicator/RTSubframes", config.RT_SUBFRAMES)
 
 def main():
     # --- 1. LOAD MAP & SKY ---
@@ -60,7 +62,7 @@ def main():
             light_path = os.path.join(config.HDR_MAPS_DIR, config.AVAILABLE_HDRS[0])
             dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(light_path))
             # High intensity to compete with the sun
-            dome_light.CreateIntensityAttr().Set(2000.0)
+            dome_light.CreateIntensityAttr().Set(600.0)
     else:
         print("[WARN] SkyDome not found in USD. Background might be black.")
 
@@ -71,7 +73,7 @@ def main():
     if sun_prim.IsValid():
         print("   -> Found Sun_Light. Randomizing time of day...")
         sun_light = UsdLux.DistantLight(sun_prim)
-        sun_light.CreateIntensityAttr().Set(2500.0)
+        sun_light.CreateIntensityAttr().Set(1100.0)
         
         # Random rotation (Simulate time of day and direction)
         xform = UsdGeom.Xformable(sun_prim)
@@ -146,7 +148,7 @@ def main():
     print("\n--- Configuration Safety Check ---")
     
     # Check Objects
-    ok_obj, msg_obj = scene_utils.validate_placement_config(
+    level_obj, msg_obj = scene_utils.validate_placement_config(
         config.OBJECTS_CONFIG, 
         config.OBJECTS_BUDGET_RANGE[1], # Use max of range
         config.OBJECTS_MAX_RADIUS, 
@@ -155,7 +157,7 @@ def main():
     print(msg_obj)
     
     # Check Distractors
-    ok_dist, msg_dist = scene_utils.validate_placement_config(
+    level_dist, msg_dist = scene_utils.validate_placement_config(
         config.DISTRACTOR_CONFIG, 
         config.DISTRACTOR_BUDGET_RANGE[1], 
         config.DISTRACTOR_MAX_RADIUS, 
@@ -163,9 +165,13 @@ def main():
     )
     print(msg_dist)
     
-    if not ok_obj or not ok_dist:
+    if level_obj == "red" or level_dist == "red":
+        print("\n🛑 CRITICAL ERROR: Impossible density detected. Increase MAX_RADIUS or decrease BUDGET.")
+        input("ℹ️ Press Enter to continue anyway or Ctrl+C to cancel...")
+    elif level_obj == "orange" or level_dist == "orange":
         print("\n⚠️  WARNING: High density detected! Consider increasing MAX_RADIUS or decreasing BUDGET.")
-        input("Press Enter to continue anyway...")
+        print("⏳ Continuing in 10 seconds... (Press Ctrl+C to cancel)")
+        time.sleep(10)
 
     # --- 7. MAIN LOOP ---
     print(f"\nStarting generation of {config.CONFIG['num_frames']} frames...")
@@ -177,6 +183,10 @@ def main():
     # Timer global
     total_start_time = time.time()
     frame_start_time = time.time()
+
+    track_total_detectables = 0
+    track_total_distractors = 0
+    track_empty_target_frames = 0
     
     while frames_generated < config.CONFIG["num_frames"] and attempts < max_attempts:
 
@@ -190,17 +200,17 @@ def main():
         content.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
 
         # Randomize sky
-        if config.AVAILABLE_HDRS and dome_prim.IsValid():
+        if config.AVAILABLE_HDRS and dome_prim.IsValid() and config.RANDOMIZE_SKY:
             hdr_name = random.choice(config.AVAILABLE_HDRS)
             light_path = os.path.join(config.HDR_MAPS_DIR, hdr_name)
             
             hdr_intensity = random.uniform(config.HDR_INTENSITY_RANGE[0] * 1000, 
-                                         config.HDR_INTENSITY_RANGE[1] * 1000)
-            
+                                        config.HDR_INTENSITY_RANGE[1] * 1000)
+        
             content.setup_dome_light(stage, dome_light_path, light_path, hdr_intensity)
 
         # Randomize sun
-        if sun_prim.IsValid():
+        if config.RANDOMIZE_SKY and sun_prim.IsValid():
             elevation = random.uniform(15, 80)
             azimuth = random.uniform(0, 360)
             
@@ -246,7 +256,7 @@ def main():
         # E. POSITION DISTRACTORS (Rocks, Vegetation...)
         all_obstacles = detectables_obstacles 
 
-        scene_utils.place_objects_from_config(
+        distractor_obstacles = scene_utils.place_objects_from_config(
             stage=stage,
             target_pos=current_target,
             config_map=config.DISTRACTOR_CONFIG,
@@ -256,12 +266,15 @@ def main():
             previous_obstacles=all_obstacles
         )
 
-        # F. SHOOT
-        simulation_app.update()
-        simulation_app.update()
-        simulation_app.update()
+        num_detectables = len(detectables_obstacles)
+        track_total_detectables += num_detectables
+        track_total_distractors += len(distractor_obstacles)
+        
+        if num_detectables == 0:
+            track_empty_target_frames += 1
 
-        rep.orchestrator.step(delta_time=0.0, rt_subframes=64)
+        # F. SHOOT
+        rep.orchestrator.step(delta_time=0.0, rt_subframes=config.RT_SUBFRAMES)
         rep.BackendDispatch.wait_until_done()
 
         # Calculate frame duration
@@ -279,6 +292,72 @@ def main():
     print("Finalizing writes...")
     rep.BackendDispatch.wait_until_done()
     simulation_app.update()
+
+    # --- 8. METADATA EXPORTATION ---
+    elapsed_total_seconds = time.time() - total_start_time
+    
+    safe_frames = frames_generated if frames_generated > 0 else 1
+
+    obj_mat_randomized = []
+    for k, v in config.OBJECTS_CONFIG.items():
+        if v.get('active', True) and v.get('randomize_materials'):
+            obj_mat_randomized.extend(v['randomize_materials'])
+
+    dist_mat_randomized = []
+    for k, v in config.DISTRACTOR_CONFIG.items():
+        if v.get('active', True) and v.get('randomize_materials'):
+            dist_mat_randomized.extend(v['randomize_materials'])
+    
+    metadata = {
+        "generation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "config": {
+            "width": config.CONFIG["width"],
+            "height": config.CONFIG["height"],
+            "renderer": config.CONFIG["renderer"],
+            "world_limits": config.WORLD_LIMITS,
+            "rt_subframes": config.RT_SUBFRAMES
+        },
+        "performance": {
+            "total_frames_requested": config.CONFIG["num_frames"],
+            "total_frames_generated": frames_generated,
+            "total_attempts": attempts,
+            "generation_efficiency_percent": round((frames_generated / attempts) * 100, 2) if attempts > 0 else 0,
+            "total_time_seconds": round(elapsed_total_seconds, 2),
+            "average_time_per_frame_seconds": round(elapsed_total_seconds / safe_frames, 2)
+        },
+        "content_density": {
+            "average_detectables_per_frame": round(track_total_detectables / safe_frames, 2),
+            "average_distractors_per_frame": round(track_total_distractors / safe_frames, 2),
+            "empty_target_frames": track_empty_target_frames,
+            "total_detectables_spawned": track_total_detectables
+        },
+        "domain_randomization": {
+            "sky_active": config.RANDOMIZE_SKY,
+            "terrain_active": config.RANDOMIZE_TERRAIN,
+            "hdr_intensity_range": config.HDR_INTENSITY_RANGE,
+            "hdr_maps_available": len(config.AVAILABLE_HDRS),
+            "pbr_materials_loaded": len(loaded_materials),
+            "object_materials_randomized": list(set(obj_mat_randomized)),
+            "distractor_materials_randomized": list(set(dist_mat_randomized))
+        },
+        "spatial_coverage": {
+            "camera_distance_range": config.CAMERA_DISTANCE_RANGE,
+            "camera_height_range": config.CAMERA_HEIGHT_RANGE,
+            "objects_max_radius": config.OBJECTS_MAX_RADIUS,
+            "distractor_max_radius": config.DISTRACTOR_MAX_RADIUS
+        },
+        "theoretical_distribution": content.calc_theoretical_distribution()
+    }
+
+    # Create the metadata file and save it
+    metadata_path = os.path.join(config.args.data_dir, "generation_metadata.json")
+    os.makedirs(config.args.data_dir, exist_ok=True)
+    
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=4)
+        
+    print(f"📊 Metadata exported successfully to: {metadata_path}")
+
 
 if __name__ == "__main__":
     try:
