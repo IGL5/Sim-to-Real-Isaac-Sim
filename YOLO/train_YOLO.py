@@ -89,16 +89,35 @@ def interactive_selection():
     print("\n--- 🎛️ INTERACTIVE CONFIGURATION ---")
     
     # 1. Select YOLO version
-    version_input = input("Use YOLOv8 or YOLO11? [8/11] (default 8): ").strip()
-    if version_input == "11":
+    print("Available YOLO Architectures:")
+    print("  [8]  YOLOv8  (Classic baseline)")
+    print("  [9]  YOLOv9  (High precision / PGI)")
+    print("  [10] YOLOv10 (NMS-free, ultra-low latency)")
+    print("  [11] YOLO11  (Stable SOTA, highest efficiency)")
+    print("  [26] YOLO26  (Bleeding-edge 2026 release)")
+    version_input = input("Select version [8/9/10/11/26] (default 8): ").strip()
+
+    if version_input == "26":
+        ver_prefix = "yolo26"
+    elif version_input == "11":
         ver_prefix = "yolo11"
-        print("   -> Selected: YOLO11")
+    elif version_input == "10":
+        ver_prefix = "yolov10"
+    elif version_input == "9":
+        ver_prefix = "yolov9"
     else:
         ver_prefix = "yolov8"
-        print("   -> Selected: YOLOv8 (Default)")
+        version_input = "8"
+
+    print(f"   -> Selected: {ver_prefix.upper()}")
 
     # 2. Select model size
+    print("\nModel Sizes:")
+    print("  [n] Nano   (Fastest, lowest accuracy)")
+    print("  [s] Small  (Balanced - RECOMMENDED)")
+    print("  [m] Medium (Slower, higher accuracy)")
     size_input = input("Model Size? [n/s/m] (default s): ").strip().lower()
+    
     if size_input == 'n':
         size_suffix = 'n'
         print("   -> Selected: Nano")
@@ -107,12 +126,13 @@ def interactive_selection():
         print("   -> Selected: Medium")
     else:
         size_suffix = 's'
-        print("   -> Selected: Small (Default)")
+        print("   -> Selected: Small")
 
     model_to_use = f"{ver_prefix}{size_suffix}.pt"
 
     # 3. Select experiment name
     default_name = f"{ver_prefix}_{size_suffix}_custom"
+    print("\nExperiment Naming:")
     name_input = input(f"Experiment Name? (default '{default_name}'): ").strip()
     
     if name_input:

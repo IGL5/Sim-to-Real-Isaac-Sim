@@ -19,23 +19,56 @@ except ImportError:
 
 def select_model_path():
     """
-    Interactively selects the model path.
+    Interactively selects the model path checking for available models.
     """
     print("\n--- 🤖 MODEL SELECTION ---")
     
-    # Check if project dir exists
+    # Check if project directory exists
     if not os.path.exists(cvu.PROJECT_DIR):
-        print(f"⚠️ Warning: Project directory '{cvu.PROJECT_DIR}' not found.")
-        print("   (Maybe you haven't trained any model yet?)")
-    
-    user_input = input(f"Enter experiment name (default: '{cvu.DEFAULT_EXP_NAME}'): ").strip()
-    
-    exp_name = user_input if user_input else cvu.DEFAULT_EXP_NAME
-    
-    # Construct path: project/exp_name/weights/best.pt
+        print(f"❌ ERROR: Project directory '{cvu.PROJECT_DIR}' not found.")
+        print("   (You need to train a model first using train_YOLO.py)")
+        sys.exit(1)
+        
+    # Loop through the project directory to find models with weights
+    available_models = []
+    for d in os.listdir(cvu.PROJECT_DIR):
+        model_dir = os.path.join(cvu.PROJECT_DIR, d)
+        if os.path.isdir(model_dir):
+            weights_path = os.path.join(model_dir, "weights", "best.pt")
+            if os.path.exists(weights_path):
+                available_models.append(d)
+                
+    if not available_models:
+        print(f"❌ ERROR: No trained models found in '{cvu.PROJECT_DIR}'.")
+        print("   (Folders exist, but none contain 'weights/best.pt')")
+        sys.exit(1)
+        
+    print("📂 Available trained models:")
+    for i, m in enumerate(available_models):
+        print(f"  [{i+1}] {m}")
+        
+    while True:
+        user_input = input(f"\nSelect a model [1-{len(available_models)}] (default: 1): ").strip()
+        
+        if not user_input:
+            exp_name = available_models[0]
+            break
+        
+        if user_input.isdigit():
+            idx = int(user_input) - 1
+            if 0 <= idx < len(available_models):
+                exp_name = available_models[idx]
+                break
+            else:
+                print(f"  ⚠️  Number out of range. Please choose between 1 and {len(available_models)}.")
+        else:
+            if user_input in available_models:
+                exp_name = user_input
+                break
+            print("  ⚠️  Invalid input. Please enter a valid number.")
+            
     path = os.path.join(cvu.PROJECT_DIR, exp_name, "weights", "best.pt")
-    
-    print(f"-> Selected model: {path}\n")
+    print(f"✅ Selected model: {exp_name}\n")
     return path
 
 
