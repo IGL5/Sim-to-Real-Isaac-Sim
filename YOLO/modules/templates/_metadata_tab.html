@@ -300,6 +300,10 @@
                     <th>mAP@50 (Test Training)</th>
                     <td>{{ train_meta.metrics_test_set.mAP50 }}</td>
                 </tr>
+                <tr>
+                    <th>mAP@50-95 (Test Training)</th>
+                    <td>{{ train_meta.metrics_test_set.mAP50_95 }}</td>
+                </tr>
             </table>
             {% else %}
             <p>⚠️ No training_metadata.json found</p>
