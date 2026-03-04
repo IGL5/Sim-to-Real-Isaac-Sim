@@ -3,6 +3,13 @@ import yaml
 from ultralytics import YOLO
 import torch
 import argparse
+import time
+import json
+import platform
+from datetime import datetime
+import pandas as pd
+import shutil
+import modules.core_visual_utils as cvu
 
 # DEFAULT CONFIGURATION
 DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
@@ -13,7 +20,7 @@ TEST_REL  = "images/test"
 
 TRAIN_LABELS = "labels"
 
-PROJECT_NAME = "cyclist_detector"
+PROJECT_NAME = cvu.PROJECT_NAME
 DEFAULT_EXP_NAME = "yolov8_s_default"
 
 # Model type
@@ -27,7 +34,7 @@ DEFAULT_EPOCHS = 50
 IMG_SIZE = 640
 BATCH_SIZE = 16
 WORKERS = 4
-
+FREEZE_LAYERS = 10
 
 
 def check_gpu():
@@ -35,11 +42,13 @@ def check_gpu():
     Checks if a GPU is available and returns the device.
     """
     if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
         print(f"✅ GPU detected: {torch.cuda.get_device_name(0)}")
-        return 0 # Uses GPU 0
+        return 0, gpu_name # Uses GPU 0
     else:
+        cpu_name = platform.processor() or "CPU"
         print("⚠️ GPU not detected. CPU will be used (it will be slower).")
-        return 'cpu'
+        return 'cpu', cpu_name
 
 
 def create_yaml_config():
@@ -52,15 +61,16 @@ def create_yaml_config():
     if not os.path.exists(abs_path):
         raise FileNotFoundError(f"Dataset not found in: {abs_path}. Has the script 1 been executed?")
 
+    # Read classes from file
+    with open("classes.txt", "r") as f:
+        class_names = [line.strip() for line in f.readlines() if line.strip()]
+
     config = {
         'path': abs_path,
         'train': TRAIN_IMGS,
         'val': VAL_IMGS,
         'test': TEST_REL,
-
-        'names': {
-            0: 'bicycle'  # Class name
-        }
+        'names': {i: name for i, name in enumerate(class_names)}
     }
 
     yaml_path = os.path.join(abs_path, 'dataset_config.yaml')
@@ -125,7 +135,10 @@ def main():
     parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
-    device = check_gpu()
+    start_time = time.time()
+    start_date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    device, device_name = check_gpu()
 
     # Model selection logic
     model_type = None
@@ -166,7 +179,7 @@ def main():
         save=True,                  # Save the best model
         exist_ok=True,              # If the experiment already exists, it will be overwritten.
         verbose=True,               # Show training progress
-        freeze=10                   # Freeze the first 10 layers
+        freeze=FREEZE_LAYERS        # Freeze the first 10 layers
     )
 
     print("\n--- Training completed ---")
@@ -182,10 +195,100 @@ def main():
     # 5. Export to ONNX (Ideal para Isaac Sim / ROS / TensorRT)
     try:
         print("\n📦 Exporting to ONNX...")
-        path = model.export(format="onnx", dynamic=True)
-        print(f"✅ Model exported for deployment: {path}")
+        onnx_path = model.export(format="onnx", dynamic=True)
+        print(f"✅ Model exported for deployment: {onnx_path}")
     except Exception as e:
         print(f"⚠️ Export to ONNX failed (non-critical): {e}")
+
+    # 6. Compile metadata
+    print("\n📝 Compiling training metadata...")
+    end_time = time.time()
+    duration_secs = end_time - start_time
+    duration_formatted = time.strftime("%H:%M:%S", time.gmtime(duration_secs))
+
+    epochs_run = epochs_to_run
+    best_epoch = -1
+
+    results_csv_path = os.path.join(PROJECT_NAME, experiment_name, 'results.csv')
+    if os.path.exists(results_csv_path):
+        try:
+            df = pd.read_csv(results_csv_path)
+            epochs_run = len(df)
+        except Exception as e:
+            print(f"⚠️ Could not read results.csv: {e}")
+
+    if os.path.exists(best_weight):
+        try:
+            ckpt = torch.load(best_weight, map_location='cpu', weights_only=False)
+            best_epoch = ckpt.get('epoch', -1) + 1 
+        except Exception as e:
+            print(f"⚠️ Could not read best.pt: {e}")
+
+    args_yaml_path = os.path.join(PROJECT_NAME, experiment_name, 'args.yaml')
+    aug_data = {}
+    if os.path.exists(args_yaml_path):
+        try:
+            with open(args_yaml_path, 'r', encoding='utf-8') as f:
+                yolo_args = yaml.safe_load(f)
+                aug_data = {
+                    "mosaic": yolo_args.get("mosaic", 1.0),
+                    "mixup": yolo_args.get("mixup", 0.0),
+                    "degrees": yolo_args.get("degrees", 0.0),
+                    "translate": yolo_args.get("translate", 0.1),
+                    "scale": yolo_args.get("scale", 0.5),
+                    "fliplr": yolo_args.get("fliplr", 0.5),
+                    "hsv_s": yolo_args.get("hsv_s", 0.7)
+                }
+        except Exception as e:
+            print(f"⚠️ Could not parse args.yaml: {e}")
+
+    training_metadata = {
+        "experiment_info": {
+            "project_name": PROJECT_NAME,
+            "experiment_name": experiment_name,
+            "start_date": start_date_str,
+            "duration_seconds": round(duration_secs, 2),
+            "duration_formatted": duration_formatted
+        },
+        "hardware": {
+            "device": "GPU" if device == 0 else "CPU",
+            "device_name": device_name
+        },
+        "hyperparameters": {
+            "model_base": model_type,
+            "epochs_requested": epochs_to_run,
+            "epochs_run": epochs_run,
+            "best_epoch": best_epoch,
+            "patience": args.patience,
+            "freeze_layers": FREEZE_LAYERS,
+            "img_size": IMG_SIZE,
+            "batch_size": BATCH_SIZE,
+            "workers": WORKERS
+        },
+        "data_augmentation": aug_data,
+        "metrics_test_set": {
+            "mAP50_95": round(float(metrics.box.map), 4),
+            "mAP50": round(float(metrics.box.map50), 4)
+        },
+        "artifacts": {
+            "best_weights": best_weight,
+            "onnx_model": onnx_path
+        }
+    }
+
+    # Save metadata
+    metadata_dir = os.path.join(PROJECT_NAME, experiment_name, 'metadata')
+    os.makedirs(metadata_dir, exist_ok=True)
+    metadata_path = os.path.join(metadata_dir, 'training_metadata.json')
+
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(training_metadata, f, indent=4)
+
+    dataset_meta_src = os.path.join(DATASET_ROOT, 'dataset_metadata.json')
+    if os.path.exists(dataset_meta_src):
+        shutil.copy2(dataset_meta_src, os.path.join(metadata_dir, 'dataset_metadata.json'))
+
+    print(f"💾 Training and Dataset metadata saved at: {metadata_path}")
 
 
 if __name__ == '__main__':

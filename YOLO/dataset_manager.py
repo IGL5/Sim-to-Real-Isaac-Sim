@@ -3,7 +3,8 @@ import cv2
 import shutil
 import random
 import argparse
-import time
+import json
+import numpy as np
 from datetime import datetime
 
 # --- CONFIG ---
@@ -16,7 +17,8 @@ IMAGES_DIR = os.path.join(os.getcwd(), "..", "_output_data", "DroneCamera", "rgb
 BASE_OUTPUT = os.path.join(os.getcwd(), "dataset_yolo_output")
 
 # Classes to detect
-CLASES = ["bicycle"]
+with open("classes.txt", "r") as f:
+    CLASES = [line.strip() for line in f.readlines() if line.strip()]
 
 # Split ratios
 TRAIN_RATIO = 0.7
@@ -69,21 +71,22 @@ def process_pair(filename_base, subset_name, unique_prefix):
             break
     
     if img_path is None:
-        return False 
+        return False, 0, []
 
     # Read dimensions
     img = cv2.imread(img_path)
     if img is None:
-        return False
+        return False, 0, []
     height, width, _ = img.shape
 
     # 2. Process KITTI label
     kitti_path = os.path.join(LABELS_KITTI, filename_base + ".txt")
     yolo_lines = []
+    bboxes_stats = []
     
     # If the label file doesn't exist (sometimes Isaac generates the image but fails the txt), skip it
     if not os.path.exists(kitti_path):
-        return False
+        return False, 0, []
 
     with open(kitti_path, 'r') as f:
         lines = f.readlines()
@@ -103,6 +106,18 @@ def process_pair(filename_base, subset_name, unique_prefix):
             
             bbox = change_coordinates((width, height), (xmin, xmax, ymin, ymax))
             yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
+
+            w, h = bbox[2], bbox[3]
+            area = w * h
+            aspect_ratio = w / h if h > 0 else 0
+            
+            bboxes_stats.append({
+                "area": area,
+                "ar": aspect_ratio,
+                "cx": bbox[0],
+                "cy": bbox[1]
+            })
+
         except (ValueError, IndexError):
             continue
 
@@ -121,7 +136,51 @@ def process_pair(filename_base, subset_name, unique_prefix):
         if yolo_lines:
             f_out.write('\n'.join(yolo_lines))
             
-    return True
+    return True, len(yolo_lines), bboxes_stats
+
+def process_subset(file_list, subset_name, batch_prefix):
+    count_imgs = 0
+    count_objs = 0
+    count_bgs = 0
+    
+    # Lists for EDA
+    all_areas, all_ars, all_cx, all_cy = [], [], [], []
+    
+    for fname in file_list:
+        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix)
+        if success:
+            count_imgs += 1
+            count_objs += num_objects
+            if num_objects == 0:
+                count_bgs += 1
+            
+            # Get metrics from each object
+            for stat in bbox_stats:
+                all_areas.append(stat["area"])
+                all_ars.append(stat["ar"])
+                all_cx.append(stat["cx"])
+                all_cy.append(stat["cy"])
+    
+    def get_stats(arr):
+        if not arr: return {"mean": 0.0, "std": 0.0}
+        return {
+            "mean": round(float(np.mean(arr)), 4),
+            "std": round(float(np.std(arr)), 4)
+        }
+        
+    eda_stats = {
+        "bbox_area": get_stats(all_areas),
+        "aspect_ratio": get_stats(all_ars),
+        "center_x": get_stats(all_cx),
+        "center_y": get_stats(all_cy)
+    }
+                
+    return {
+        "images": count_imgs, 
+        "objects": count_objs, 
+        "backgrounds": count_bgs,
+        "eda": eda_stats
+    }
 
 def main():
     parser = argparse.ArgumentParser(description="Dataset manager from KITTI to YOLO")
@@ -169,26 +228,73 @@ def main():
     print("-" * 40)
 
     # 5. Process passing the prefix
-    def process_subset(file_list, subset_name):
-        count = 0
-        for fname in file_list:
-            if process_pair(fname, subset_name, batch_prefix):
-                count += 1
-        return count
-
     print("🚀 Processing Train...")
-    c_train = process_subset(train_files, 'train')
+    train_stats = process_subset(train_files, 'train', batch_prefix)
     
     print("🚀 Processing Val...")
-    c_val = process_subset(val_files, 'val')
+    val_stats = process_subset(val_files, 'val', batch_prefix)
     
     print("🚀 Processing Test...")
-    c_test = process_subset(test_files, 'test')
+    test_stats = process_subset(test_files, 'test', batch_prefix)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
-    print(f"New files added: {c_train + c_val + c_test}")
+    total_added_imgs = train_stats["images"] + val_stats["images"] + test_stats["images"]
+    print(f"New files added: {total_added_imgs}")
     print(f"Dataset located in: {BASE_OUTPUT}")
+
+    # 6. Process JSON
+    source_meta_path = os.path.join(os.getcwd(), "..", "_output_data", "generation_metadata.json")
+    batch_meta = {"batch_id": batch_prefix} # Fallback if it doesn't exist
+    
+    if os.path.exists(source_meta_path):
+        with open(source_meta_path, 'r', encoding='utf-8') as f:
+            batch_meta.update(json.load(f))
+            
+    # Add the split data to the batch
+    batch_meta["yolo_split"] = {
+        "train": train_stats,
+        "val": val_stats,
+        "test": test_stats,
+        "total_added": total_added_imgs
+    }
+
+    master_meta_path = os.path.join(BASE_OUTPUT, "dataset_metadata.json")
+    master_meta = {
+        "global_totals": {
+            "train": {"images": 0, "objects": 0, "backgrounds": 0},
+            "val": {"images": 0, "objects": 0, "backgrounds": 0},
+            "test": {"images": 0, "objects": 0, "backgrounds": 0},
+            "total_images": 0,
+            "total_objects": 0,
+            "total_backgrounds": 0
+        },
+        "sessions": []
+    }
+
+    # If append mode
+    if args.append and os.path.exists(master_meta_path):
+        with open(master_meta_path, 'r', encoding='utf-8') as f:
+            loaded_meta = json.load(f)
+            if isinstance(loaded_meta.get("global_totals", {}).get("train"), dict):
+                master_meta = loaded_meta
+
+    master_meta["sessions"].append(batch_meta)
+    
+    for split, stats in [("train", train_stats), ("val", val_stats), ("test", test_stats)]:
+        master_meta["global_totals"][split]["images"] += stats["images"]
+        master_meta["global_totals"][split]["objects"] += stats["objects"]
+        master_meta["global_totals"][split]["backgrounds"] += stats["backgrounds"]
+        
+        master_meta["global_totals"]["total_images"] += stats["images"]
+        master_meta["global_totals"]["total_objects"] += stats["objects"]
+        master_meta["global_totals"]["total_backgrounds"] += stats["backgrounds"]
+
+    # Save Master Metadata
+    with open(master_meta_path, 'w', encoding='utf-8') as f:
+        json.dump(master_meta, f, indent=4)
+        
+    print(f"🧠 Master Metadata saved/updated in: {master_meta_path}")
 
 
 if __name__ == "__main__":

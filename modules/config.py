@@ -3,7 +3,7 @@ import argparse
 
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", type=bool, default=False, help="Launch script headless, default is False")
-parser.add_argument("--height", type=int, default=816, help="Height of image") # 544
+parser.add_argument("--height", type=int, default=810, help="Height of image") # 540
 parser.add_argument("--width", type=int, default=1440, help="Width of image") # 960
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
 parser.add_argument("--distractors", type=str, default="None",
@@ -41,7 +41,7 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (0.5, 7.0)
+OBJECTS_BUDGET_RANGE = (2.0, 2.0) # (0.5, 7.0)
 OBJECTS_MAX_RADIUS = 3.0
 
 # DISTRACTOR BUDGET
@@ -57,18 +57,24 @@ ENVIRONMENT_LOOKUP_KEYS = [
     # "Lake"
 ]
 
+# --- DOMAIN RANDOMIZATION LIMITS ---
+MAX_PBR_MATERIALS = 2
+MAX_HDR_MAPS = 1
+RANDOMIZE_SKY = False
+RANDOMIZE_TERRAIN = False
+
 # ASSET POOLS
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "bicycle": {
         "active": True,                     # Enable this object type
-        "pool_size": 15,                    # Number of bicycles in the pool
+        "pool_size": 1,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "cost_units": 2.0,                  # High cost (main character)
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
-        "randomize_materials": ["frame"]    # List of prim names to randomize materials
+        # "randomize_materials": ["frame"]    # List of prim names to randomize materials
     },
 }
 
@@ -76,7 +82,7 @@ OBJECTS_CONFIG = {
 # Keys must match folder names in assets/objects/distractors/
 DISTRACTOR_CONFIG = {
     "vegetation": {
-        "active": True,
+        "active": False,
         "pool_size": 25,
         "spawn_radius": (5.0, 25.0),
         "radius": 0.5,
@@ -85,7 +91,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.7, 1.5)
     },
     "trees": {
-        "active": True,
+        "active": False,
         "pool_size": 20,
         "spawn_radius": (5.0, 25.0),
         "radius": 2.0,
@@ -94,7 +100,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.6, 1.2)
     },
     "debris": {
-        "active": True,
+        "active": False,
         "pool_size": 50,
         "spawn_radius": (2.0, 15.0),
         "radius": 0.5,
@@ -103,7 +109,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.3, 1.0)
     },
     "manmade": {
-        "active": True,
+        "active": False,
         "pool_size": 30,
         "spawn_radius": (10.0, 40.0),
         "radius": 1.0,

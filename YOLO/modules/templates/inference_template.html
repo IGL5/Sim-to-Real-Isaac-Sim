@@ -1,0 +1,86 @@
+{% extends "base_template.html" %}
+
+{% block tab_buttons %}
+<button class="tablinks active" onclick="openTab(event, 'Inference')">🌍 Real Inference</button>
+<button class="tablinks" onclick="openTab(event, 'Overlaps')">⚠️ Suspicious Overlaps</button>
+{% endblock %}
+
+{% block tab_contents %}
+<div id="Inference" class="tabcontent" style="display:block;">
+    <div class="container">
+        <div class="card">
+            <div>Images Processed</div>
+            <div class="metric">{{ stats.total_images }}</div>
+        </div>
+        <div class="card">
+            <div>Total Detections</div>
+            <div class="metric">{{ stats.total_detections }}</div>
+        </div>
+        <div class="card">
+            <div>Crowdness (Avg/Img)</div>
+            <div class="metric">{{ "%.2f"|format(stats.avg_detections) }}</div>
+        </div>
+        <div class="card" style="background-color: #fdedec;">
+            <div>Total Suspicious Pairs (IoU > {{ overlap_thresh }})</div>
+            <div class="metric alert-metric">{{ stats.total_overlaps }}</div>
+        </div>
+    </div>
+    <div class="plot-grid">
+        <div class="card">
+            <h3>Confidence Distribution</h3>
+            <p style="font-size:0.9em; color:#666; margin-top: 0;">
+                <span style="color: #2980b9;"><strong>Predictions</strong></span> -> Mean: {{
+                "%.2f"|format(stats.confidence_stats.mean) }} | Std: {{ "%.2f"|format(stats.confidence_stats.std) }}
+            </p>
+            <img src="plots/inference_conf_dist.png" style="margin-top: 10px;">
+        </div>
+        <div class="card">
+            <h3>Spatial Distribution (Heatmap)</h3>
+            <p style="font-size:0.9em; color:#666;">Normalized to 1x1 frame regardless of resolution.</p>
+            <img src="plots/inference_heatmap.png">
+        </div>
+        <div class="card">
+            <h3>Positional Bias</h3>
+            <p style="font-size:0.9em; color:#666;">Based on Center of Mass and Dispersion (Predictions)</p>
+            <div style="text-align: center;">
+                <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
+                    viewBox="0 0 100 100">
+                    <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
+
+                    <ellipse cx="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                        cy="{{ stats.spatial_stats.center_of_mass_y * 100 }}"
+                        rx="{{ stats.spatial_stats.dispersion_x * 100 }}"
+                        ry="{{ stats.spatial_stats.dispersion_y * 100 }}" fill="#e74c3c" opacity="0.4" />
+
+                    <line x1="{{ (stats.spatial_stats.center_of_mass_x * 100) - 5 }}"
+                        y1="{{ stats.spatial_stats.center_of_mass_y * 100 }}"
+                        x2="{{ (stats.spatial_stats.center_of_mass_x * 100) + 5 }}"
+                        y2="{{ stats.spatial_stats.center_of_mass_y * 100 }}" stroke="#c0392b" stroke-width="2" />
+                    <line x1="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                        y1="{{ (stats.spatial_stats.center_of_mass_y * 100) - 5 }}"
+                        x2="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                        y2="{{ (stats.spatial_stats.center_of_mass_y * 100) + 5 }}" stroke="#c0392b" stroke-width="2" />
+                </svg>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="Overlaps" class="tabcontent">
+    <h2>Suspicious Overlaps Evidence</h2>
+    <div class="plot-grid">
+        {% if not stats.overlap_events %}
+        <p>✅ No suspicious overlaps detected above threshold.</p>
+        {% else %}
+        {% for event in stats.overlap_events %}
+        <div class="card" style="border-left-color: #e74c3c;">
+            <p><strong>Source:</strong> {{ event.orig_filename }}</p>
+            <p>Found <strong>{{ event.count }}</strong> risk pair(s)</p>
+            <img src="plots/suspicious_overlaps_imgs/{{ event.evidence_filename }}" alt="Overlap Evidence">
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
