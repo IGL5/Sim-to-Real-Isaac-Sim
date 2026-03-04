@@ -371,24 +371,21 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                 UsdGeom.Imageable(prim).MakeInvisible()
 
                 shader_paths = []
-                if not target_mat_names:
-                    return shader_paths
+                if target_mat_names:
+                    root_prim = stage.GetPrimAtPath(found_path)
                     
-                root_prim = stage.GetPrimAtPath(found_path)
-                if not root_prim.IsValid():
-                    return shader_paths
-
-                for p in Usd.PrimRange(root_prim):
-                    if not p.IsA(UsdShade.Material):
-                        continue
-                        
-                    mat_name = p.GetName().lower()
-                    if not any(target.lower() in mat_name for target in target_mat_names):
-                        continue
-                        
-                    for child in p.GetChildren():
-                        if child.IsA(UsdShade.Shader) and "Tex" not in child.GetName():
-                            shader_paths.append(str(child.GetPath()))
+                    if root_prim.IsValid():
+                        for p in Usd.PrimRange(root_prim):
+                            if not p.IsA(UsdShade.Material):
+                                continue
+                                
+                            mat_name = p.GetName().lower()
+                            if not any(target.lower() in mat_name for target in target_mat_names):
+                                continue
+                                
+                            for child in p.GetChildren():
+                                if child.IsA(UsdShade.Shader) and "Tex" not in child.GetName():
+                                    shader_paths.append(str(child.GetPath()))
 
                 # Save info
                 created_objects.append({
