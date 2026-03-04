@@ -132,6 +132,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False):
 
         # Inference
         results = model.predict(source=img, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
+        speed_dict = results.speed
         
         pred_boxes = []
         confidences = []
@@ -141,7 +142,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False):
             confidences.append(float(box.conf))
 
         # Statistics
-        img_stats = reporter.update(pred_boxes, gt_boxes, confidences, (h, w))
+        img_stats = reporter.update(pred_boxes, gt_boxes, confidences, (h, w), speed_dict)
 
         # Save and Organization Logic
         if i < cvu.LIMIT_IMAGES:
@@ -228,6 +229,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False):
 
             # Run YOLO inference
             res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
+            speed_dict = res.speed
             
             pred_boxes = []
             confidences = []
@@ -237,7 +239,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False):
                 confidences.append(float(box.conf))
                 
             # Analyze predictions for overlapping boxes (potential double detections)
-            problematic_pairs = reporter.update(pred_boxes, confidences, (h, w), filename)
+            problematic_pairs = reporter.update(pred_boxes, confidences, (h, w), filename, speed_dict)
             
             # Save visual evidence if overlaps are found
             if problematic_pairs:

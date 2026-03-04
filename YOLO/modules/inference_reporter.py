@@ -20,14 +20,20 @@ class InferenceReportGenerator:
             "total_detections": 0,
             "confidences": [],
             "bbox_centers_norm": [],
-            "overlap_events": []
+            "overlap_events": [],
+            "speeds": {"preprocess": [], "inference": [], "postprocess": []}
         }
 
-    def update(self, pred_boxes, confidences, img_shape, filename):
+    def update(self, pred_boxes, confidences, img_shape, filename, speed_dict=None):
         h, w = img_shape
         self.stats["total_images"] += 1
         self.stats["total_detections"] += len(pred_boxes)
         self.stats["confidences"].extend(confidences)
+        
+        if speed_dict:
+            self.stats["speeds"]["preprocess"].append(speed_dict.get('preprocess', 0))
+            self.stats["speeds"]["inference"].append(speed_dict.get('inference', 0))
+            self.stats["speeds"]["postprocess"].append(speed_dict.get('postprocess', 0))
         
         # Centers for the Heatmap
         for box in pred_boxes:
@@ -89,6 +95,20 @@ class InferenceReportGenerator:
 
         stats_dict["confidence_stats"] = cvu.calculate_1d_stats(self.stats["confidences"])
         stats_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers_norm"])
+
+        avg_pre = np.mean(self.stats["speeds"]["preprocess"]) if self.stats["speeds"]["preprocess"] else 0
+        avg_inf = np.mean(self.stats["speeds"]["inference"]) if self.stats["speeds"]["inference"] else 0
+        avg_post = np.mean(self.stats["speeds"]["postprocess"]) if self.stats["speeds"]["postprocess"] else 0
+        total_ms = avg_pre + avg_inf + avg_post
+        fps = 1000 / total_ms if total_ms > 0 else 0
+
+        stats_dict["speed_stats"] = {
+            "preprocess_ms": round(avg_pre, 2),
+            "inference_ms": round(avg_inf, 2),
+            "postprocess_ms": round(avg_post, 2),
+            "total_ms": round(total_ms, 2),
+            "fps": round(fps, 2)
+        }
 
         # 3. Save inference metadata to JSON
         inference_metadata = {

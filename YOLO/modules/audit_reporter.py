@@ -17,12 +17,13 @@ class ReportGenerator:
             "confidences_FP": [],
             "bbox_centers": [],     # For the heatmap
             "total_gt": 0,          # Total ground truth objects
-            "all_predictions": []   # We save (confidence, best_iou) for PR curve
+            "all_predictions": [],  # We save (confidence, best_iou) for PR curve
+            "speeds": {"preprocess": [], "inference": [], "postprocess": []}
         }
         self.plots_dir = os.path.join(output_dir, "plots")
         os.makedirs(self.plots_dir, exist_ok=True)
 
-    def update(self, pred_boxes, gt_boxes, confidences, img_shape):
+    def update(self, pred_boxes, gt_boxes, confidences, img_shape, speed_dict=None):
         """
         Receive the boxes of ONE image, calculate matchings and update statistics.
         """
@@ -31,6 +32,11 @@ class ReportGenerator:
         matched_gt = set()
         self.stats["total_gt"] += len(gt_boxes)
         img_stats = {"TP": 0, "FP": 0, "FN": 0, "poor_bbox": 0}
+
+        if speed_dict:
+            self.stats["speeds"]["preprocess"].append(speed_dict.get('preprocess', 0))
+            self.stats["speeds"]["inference"].append(speed_dict.get('inference', 0))
+            self.stats["speeds"]["postprocess"].append(speed_dict.get('postprocess', 0))
         
         # Save centers for Heatmap
         for box in pred_boxes:
@@ -186,6 +192,20 @@ class ReportGenerator:
             "False_Positives": cvu.calculate_1d_stats(self.stats["confidences_FP"])
         }
         metrics_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers"])
+
+        avg_pre = np.mean(self.stats["speeds"]["preprocess"]) if self.stats["speeds"]["preprocess"] else 0
+        avg_inf = np.mean(self.stats["speeds"]["inference"]) if self.stats["speeds"]["inference"] else 0
+        avg_post = np.mean(self.stats["speeds"]["postprocess"]) if self.stats["speeds"]["postprocess"] else 0
+        total_ms = avg_pre + avg_inf + avg_post
+        fps = 1000 / total_ms if total_ms > 0 else 0
+
+        metrics_dict["speed_stats"] = {
+            "preprocess_ms": round(avg_pre, 2),
+            "inference_ms": round(avg_inf, 2),
+            "postprocess_ms": round(avg_post, 2),
+            "total_ms": round(total_ms, 2),
+            "fps": round(fps, 2)
+        }
 
         # 3. Save audit metadata to JSON
         audit_metadata = {
