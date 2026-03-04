@@ -261,9 +261,10 @@
                     <th>Transfer Learning</th>
                     <td>
                         {% if train_meta.hyperparameters.freeze_layers > 0 %}
-                            <span style="color: #27ae60;"><strong>Yes</strong> (Frozen layers: {{ train_meta.hyperparameters.freeze_layers }})</span>
+                        <span style="color: #27ae60;"><strong>Yes</strong> (Frozen layers: {{
+                            train_meta.hyperparameters.freeze_layers }})</span>
                         {% else %}
-                            <span style="color: #c0392b;"><strong>No</strong> (Full Fine-Tuning)</span>
+                        <span style="color: #c0392b;"><strong>No</strong> (Full Fine-Tuning)</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -271,13 +272,13 @@
                     <th>Data Augmentation (2D)</th>
                     <td style="line-height: 2.2;">
                         {% if train_meta.data_augmentation %}
-                            <span class="badge">Mosaic: {{ train_meta.data_augmentation.mosaic }}</span>
-                            <span class="badge">Mixup: {{ train_meta.data_augmentation.mixup }}</span>
-                            <span class="badge">Flip LR: {{ train_meta.data_augmentation.fliplr }}</span>
-                            <span class="badge">Scale: {{ train_meta.data_augmentation.scale }}</span>
-                            <span class="badge">Color HSV: {{ train_meta.data_augmentation.hsv_s }}</span>
+                        <span class="badge">Mosaic: {{ train_meta.data_augmentation.mosaic }}</span>
+                        <span class="badge">Mixup: {{ train_meta.data_augmentation.mixup }}</span>
+                        <span class="badge">Flip LR: {{ train_meta.data_augmentation.fliplr }}</span>
+                        <span class="badge">Scale: {{ train_meta.data_augmentation.scale }}</span>
+                        <span class="badge">Color HSV: {{ train_meta.data_augmentation.hsv_s }}</span>
                         {% else %}
-                            <span style="color: #7f8c8d;">Data not found in args.yaml</span>
+                        <span style="color: #7f8c8d;">Data not found in args.yaml</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -289,6 +290,10 @@
                 <tr>
                     <th>Best Epoch</th>
                     <td>{{ train_meta.hyperparameters.best_epoch }}</td>
+                </tr>
+                <tr>
+                    <th>Early Stopping</th>
+                    <td>{{ train_meta.hyperparameters.patience }}</td>
                 </tr>
                 <tr>
                     <th>mAP@50 (Test Training)</th>
