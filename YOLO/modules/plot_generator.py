@@ -4,11 +4,17 @@ import seaborn as sns
 
 def plot_confusion_matrix(tp, fp, fn, output_path):
     """ Draws a confusion matrix """
+    tn = 0 
+    matrix = [[tp, fn], 
+              [fp, tn]]
+
     plt.figure(figsize=(6, 5))
-    matrix = [[tp, fp], [fn, 0]]
-    sns.heatmap(matrix, annot=True, fmt="d", cmap="Blues", cbar=False, 
-                xticklabels=["Pred Pos", "Pred Neg"], yticklabels=["Real Pos", "Real Neg"])
-    plt.title("Confusion Matrix")
+    ax = sns.heatmap(matrix, annot=True, fmt='d', cmap='Blues', cbar=False,
+                     xticklabels=['Pred Pos', 'Pred Neg'],
+                     yticklabels=['Real Pos', 'Real Neg'])
+    plt.title('Confusion Matrix')
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=90, va="center")
+    plt.tight_layout()
     plt.savefig(output_path)
     plt.close()
 
