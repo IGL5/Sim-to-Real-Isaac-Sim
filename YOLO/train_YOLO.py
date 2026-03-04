@@ -198,7 +198,7 @@ def main():
         save=True,                  # Save the best model
         exist_ok=True,              # If the experiment already exists, it will be overwritten.
         verbose=True,               # Show training progress
-        freeze=args.freeze        # Freeze the first 10 layers
+        freeze=args.freeze          # Freeze the first 10 layers
     )
 
     print("\n--- Training completed ---")
@@ -233,15 +233,22 @@ def main():
         try:
             df = pd.read_csv(results_csv_path)
             epochs_run = len(df)
+            
+            df.columns = df.columns.str.strip()
+            
+            if 'metrics/mAP50(B)' in df.columns and 'metrics/mAP50-95(B)' in df.columns:
+                fitness = (df['metrics/mAP50(B)'] * 0.1) + (df['metrics/mAP50-95(B)'] * 0.9)
+                best_idx = fitness.idxmax()
+                
+                if 'epoch' in df.columns:
+                    best_epoch = int(df.loc[best_idx, 'epoch'])
+                else:
+                    best_epoch = int(best_idx) + 1
         except Exception as e:
-            print(f"⚠️ Could not read results.csv: {e}")
+            print(f"⚠️ Could not read results.csv to find best epoch: {e}")
 
-    if os.path.exists(best_weight):
-        try:
-            ckpt = torch.load(best_weight, map_location='cpu', weights_only=False)
-            best_epoch = ckpt.get('epoch', -1) + 1 
-        except Exception as e:
-            print(f"⚠️ Could not read best.pt: {e}")
+    if epochs_run < args.epochs and best_epoch == -1:
+        best_epoch = epochs_run - args.patience
 
     args_yaml_path = os.path.join(PROJECT_NAME, experiment_name, 'args.yaml')
     aug_data = {}
