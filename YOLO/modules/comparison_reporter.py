@@ -40,9 +40,12 @@ class ComparisonReporter:
     def prepare_chart_data(self):
         """ Extracts the key metrics in clean arrays to inject them into Chart.js """
         labels = list(self.data.keys())
+
+        aliases = [f"M{i+1}" for i in range(len(labels))]
         
         chart_data = {
             "labels": labels,
+            "aliases": aliases,
             "map50": [],
             "map50_95": [],
             "precision": [],
@@ -62,8 +65,8 @@ class ComparisonReporter:
             audit = self.data[m].get("audit") or {}
             metrics = audit.get("metrics") or {}
             
-            chart_data["map50"].append(metrics.get("ap50", 0))
-            chart_data["map50_95"].append(metrics.get("ap50_95", 0))
+            chart_data["map50"].append(metrics.get("map_50", 0))
+            chart_data["map50_95"].append(metrics.get("map_50_95", 0))
             chart_data["precision"].append(metrics.get("precision", 0))
             chart_data["recall"].append(metrics.get("recall", 0))
             chart_data["f1"].append(metrics.get("f1", 0))

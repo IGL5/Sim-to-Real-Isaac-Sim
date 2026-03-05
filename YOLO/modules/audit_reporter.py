@@ -164,7 +164,7 @@ class ReportGenerator:
         recall = self.stats["TP"] / total_real if total_real > 0 else 0
         f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
-        ap50, _, _ = self.calculate_ap(0.5)
+        map50, _, _ = self.calculate_ap(0.5)
         
         ap_sum = 0
         thresholds = np.arange(0.5, 1.0, 0.05)
@@ -178,7 +178,7 @@ class ReportGenerator:
             "precision": precision,
             "recall": recall,
             "f1": f1,
-            "ap50": ap50,
+            "map_50": map50,
             "map_50_95": map_50_95,
             "total_real": total_real,
             "total_pred": total_pred,

@@ -26,8 +26,21 @@
     </div>
 
     <div id="Trend" class="tabcontent" style="display:block;">
-        <p style="color: #7f8c8d; margin-bottom: 20px;">Visualize the performance evolution through all the models
+        <p style="color: #7f8c8d; margin-bottom: 20px;">Visualizes the performance evolution through all the models
             selected. <i>(Tip: Click on the legend to hide metrics).</i></p>
+
+        <div
+            style="background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 4px solid #3498db;">
+            <h4 style="margin-top: 0; margin-bottom: 10px; color: #2c3e50;">🧪 Model Legend</h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                {% for m in models %}
+                <div
+                    style="background: #ecf0f1; padding: 5px 10px; border-radius: 4px; font-size: 0.85em; color: #34495e;">
+                    <strong style="color: #2980b9;">[M{{ loop.index }}]</strong> {{ m }}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
 
         <div class="plot-grid">
             <div class="card" style="border-left-color: #9b59b6;">
@@ -102,14 +115,20 @@
             <thead>
                 <tr>
                     <th>Metric / Attribute</th>
-                    {% for m in models %}<th>{{ m }}</th>{% endfor %}
+                    {% for m in models %}
+                    <th>
+                        <span style="color: #3498db;">[M{{ loop.index }}]</span><br>
+                        <span style="font-size: 0.7em; font-weight: normal;">{{ m }}</span>
+                    </th>
+                    {% endfor %}
                 </tr>
             </thead>
             <tbody>
                 <tr>
                     <td>mAP@50 / mAP@50-95</td>
                     {% for m in models %}<td style="font-size: 1.1em; font-weight: bold; color: #2980b9;">{{
-                        "%.3f"|format(data[m].audit.metrics.ap50) }} / {{ "%.3f"|format(data[m].audit.metrics.map_50_95)
+                        "%.3f"|format(data[m].audit.metrics.map_50) }} / {{
+                        "%.3f"|format(data[m].audit.metrics.map_50_95)
                         }}</td>{% endfor %}
                 </tr>
                 <tr>
@@ -203,7 +222,7 @@
             new Chart(ctxPerf, {
                 type: 'line',
                 data: {
-                    labels: rawData.labels,
+                    labels: rawData.aliases,
                     datasets: [
                         { label: 'mAP@50', data: rawData.map50, borderColor: '#9b59b6', backgroundColor: 'rgba(155, 89, 182, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 },
                         { label: 'mAP@50-95', data: rawData.map50_95, borderColor: '#8e44ad', borderDash: [3, 3], tension: 0.3, borderWidth: 2 },
@@ -212,24 +231,54 @@
                         { label: 'Recall', data: rawData.recall, borderColor: '#e67e22', borderDash: [5, 5], tension: 0.3, borderWidth: 2, hidden: true }
                     ]
                 },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1.05 } }, plugins: { tooltip: { mode: 'index', intersect: false } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 1.05 } },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function (tooltipItems) {
+                                    return rawData.labels[tooltipItems[0].dataIndex];
+                                }
+                            }
+                        }
+                    }
+                }
             });
 
             const ctxFps = document.getElementById('trendFpsChart').getContext('2d');
             new Chart(ctxFps, {
                 type: 'line',
                 data: {
-                    labels: rawData.labels,
+                    labels: rawData.aliases,
                     datasets: [{ label: 'Frames Por Segundo (FPS)', data: rawData.fps, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { tooltip: { mode: 'index', intersect: false } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function (tooltipItems) {
+                                    return rawData.labels[tooltipItems[0].dataIndex];
+                                }
+                            }
+                        }
+                    }
+                }
             });
 
             const ctxLatency = document.getElementById('trendLatencyChart').getContext('2d');
             new Chart(ctxLatency, {
                 type: 'bar',
                 data: {
-                    labels: rawData.labels,
+                    labels: rawData.aliases,
                     datasets: [
                         { label: 'Red Neuronal (Inferencia)', data: rawData.inf_time, backgroundColor: '#3498db', stack: 'Stack 0' },
                         { label: 'Limpieza (NMS)', data: rawData.nms_time, backgroundColor: '#e67e22', stack: 'Stack 0' },
@@ -239,8 +288,21 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
-                    plugins: { tooltip: { mode: 'index', intersect: false } }
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function (tooltipItems) {
+                                    return rawData.labels[tooltipItems[0].dataIndex];
+                                }
+                            }
+                        }
+                    }
                 }
             });
 
@@ -248,10 +310,25 @@
             new Chart(ctxTime, {
                 type: 'line',
                 data: {
-                    labels: rawData.labels,
+                    labels: rawData.aliases,
                     datasets: [{ label: 'Segundos / Frame (Isaac Sim)', data: rawData.gen_time, borderColor: '#27ae60', backgroundColor: 'rgba(39, 174, 96, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { tooltip: { mode: 'index', intersect: false } } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function (tooltipItems) {
+                                    return rawData.labels[tooltipItems[0].dataIndex];
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
 
