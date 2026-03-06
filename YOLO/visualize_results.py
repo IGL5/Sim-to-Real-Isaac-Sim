@@ -87,20 +87,24 @@ def save_evaluation_results(exp_name, mode):
     print(f"\n📦 Persistent Evaluation saved at: {eval_dir}")
 
 
-def run_audit_mode(model_path, draw_all=False, save_persistently=False):
-    """ Audit mode (Dataset Test with Labels) """
-    if not cvu.check_system_integrity(model_path, check_dataset=True):
+def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep_dir=False):
+    """ Audit mode (Dataset Test with Labels) - Supports both Sim and Real """
+    if not cvu.check_system_integrity(model_path, check_dataset=(custom_img_dir is None)):
         return
 
-    print(f"--- 🕵️ STARTING AUDIT (Draw All: {draw_all}) ---")
+    is_real = custom_img_dir is not None and custom_lbl_dir is not None
+    prefix = "real_audit" if is_real else "audit"
+
+    print(f"--- 🕵️ STARTING {'REAL ' if is_real else ''}AUDIT (Draw All: {draw_all}) ---")
     
     # 1. Prepare folders according to the mode
-    if os.path.exists(cvu.OUTPUT_DIR): shutil.rmtree(cvu.OUTPUT_DIR)
+    if not keep_dir:
+        if os.path.exists(cvu.OUTPUT_DIR): shutil.rmtree(cvu.OUTPUT_DIR)
     
-    path_fn = os.path.join(cvu.OUTPUT_DIR, "audit", "audit_missed_FN")
-    path_fp = os.path.join(cvu.OUTPUT_DIR, "audit", "audit_invented_FP")
-    path_poor = os.path.join(cvu.OUTPUT_DIR, "audit", "audit_poor_bbox")
-    path_all = os.path.join(cvu.OUTPUT_DIR, "audit", "audit_all")
+    path_fn = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_missed_FN")
+    path_fp = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_invented_FP")
+    path_poor = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_poor_bbox")
+    path_all = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_all")
 
     if draw_all:
         os.makedirs(path_all)
@@ -113,15 +117,19 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False):
         shorten = lambda p: p[p.find("YOLO"):] if "YOLO" in p else p
         print(f"📂 Separating errors in: {shorten(path_fn)}, {shorten(path_fp)} and {shorten(path_poor)}")
 
-    reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD)
+    reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD, prefix=prefix)
     model = YOLO(model_path)
+
+    # Determine which folders to use
+    img_dir = custom_img_dir if is_real else cvu.DEFAULT_TEST_IMAGES
+    lbl_dir = custom_lbl_dir if is_real else cvu.DEFAULT_TEST_LABELS
     
-    image_files = [f for f in glob.glob(os.path.join(cvu.DEFAULT_TEST_IMAGES, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    image_files = [f for f in glob.glob(os.path.join(img_dir, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     print(f"📸 Processing {len(image_files)} images...")
 
     for i, img_path in enumerate(image_files):
         filename = os.path.basename(img_path)
-        txt_path = os.path.join(cvu.DEFAULT_TEST_LABELS, os.path.splitext(filename)[0] + ".txt")
+        txt_path = os.path.join(lbl_dir, os.path.splitext(filename)[0] + ".txt")
 
         img = cv2.imread(img_path)
         if img is None:
@@ -176,10 +184,10 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False):
     # Generate final report
     exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
     reporter.generate_plots()
-    reporter.generate_html_report(exp_name)
+    reporter.generate_html_report(exp_name, is_real_audit=is_real)
 
     if save_persistently:
-        save_evaluation_results(exp_name, "audit")
+        save_evaluation_results(exp_name, prefix)
 
 
 def run_inference_mode(model_path, source_folder, save_persistently=False):
@@ -303,9 +311,11 @@ if __name__ == "__main__":
     
     # Options
     parser.add_argument('--draw_all', action='store_true', help="Audit: Save ALL images (hits and misses)")
-    parser.add_argument('--source', type=str, default=None, help="Inference: Folder of new images (without labels)")
-    parser.add_argument('--video', type=str, default=None, help="Video: Path to the MP4/AVI file")
+    parser.add_argument('--source', type=str, default=None, help="Inference: Folder of new images")
+    parser.add_argument('--labels', type=str, default=None, help="Real Audit: Folder of labels for the new images")
+    parser.add_argument('--video', type=str, default=None, help="Video: Path to the MP4/AVI file") 
     parser.add_argument('--save', action='store_true', help="Persistently save this evaluation in the model's folder")
+    parser.add_argument('--keep', action='store_true', help="Do not delete the output directory before running (useful to combine reports)")
     
     args = parser.parse_args()
 
@@ -315,8 +325,15 @@ if __name__ == "__main__":
     # Mode Selector
     if args.video:
         run_video_mode(selected_model_path, args.video)
+    elif args.source and args.labels:
+        # REAL AUDIT MODE (Has images and has labels)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, 
+                       custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep)
     elif args.source:
+        # INFERENCE MODE (Has images)
         run_inference_mode(selected_model_path, args.source, save_persistently=args.save)
     else:
-        # Default: Audit the test dataset
-        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save)
+        # SYNTHETIC AUDIT MODE (Default, uses Isaac Sim test set)
+        if args.labels:
+            print("⚠️ Warning: --labels ignored because --source was not provided.")
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep)

@@ -37,12 +37,12 @@
                 <span style="color: #2980b9;"><strong>Predictions</strong></span> -> Mean: {{
                 "%.2f"|format(stats.confidence_stats.mean) }} | Std: {{ "%.2f"|format(stats.confidence_stats.std) }}
             </p>
-            <img src="plots/inference_conf_dist.png" style="margin-top: 10px;">
+            <img src="plots/inference/inference_conf_dist.png" style="margin-top: 10px;">
         </div>
         <div class="card">
             <h3>Spatial Distribution (Heatmap)</h3>
             <p style="font-size:0.9em; color:#666;">Normalized to 1x1 frame regardless of resolution.</p>
-            <img src="plots/inference_heatmap.png">
+            <img src="plots/inference/inference_heatmap.png">
         </div>
         <div class="card">
             <h3>Positional Bias</h3>
@@ -101,7 +101,7 @@
         <div class="card" style="border-left-color: #e74c3c;">
             <p><strong>Source:</strong> {{ event.orig_filename }}</p>
             <p>Found <strong>{{ event.count }}</strong> risk pair(s)</p>
-            <img src="plots/suspicious_overlaps_imgs/{{ event.evidence_filename }}" alt="Overlap Evidence">
+            <img src="plots/inference/suspicious_overlaps_imgs/{{ event.evidence_filename }}" alt="Overlap Evidence">
         </div>
         {% endfor %}
         {% endif %}

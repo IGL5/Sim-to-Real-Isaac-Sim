@@ -8,9 +8,10 @@ from . import plot_generator
 
 
 class ReportGenerator:
-    def __init__(self, output_dir, iou_threshold=0.5):
+    def __init__(self, output_dir, iou_threshold=0.5, prefix="audit"):
         self.output_dir = output_dir
         self.iou_threshold = iou_threshold
+        self.prefix = prefix
         self.stats = {
             "TP": 0, "FP": 0, "FN": 0,
             "confidences_TP": [],
@@ -20,7 +21,7 @@ class ReportGenerator:
             "all_predictions": [],  # We save (confidence, best_iou) for PR curve
             "speeds": {"preprocess": [], "inference": [], "postprocess": []}
         }
-        self.plots_dir = os.path.join(output_dir, "plots")
+        self.plots_dir = os.path.join(output_dir, "plots", self.prefix)
         os.makedirs(self.plots_dir, exist_ok=True)
 
     def update(self, pred_boxes, gt_boxes, confidences, img_shape, speed_dict=None):
@@ -187,6 +188,8 @@ class ReportGenerator:
             "fp": self.stats["FP"]
         }
 
+        metrics_dict["prefix"] = self.prefix
+
         metrics_dict["confidence_stats"] = {
             "True_Positives": cvu.calculate_1d_stats(self.stats["confidences_TP"]),
             "False_Positives": cvu.calculate_1d_stats(self.stats["confidences_FP"])
@@ -216,7 +219,7 @@ class ReportGenerator:
             }
         }
         
-        audit_json_path = os.path.join(self.output_dir, "audit_metadata.json")
+        audit_json_path = os.path.join(self.output_dir, f"{self.prefix}_metadata.json")
         try:
             with open(audit_json_path, "w", encoding='utf-8') as f:
                 json.dump(audit_metadata, f, indent=4)
@@ -231,5 +234,5 @@ class ReportGenerator:
         
         generator = HTMLReportGenerator(templates_dir, project_dir, dataset_out_dir)
         
-        output_path = os.path.join(self.output_dir, "report.html")
+        output_path = os.path.join(self.output_dir, f"{self.prefix}_report.html")
         generator.generate_audit_html(output_path, experiment_name, metrics_dict)

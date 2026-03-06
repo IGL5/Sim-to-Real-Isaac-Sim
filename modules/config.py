@@ -2,7 +2,7 @@ import os
 import argparse
 
 parser = argparse.ArgumentParser("Dataset generator")
-parser.add_argument("--headless", type=bool, default=False, help="Launch script headless, default is False")
+parser.add_argument("--headless", action="store_true", help="Launch script headless")
 parser.add_argument("--height", type=int, default=810, help="Height of image") # 540
 parser.add_argument("--width", type=int, default=1440, help="Width of image") # 960
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
@@ -59,17 +59,17 @@ ENVIRONMENT_LOOKUP_KEYS = [
 ]
 
 # --- DOMAIN RANDOMIZATION LIMITS ---
-MAX_PBR_MATERIALS = 2
+MAX_PBR_MATERIALS = 30
 MAX_HDR_MAPS = 1
 RANDOMIZE_SKY = False
-RANDOMIZE_TERRAIN = False
+RANDOMIZE_TERRAIN = True
 
 # ASSET POOLS
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "bicycle": {
         "active": True,                     # Enable this object type
-        "pool_size": 1,                    # Number of bicycles in the pool
+        "pool_size": 13,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "cost_units": 2.0,                  # High cost (main character)
         "selection_weight": 100,            # Always want to appear if there's space

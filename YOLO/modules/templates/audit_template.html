@@ -36,10 +36,10 @@
     </div>
     <div class="plot-grid">
         <div class="card">
-            <h3>Confusion Matrix</h3><img src="plots/confusion_matrix.png">
+            <h3>Confusion Matrix</h3><img src="plots/{{metrics.prefix}}/confusion_matrix.png">
         </div>
         <div class="card">
-            <h3>Precision-Recall Curve</h3><img src="plots/pr_curve.png">
+            <h3>Precision-Recall Curve</h3><img src="plots/{{metrics.prefix}}/pr_curve.png">
         </div>
     </div>
     <div class="card" style="margin-top:20px;">
@@ -102,10 +102,10 @@
                 "%.2f"|format(metrics.confidence_stats.False_Positives.mean) }} | Std: {{
                 "%.2f"|format(metrics.confidence_stats.False_Positives.std) }}
             </p>
-            <img src="plots/confidence_dist.png" style="margin-top: 10px;">
+            <img src="plots/{{metrics.prefix}}/confidence_dist.png" style="margin-top: 10px;">
         </div>
         <div class="card">
-            <h3>Heatmap of Detections</h3><img src="plots/heatmap.png">
+            <h3>Heatmap of Detections</h3><img src="plots/{{metrics.prefix}}/heatmap.png">
         </div>
         <div class="card">
             <h3>Positional Bias</h3>

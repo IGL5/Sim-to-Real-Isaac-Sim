@@ -154,7 +154,6 @@ def main():
     parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS, help="Override number of epochs")
     parser.add_argument('--patience', type=int, default=DEFAULT_PATIENCE, help="Override patience")
     parser.add_argument('--freeze', type=int, default=FREEZE_LAYERS, help="Override freeze layers")
-    parser.add_argument('--select', action='store_true', help="Interactive mode to choose model version and size")
     args = parser.parse_args()
 
     start_time = time.time()
@@ -163,13 +162,7 @@ def main():
     device, device_name = check_gpu()
 
     # Model selection logic
-    model_type = None
-    experiment_name = None
-    if args.select:
-        model_type, experiment_name = interactive_selection()
-    else:
-        model_type = DEFAULT_MODEL
-        experiment_name = DEFAULT_EXP_NAME
+    model_type, experiment_name = interactive_selection()
 
     print(f"🚀 Starting training: {model_type} | Epochs: {args.epochs} | Exp: {experiment_name}")
 

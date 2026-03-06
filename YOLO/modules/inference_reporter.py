@@ -10,7 +10,7 @@ from . import plot_generator
 class InferenceReportGenerator:
     def __init__(self, output_dir, overlap_threshold=0.5):
         self.output_dir = output_dir
-        self.plots_dir = os.path.join(output_dir, "..", "plots")
+        self.plots_dir = os.path.join(output_dir, "..", "plots", "inference")
         self.overlaps_dir = os.path.join(self.plots_dir, "suspicious_overlaps_imgs")
         os.makedirs(self.plots_dir, exist_ok=True)
         os.makedirs(self.overlaps_dir, exist_ok=True)
