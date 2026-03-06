@@ -46,7 +46,7 @@ OBJECTS_BUDGET_RANGE = (2.0, 2.0) # (0.5, 7.0)
 OBJECTS_MAX_RADIUS = 3.0
 
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (30.0, 75.0)
+DISTRACTOR_BUDGET_RANGE = (15.0, 30.0) # (30.0, 75.0)
 DISTRACTOR_MAX_RADIUS = 7.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
@@ -83,7 +83,7 @@ OBJECTS_CONFIG = {
 # Keys must match folder names in assets/objects/distractors/
 DISTRACTOR_CONFIG = {
     "vegetation": {
-        "active": False,
+        "active": True,
         "pool_size": 25,
         "spawn_radius": (5.0, 25.0),
         "radius": 0.5,
@@ -101,7 +101,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.6, 1.2)
     },
     "debris": {
-        "active": False,
+        "active": True,
         "pool_size": 50,
         "spawn_radius": (2.0, 15.0),
         "radius": 0.5,

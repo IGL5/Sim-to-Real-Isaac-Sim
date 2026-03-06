@@ -87,7 +87,7 @@ def save_evaluation_results(exp_name, mode):
     print(f"\n📦 Persistent Evaluation saved at: {eval_dir}")
 
 
-def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep_dir=False):
+def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep=False):
     """ Audit mode (Dataset Test with Labels) - Supports both Sim and Real """
     if not cvu.check_system_integrity(model_path, check_dataset=(custom_img_dir is None)):
         return
@@ -98,7 +98,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     print(f"--- 🕵️ STARTING {'REAL ' if is_real else ''}AUDIT (Draw All: {draw_all}) ---")
     
     # 1. Prepare folders according to the mode
-    if not keep_dir:
+    if not keep:
         if os.path.exists(cvu.OUTPUT_DIR): shutil.rmtree(cvu.OUTPUT_DIR)
     
     path_fn = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_missed_FN")
@@ -107,13 +107,13 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     path_all = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_all")
 
     if draw_all:
-        os.makedirs(path_all)
+        os.makedirs(path_all, exist_ok=True)
         short_all = path_all[path_all.find("YOLO"):] if "YOLO" in path_all else path_all
         print(f"📂 Saving everything in: {short_all}")
     else:
-        os.makedirs(path_fn)
-        os.makedirs(path_fp)
-        os.makedirs(path_poor)
+        os.makedirs(path_fn, exist_ok=True)
+        os.makedirs(path_fp, exist_ok=True)
+        os.makedirs(path_poor, exist_ok=True)
         shorten = lambda p: p[p.find("YOLO"):] if "YOLO" in p else p
         print(f"📂 Separating errors in: {shorten(path_fn)}, {shorten(path_fp)} and {shorten(path_poor)}")
 
@@ -136,7 +136,10 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
             continue
 
         h, w, _ = img.shape
-        gt_boxes = cvu.parse_kitti_label(txt_path, w, h)
+        if os.path.exists(txt_path):
+            gt_boxes = cvu.parse_kitti_label(txt_path, w, h)
+        else:
+            gt_boxes = []
 
         # Inference
         results = model.predict(source=img, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
@@ -184,7 +187,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     # Generate final report
     exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
     reporter.generate_plots()
-    reporter.generate_html_report(exp_name, is_real_audit=is_real)
+    reporter.generate_html_report(exp_name)
 
     if save_persistently:
         save_evaluation_results(exp_name, prefix)

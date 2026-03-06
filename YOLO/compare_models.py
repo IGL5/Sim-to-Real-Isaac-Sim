@@ -18,18 +18,18 @@ def get_available_models():
         return []
     return [d for d in os.listdir(PROJECT_DIR) if os.path.isdir(os.path.join(PROJECT_DIR, d))]
 
-def find_audits_for_model(model_name):
+def find_audits_for_model(model_name, target_json="audit_metadata.json"):
     """
-    Searches for audit_metadata.json files in the root of the model and in saved iterations.
-    Returns ONLY valid audits.
+    Searches for metadata files in the root of the model and in saved iterations.
+    Returns ONLY valid audits for the selected environment.
     """
     model_dir = os.path.join(PROJECT_DIR, model_name)
     
     # 1. Search in the root (temporary / last audit)
-    base_audit = os.path.join(model_dir, "audit_metadata.json")
+    base_audit = os.path.join(model_dir, target_json)
     
     # 2. Search in the persistent evaluations (iter_xxx)
-    eval_audits = glob.glob(os.path.join(model_dir, "evaluations", "*", "audit_metadata.json"))
+    eval_audits = glob.glob(os.path.join(model_dir, "evaluations", "*", target_json))
     
     all_audits = []
     if os.path.exists(base_audit):
@@ -58,29 +58,29 @@ def find_audits_for_model(model_name):
     return audit_info
 
 
-def main():
-    print("--- ⚖️  MODEL BENCHMARKING (COMPARATION) ---")
-    available_models = get_available_models()
+# 1. GENERAL BENCHMARK
+def run_benchmark_flow(available_models):
+    print("\n🌍 ENVIRONMENT SELECTION (Benchmark)")
+    print("  [1] Simulation (Isaac Sim -> audit_metadata.json)")
+    print("  [2] Real World (Real Photos -> real_audit_metadata.json)")
     
-    if not available_models:
-        print(f"❌ No models found in the '{PROJECT_DIR}' directory.")
-        return
-        
-    # 1. Show available models NUMERATED
-    print("\n📂 Available models:")
+    env_input = input("-> Selection [1/2] (default 1): ").strip() or "1"
+    target_json = "real_audit_metadata.json" if env_input == "2" else "audit_metadata.json"
+    env_name = "Real World" if env_input == "2" else "Simulation"
+    
+    print(f"\n✅ Selected mode: Benchmark in {env_name}.")
+    print(f"\n📂 Available models for {env_name}:")
     for i, m in enumerate(available_models):
         print(f"  [{i+1}] {m}")
         
     print("\n✏️  Introduce the NUMBERS of the models you want to compare separated by commas.")
     print("   (Example: 1, 3)")
     
-    # 2. Get Input numeric from user
     user_input = input("-> Selections: ").strip()
     if not user_input:
         print("Operation cancelled.")
-        return
+        return {}
         
-    # Process and validate numbers
     selected_models = []
     for part in user_input.split(','):
         part = part.strip()
@@ -93,20 +93,16 @@ def main():
         else:
             print(f"  ⚠️  [IGNORED] '{part}' is not a valid number.")
             
-    final_audits_to_compare = {}
-    
+    final_audits = {}
     print("\n🔍 Verifying audits...")
     
-    # 3. Validation logic
     for model_name in selected_models:
-        audits = find_audits_for_model(model_name)
+        audits = find_audits_for_model(model_name, target_json=target_json)
         
         if len(audits) == 0:
             print(f"  ❌ [DISCARDED] '{model_name}': No valid audits found.")
             continue
             
-        selected_audit = None
-        
         if len(audits) == 1:
             print(f"  ✅ [ACCEPTED] '{model_name}': 1 audit found ({audits[0]['folder']}).")
             selected_audit = audits[0]
@@ -134,18 +130,95 @@ def main():
         # If the user selects the same audit twice, we number it
         base_label = label
         counter = 2
-        while label in final_audits_to_compare:
+        while label in final_audits:
             label = f"{base_label} v{counter}"
             counter += 1
             
         # Save the audit path and the real folder name
-        final_audits_to_compare[label] = {
+        final_audits[label] = {
             "path": selected_audit["path"],
             "model_root_name": model_name
         }
+        
+    return final_audits
 
-    # 4. Final check
-    if len(final_audits_to_compare) < 2:
+
+# 2. SIM-TO-REAL GAP
+def run_sim_to_real_flow(available_models):
+    print("\n🌉 SIM-TO-REAL GAP ANALYSIS")
+    print("📂 Available models:")
+    for i, m in enumerate(available_models):
+        print(f"  [{i+1}] {m}")
+        
+    print("\n✏️  Introduce the NUMBER of the model you want to analyze (ej: 1).")
+    user_input = input("-> Selection: ").strip()
+    
+    if not user_input.isdigit() or not (1 <= int(user_input) <= len(available_models)):
+        print("❌ Invalid selection.")
+        return {}
+        
+    model_name = available_models[int(user_input) - 1]
+    
+    print(f"\n🔍 Searching for reports for '{model_name}'...")
+    sim_audits = find_audits_for_model(model_name, target_json="audit_metadata.json")
+    real_audits = find_audits_for_model(model_name, target_json="real_audit_metadata.json")
+    
+    if not sim_audits:
+        print("  ❌ No simulation audit found (audit_metadata.json).")
+    if not real_audits:
+        print("  ❌ No reality audit found (real_audit_metadata.json).")
+        
+    if not sim_audits or not real_audits:
+        print("\n🛑 ERROR: The model needs to be evaluated in BOTH environments to measure the Gap.")
+        return {}
+        
+    # Automatically take the most recent evaluation of each
+    sim_audit = sim_audits[0]
+    real_audit = real_audits[0]
+    
+    print(f"  ✅ Simulation found: {sim_audit['folder']} ({sim_audit['date']})")
+    print(f"  ✅ Reality found:   {real_audit['folder']} ({real_audit['date']})")
+    
+    # We trick the system by registering them as if they were two different models
+    return {
+        f"{model_name} (Simulation)": {
+            "path": sim_audit["path"],
+            "model_root_name": model_name
+        },
+        f"{model_name} (Reality)": {
+            "path": real_audit["path"],
+            "model_root_name": model_name
+        }
+    }
+
+
+# MAIN
+def main():
+    print("--- ⚖️  MODEL BENCHMARKING & SIM-TO-REAL ANALYSIS ---")
+    
+    # Load available models at the beginning
+    available_models = get_available_models()
+    if not available_models:
+        print(f"❌ No models found in the '{PROJECT_DIR}' directory.")
+        return
+
+    # Show main menu
+    print("\nWhat type of analysis do you want to perform?")
+    print("  [1] General Benchmark (Compare several models in the SAME environment)")
+    print("  [2] Sim-to-Real Gap Analysis (Compare Simulation vs Reality of ONE model)")
+    
+    flow_input = input("-> Selection [1/2] (default 1): ").strip() or "1"
+    
+    final_audits_to_compare = {}
+
+    # Derive the logic to the corresponding function
+    if flow_input == "2":
+        final_audits_to_compare = run_sim_to_real_flow(available_models)
+    else:
+        final_audits_to_compare = run_benchmark_flow(available_models)
+
+    # Final verification
+    if not final_audits_to_compare or len(final_audits_to_compare) < 2:
         print("\n🛑 ERROR: Need at least 2 models with valid audits to compare.")
         print("Please run audits on your models or select others.")
         return
@@ -158,12 +231,13 @@ def main():
         
     print("\n🚀 Passing data to comparison engine...")
     
-    # 5. Call to the generation module
+    # Call the generation module
     try:
         reporter = ComparisonReporter(final_audits_to_compare)
         reporter.generate_comparison()
     except NameError:
         pass
+
 
 if __name__ == "__main__":
     main()
