@@ -97,7 +97,7 @@ def main():
 
     # --- 4. LOAD ASSETS ---
     print("\n--- Loading Detectable Objects ---")
-    detectable_pools = content.create_class_pool(
+    detectable_pools, n_distinct_assets_obj = content.create_class_pool(
         stage, 
         config.OBJECTS_CONFIG, 
         config.ASSETS_ROOT_DIR, 
@@ -105,7 +105,7 @@ def main():
     )
     
     print("\n--- Loading Distractors ---")
-    distractor_pools = content.create_class_pool(
+    distractor_pools, n_distinct_assets_distractor = content.create_class_pool(
         stage, 
         config.DISTRACTOR_CONFIG, 
         config.ASSETS_ROOT_DIR, 
@@ -338,7 +338,11 @@ def main():
             "hdr_maps_available": len(config.AVAILABLE_HDRS),
             "pbr_materials_loaded": len(loaded_materials),
             "object_materials_randomized": list(set(obj_mat_randomized)),
-            "distractor_materials_randomized": list(set(dist_mat_randomized))
+            "distractor_materials_randomized": list(set(dist_mat_randomized)),
+            "distinct_assets_used": {
+                "objects": n_distinct_assets_obj,
+                "distractors": n_distinct_assets_distractor
+            }
         },
         "spatial_coverage": {
             "camera_distance_range": config.CAMERA_DISTANCE_RANGE,

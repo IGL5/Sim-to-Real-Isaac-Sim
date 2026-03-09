@@ -313,6 +313,7 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                                 If False (distractors), the object is "invisible" to the AI.
     """
     pools_paths = {}
+    distinct_assets_used = {}
     print(f"--- Creating Asset Pools (Semantics={apply_semantics}) ---")
 
     for category, cfg in config_map.items():
@@ -330,6 +331,7 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
         target_pool_size = cfg["pool_size"]
         created_objects = [] 
         target_mat_names = cfg.get("randomize_materials", [])
+        distinct_assets_used[category] = min(target_pool_size, len(asset_files))
         
         # Fill list to meet pool size
         assets_to_use = []
@@ -397,7 +399,7 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
 
         pools_paths[category] = created_objects
         
-    return pools_paths
+    return pools_paths, distinct_assets_used
 
 
 def calc_theoretical_distribution():
