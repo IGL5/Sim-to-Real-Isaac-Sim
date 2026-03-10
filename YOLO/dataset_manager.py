@@ -307,10 +307,10 @@ def main():
     total_size_mb = round(total_size_bytes / (1024 * 1024), 2)
     
     total_imgs = master_meta["global_totals"]["total_images"]
-    avg_img_kb = round((total_size_bytes / 1024) / total_imgs, 2) if total_imgs > 0 else 0
+    avg_img_mb = round(total_size_mb / total_imgs, 2) if total_imgs > 0 else 0
     
     master_meta["global_totals"]["size_mb"] = total_size_mb
-    master_meta["global_totals"]["avg_image_kb"] = avg_img_kb
+    master_meta["global_totals"]["avg_image_mb"] = avg_img_mb
 
     # Save Master Metadata
     with open(master_meta_path, 'w', encoding='utf-8') as f:
