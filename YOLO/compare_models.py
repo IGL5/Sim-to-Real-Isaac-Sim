@@ -73,8 +73,8 @@ def run_benchmark_flow(available_models):
     for i, m in enumerate(available_models):
         print(f"  [{i+1}] {m}")
         
-    print("\n✏️  Introduce the NUMBERS of the models you want to compare separated by commas.")
-    print("   (Example: 1, 3)")
+    print("\n✏️  Introduce the NUMBERS of the models you want to compare separated by commas or hyphens for ranges.")
+    print("   (Example: 1, 3-5, 8)")
     
     user_input = input("-> Selections: ").strip()
     if not user_input:
