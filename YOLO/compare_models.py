@@ -81,17 +81,46 @@ def run_benchmark_flow(available_models):
         print("Operation cancelled.")
         return {}
         
-    selected_models = []
+    selected_indices = []
     for part in user_input.split(','):
         part = part.strip()
-        if part.isdigit():
+        if not part:
+            continue
+            
+        # If it contains a hyphen, it's a range (ej: 1-3)
+        if '-' in part:
+            range_parts = part.split('-')
+            if len(range_parts) == 2 and range_parts[0].strip().isdigit() and range_parts[1].strip().isdigit():
+                start_idx = int(range_parts[0].strip())
+                end_idx = int(range_parts[1].strip())
+                
+                # In case the user puts it backwards (ej: 3-1)
+                if start_idx > end_idx:
+                    start_idx, end_idx = end_idx, start_idx
+                    
+                for i in range(start_idx, end_idx + 1):
+                    idx = i - 1
+                    if 0 <= idx < len(available_models):
+                        if idx not in selected_indices:
+                            selected_indices.append(idx)
+                    else:
+                        print(f"  ⚠️  [IGNORED] The number {i} is out of range.")
+            else:
+                print(f"  ⚠️  [IGNORED] '{part}' is not a valid range.")
+                
+        # If it's a normal number (ej: 4)
+        elif part.isdigit():
             idx = int(part) - 1
             if 0 <= idx < len(available_models):
-                selected_models.append(available_models[idx])
+                if idx not in selected_indices:
+                    selected_indices.append(idx)
             else:
                 print(f"  ⚠️  [IGNORED] The number {part} is out of range.")
         else:
-            print(f"  ⚠️  [IGNORED] '{part}' is not a valid number.")
+            print(f"  ⚠️  [IGNORED] '{part}' is not a valid format.")
+            
+    # Reconstruct the final list of models from the unique indices
+    selected_models = [available_models[idx] for idx in selected_indices]
             
     final_audits = {}
     print("\n🔍 Verifying audits...")
