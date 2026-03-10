@@ -32,7 +32,7 @@ DEFAULT_MODEL = 'yolov8s.pt'
 # Training params
 DEFAULT_EPOCHS = 50
 DEFAULT_PATIENCE = 15
-IMG_SIZE = 640
+IMG_SIZE = 640      # Trains on SD resolution
 BATCH_SIZE = 16
 WORKERS = 4
 FREEZE_LAYERS = 10
@@ -152,8 +152,9 @@ def main():
     
     # Options
     parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS, help="Override number of epochs")
-    parser.add_argument('--patience', type=int, default=DEFAULT_PATIENCE, help="Override patience")
+    parser.add_argument('--patience', type=int, default=DEFAULT_PATIENCE, help="Override patience (0 = disabled)")
     parser.add_argument('--freeze', type=int, default=FREEZE_LAYERS, help="Override freeze layers")
+    parser.add_argument('--img_size', type=int, default=IMG_SIZE, help="Override image size [640 (SD default), 1280 (HD)]")
     args = parser.parse_args()
 
     start_time = time.time()
@@ -261,6 +262,11 @@ def main():
         except Exception as e:
             print(f"⚠️ Could not parse args.yaml: {e}")
 
+    
+    weight_size_mb = 0.0
+    if os.path.exists(best_weight):
+        weight_size_mb = round(os.path.getsize(best_weight) / (1024 * 1024), 2)
+
     training_metadata = {
         "experiment_info": {
             "project_name": PROJECT_NAME,
@@ -291,6 +297,7 @@ def main():
         },
         "artifacts": {
             "best_weights": best_weight,
+            "best_weights_mb": weight_size_mb,
             "onnx_model": onnx_path
         }
     }

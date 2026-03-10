@@ -3,11 +3,9 @@ import argparse
 
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", action="store_true", help="Launch script headless")
-parser.add_argument("--height", type=int, default=810, help="Height of image") # 540
-parser.add_argument("--width", type=int, default=1440, help="Width of image") # 960
+parser.add_argument("--width", type=int, default=640, help="Width of image")     # 1280x720 (HD Resolution)
+parser.add_argument("--height", type=int, default=480, help="Height of image")    # 640x480 (SD Resolution)
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
-parser.add_argument("--distractors", type=str, default="None",
-                    help="Options are ")
 parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data",
                     help="Location where data will be output")
 
@@ -59,23 +57,23 @@ ENVIRONMENT_LOOKUP_KEYS = [
 ]
 
 # --- DOMAIN RANDOMIZATION LIMITS ---
-MAX_PBR_MATERIALS = 30
+MAX_PBR_MATERIALS = 2   # 30
 MAX_HDR_MAPS = 1
 RANDOMIZE_SKY = False
-RANDOMIZE_TERRAIN = True
+RANDOMIZE_TERRAIN = False
 
 # ASSET POOLS
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "bicycle": {
         "active": True,                     # Enable this object type
-        "pool_size": 13,                    # Number of bicycles in the pool
+        "pool_size": 1,                     # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "cost_units": 2.0,                  # High cost (main character)
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
-        "randomize_materials": ["frame"]    # List of prim names to randomize materials
+        # "randomize_materials": ["frame"]    # List of prim names to randomize materials
     },
 }
 
@@ -83,7 +81,7 @@ OBJECTS_CONFIG = {
 # Keys must match folder names in assets/objects/distractors/
 DISTRACTOR_CONFIG = {
     "vegetation": {
-        "active": True,
+        "active": False,
         "pool_size": 25,
         "spawn_radius": (5.0, 25.0),
         "radius": 0.5,
@@ -101,7 +99,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.6, 1.2)
     },
     "debris": {
-        "active": True,
+        "active": False,
         "pool_size": 50,
         "spawn_radius": (2.0, 15.0),
         "radius": 0.5,

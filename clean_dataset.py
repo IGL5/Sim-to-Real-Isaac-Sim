@@ -6,7 +6,7 @@ import json
 import numpy as np
 from pathlib import Path
 
-def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.0):
+def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.0, remove_empty=False):
     """
     Analizes datasets of Isaac Sim with hierarchical structure:
     root/CameraName/rgb/*.png
@@ -24,8 +24,11 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
         return
 
     print(f"--- Starting cleaning in {len(rgb_folders)} camera folders ---")
+    if remove_empty:
+        print("🧹 Mode active: Empty frames (backgrounds without objects) WILL BE DELETED.")
     
-    total_deleted = 0
+    total_corrupted = 0
+    total_empty = 0
     total_kept = 0
 
     for rgb_folder in rgb_folders:
@@ -43,12 +46,15 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
         print(f"  -> Analyzing {len(png_files)} images...")
 
         for rgb_path in png_files:
+            frame_id = Path(rgb_path).stem
             img = cv2.imread(rgb_path)
             
-            is_bad = False
+            is_corrupted = False
+            is_empty = False
+
             if img is None:
                 print(f"  [WARN] Corrupted file: {rgb_path}")
-                is_bad = True
+                is_corrupted = True
             else:
                 # Calculate metrics
                 mean_val = np.mean(img)
@@ -56,21 +62,36 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
                 
                 # Criteria: Too dark OR Flat
                 if mean_val < threshold_mean or std_val < threshold_std:
-                    is_bad = True
+                    is_corrupted = True
 
-            if is_bad:
+            if not is_corrupted and remove_empty:
+                txt_path = os.path.join(camera_root, "object_detection", f"{frame_id}.txt")
+                if os.path.exists(txt_path):
+                    with open(txt_path, 'r') as f:
+                        if not f.read().strip():
+                            is_empty = True
+                else:
+                    is_empty = True
+
+            if is_corrupted or is_empty:
                 if not dry_run:
                     delete_hierarchical_frame(rgb_path, camera_root)
                 else:
-                    print(f"  [DRY-RUN] The frame ID: {Path(rgb_path).stem} would be deleted.")
+                    reason = "CORRUPTED" if is_corrupted else "EMPTY"
+                    print(f"  [DRY-RUN] The frame ID: {frame_id} would be deleted ({reason}).")
                 
-                total_deleted += 1
+                if is_corrupted:
+                    total_corrupted += 1
+                elif is_empty:
+                    total_empty += 1
             else:
                 total_kept += 1
 
     print("\n--- FINAL SUMMARY ---")
     print(f"✅ Valid frames kept: {total_kept}")
-    print(f"🗑️ Corrupted frames deleted: {total_deleted}")
+    print(f"🗑️ Corrupted frames deleted: {total_corrupted}")
+    if remove_empty or total_empty > 0:
+        print(f"🧹 Empty frames (backgrounds) deleted: {total_empty}")
 
     if dry_run:
         print("⚠️  DRY-RUN: No files were deleted.")
@@ -81,7 +102,8 @@ def clean_dataset(data_dir, dry_run=False, threshold_mean=10.0, threshold_std=5.
                 meta = json.load(f)
             
             meta["cleaning"] = {
-                "corrupted_deleted": total_deleted,
+                "corrupted_deleted": total_corrupted,
+                "empty_deleted": total_empty,
                 "valid_kept": total_kept
             }
             
@@ -116,10 +138,11 @@ if __name__ == "__main__":
     parser.add_argument("--dir", type=str, default="_output_data", help="Root directory of the dataset")
     parser.add_argument("--dry", action="store_true", help="Dry run, do not delete files")
     parser.add_argument("--thresh_mean", type=float, default=5.0, help="Darkness threshold (0-255)")
+    parser.add_argument("--empty", action="store_true", help="Delete pure backgrounds")
     
     args = parser.parse_args()
     
     if os.path.exists(args.dir):
-        clean_dataset(args.dir, dry_run=args.dry, threshold_mean=args.thresh_mean)
+        clean_dataset(args.dir, dry_run=args.dry, threshold_mean=args.thresh_mean, remove_empty=args.empty)
     else:
         print(f"The directory {args.dir} does not exist.")

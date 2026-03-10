@@ -35,6 +35,18 @@ def change_coordinates(size, box):
     h = box[3] - box[2]
     return (x * dw, y * dh, w * dw, h * dh)
 
+def get_dir_size(path):
+    """ Calculates the total size of a directory in bytes """
+    total = 0
+    if os.path.exists(path):
+        with os.scandir(path) as it:
+            for entry in it:
+                if entry.is_file():
+                    total += entry.stat().st_size
+                elif entry.is_dir():
+                    total += get_dir_size(entry.path)
+    return total
+
 def create_dir_structure(append_mode):
     """ 
     Creates the folder structure.
@@ -289,6 +301,16 @@ def main():
         master_meta["global_totals"]["total_images"] += stats["images"]
         master_meta["global_totals"]["total_objects"] += stats["objects"]
         master_meta["global_totals"]["total_backgrounds"] += stats["backgrounds"]
+
+    images_dir = os.path.join(BASE_OUTPUT, 'images')
+    total_size_bytes = get_dir_size(images_dir)
+    total_size_mb = round(total_size_bytes / (1024 * 1024), 2)
+    
+    total_imgs = master_meta["global_totals"]["total_images"]
+    avg_img_kb = round((total_size_bytes / 1024) / total_imgs, 2) if total_imgs > 0 else 0
+    
+    master_meta["global_totals"]["size_mb"] = total_size_mb
+    master_meta["global_totals"]["avg_image_kb"] = avg_img_kb
 
     # Save Master Metadata
     with open(master_meta_path, 'w', encoding='utf-8') as f:
