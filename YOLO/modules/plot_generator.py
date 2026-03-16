@@ -18,20 +18,27 @@ def plot_confusion_matrix(tp, fp, fn, output_path):
     plt.savefig(output_path)
     plt.close()
 
-def plot_confidence_histogram(confs_primary, label_primary, color_primary, output_path, title, confs_secondary=None, label_secondary=None, color_secondary=None):
-    """ Draws a confidence histogram """
+def plot_confidence_histogram(tp_kept, fp_kept, tp_disc, fp_disc, threshold, output_path, title="Confidence Distribution"):
+    """ Draws a confidence histogram including discarded detections in pastel colors """
     plt.figure(figsize=(8, 5))
-    bins_fixed = np.linspace(0, 1, 21)
-    plt.hist(confs_primary, bins=bins_fixed, alpha=0.7, label=label_primary, color=color_primary)
-    
-    if confs_secondary is not None:
-        plt.hist(confs_secondary, bins=bins_fixed, alpha=0.7, label=label_secondary, color=color_secondary)
-        plt.legend()
-        
+    bins = np.linspace(0, 1, 21)
+
+    # Draw the discarded (pastel colors / transparent)
+    plt.hist(tp_disc, bins=bins, alpha=0.4, color='lightgreen', label='Missed TP (Below Thresh)')
+    plt.hist(fp_disc, bins=bins, alpha=0.4, color='lightcoral', label='Ignored FP (Below Thresh)')
+
+    # Draw the valid (solid colors)
+    plt.hist(tp_kept, bins=bins, alpha=0.8, color='green', label='Valid Hits (TP)')
+    plt.hist(fp_kept, bins=bins, alpha=0.8, color='red', label='Critical Errors (FP)')
+
+    # Draw the threshold line
+    plt.axvline(x=threshold, color='black', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
+
     plt.title(title)
     plt.xlabel("Confidence")
     plt.ylabel("Frequency")
     plt.xlim([0.0, 1.0])
+    plt.legend(loc="upper right")
     plt.savefig(output_path)
     plt.close()
 

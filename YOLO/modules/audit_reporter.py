@@ -17,6 +17,8 @@ class ReportGenerator:
             "TP": 0, "FP": 0, "FN": 0,
             "confidences_TP": [],
             "confidences_FP": [],
+            "discarded_TP": [],
+            "discarded_FP": [],
             "bbox_centers": [],     # For the heatmap
             "total_gt": 0,          # Total ground truth objects
             "all_predictions": [],  # We save (confidence, best_iou) for PR curve
@@ -78,6 +80,12 @@ class ReportGenerator:
                     else:
                         img_stats["FP"] += 1
 
+            elif conf >= 0.2:
+                if best_iou >= self.iou_threshold and best_gt_idx not in matched_gt_thresh:
+                    self.stats["discarded_TP"].append(conf)
+                else:
+                    self.stats["discarded_FP"].append(conf)
+
         img_fn = len(gt_boxes) - len(matched_gt_thresh)
         self.stats["FN"] += img_fn
         img_stats["FN"] = img_fn
@@ -129,10 +137,10 @@ class ReportGenerator:
 
         # 2. Confidence Histogram
         plot_generator.plot_confidence_histogram(
-            confs_primary=self.stats["confidences_TP"], label_primary='Hits (TP)', color_primary='green',
-            confs_secondary=self.stats["confidences_FP"], label_secondary='Errors (FP)', color_secondary='red',
-            output_path=os.path.join(self.plots_dir, "confidence_dist.png"),
-            title="Confidence Distribution"
+            self.stats["confidences_TP"], self.stats["confidences_FP"],
+            self.stats["discarded_TP"], self.stats["discarded_FP"],
+            self.user_conf_threshold,
+            os.path.join(self.plots_dir, "confidence_dist.png")
         )
 
         # 3. Heatmap
@@ -178,6 +186,17 @@ class ReportGenerator:
             ap_sum += ap_t
         map_50_95 = ap_sum / len(thresholds)
 
+        # Extract the optimal F1
+        map50, _, _, confs, f1_scores = self.calculate_ap(0.5)
+        best_f1, best_conf = 0.0, 0.0
+        if len(f1_scores) > 0:
+            best_idx = np.argmax(f1_scores)
+            best_f1 = float(f1_scores[best_idx])
+            best_conf = float(confs[best_idx])
+
+        global_tp = self.stats["confidences_TP"] + self.stats["discarded_TP"]
+        global_fp = self.stats["confidences_FP"] + self.stats["discarded_FP"]
+
         # 2. Pack metrics for the template
         metrics_dict = {
             "precision": precision,
@@ -185,6 +204,8 @@ class ReportGenerator:
             "f1": f1,
             "map_50": map50,
             "map_50_95": map_50_95,
+            "optimal_f1": best_f1,
+            "optimal_conf": best_conf,
             "total_real": total_real,
             "total_pred": total_pred,
             "tp": self.stats["TP"],
@@ -196,7 +217,9 @@ class ReportGenerator:
 
         metrics_dict["confidence_stats"] = {
             "True_Positives": cvu.calculate_1d_stats(self.stats["confidences_TP"]),
-            "False_Positives": cvu.calculate_1d_stats(self.stats["confidences_FP"])
+            "False_Positives": cvu.calculate_1d_stats(self.stats["confidences_FP"]),
+            "Global_TP_Mean": round(float(np.mean(global_tp)), 4) if global_tp else 0.0,
+            "Global_FP_Mean": round(float(np.mean(global_fp)), 4) if global_fp else 0.0
         }
         metrics_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.stats["bbox_centers"])
 

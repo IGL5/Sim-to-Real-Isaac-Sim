@@ -71,9 +71,10 @@ class ComparisonReporter:
             chart_data["recall"].append(metrics.get("recall", 0))
             chart_data["f1"].append(metrics.get("f1", 0))
             
+            # We extract the GLOBAL statistics for a real calibration comparison
             conf_stats = metrics.get("confidence_stats") or {}
-            chart_data["conf_tp"].append(conf_stats.get("True_Positives", {}).get("mean", 0))
-            chart_data["conf_fp"].append(conf_stats.get("False_Positives", {}).get("mean", 0))
+            chart_data["conf_tp"].append(conf_stats.get("Global_TP_Mean", 0))
+            chart_data["conf_fp"].append(conf_stats.get("Global_FP_Mean", 0))
 
             speed_stats = metrics.get("speed_stats") or {}
             chart_data["fps"].append(speed_stats.get("fps", 0))

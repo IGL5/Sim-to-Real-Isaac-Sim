@@ -135,6 +135,16 @@
                     <td>F1-Score</td>
                     {% for m in models %}<td>{{ "%.3f"|format(data[m].audit.metrics.f1) }}</td>{% endfor %}
                 </tr>
+                <tr>
+                    <td>Optimal F1 (Optimal Threshold)</td>
+                    {% for m in models %}
+                    <td>
+                        <strong style="color: #16a085;">{{ "%.3f"|format(data[m].audit.metrics.optimal_f1) }}</strong>
+                        <span style="font-size: 0.85em; color: #7f8c8d;">(@{{
+                            "%.3f"|format(data[m].audit.metrics.optimal_conf) }})</span>
+                    </td>
+                    {% endfor %}
+                </tr>
 
                 <tr style="background-color: #bdc3c7;">
                     <td colspan="{{ models|length + 1 }}"
@@ -196,6 +206,31 @@
                     {% for m in models %}<td style="font-size: 0.85em; color: #7f8c8d;">{{
                         data[m].train.hardware.device_name if data[m].train else 'N/A' }}</td>{% endfor %}
                 </tr>
+                <tr style="background-color: #bdc3c7;">
+                    <td colspan="{{ models|length + 1 }}"
+                        style="text-align: left; font-weight: bold; color: #2c3e50; padding-top: 15px; padding-bottom: 15px;">
+                        💾 Weights and Storage (Edge AI)
+                    </td>
+                </tr>
+                <tr>
+                    <td>Model Weight (.pt)</td>
+                    {% for m in models %}
+                    <td><strong style="color: #e67e22;">{{ data[m].train.artifacts.best_weights_mb if data[m].train and
+                            data[m].train.artifacts.best_weights_mb else 'N/A' }}</strong> MB</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td>Dataset Weight (Training)</td>
+                    {% for m in models %}
+                    <td>
+                        <strong>{{ data[m].dataset.global_totals.size_mb if data[m].dataset and
+                            data[m].dataset.global_totals.size_mb else 'N/A' }}</strong> MB
+                        <div style="font-size: 0.8em; color: #7f8c8d; margin-top: 4px;">Avg/img: {{
+                            data[m].dataset.global_totals.avg_image_mb if data[m].dataset and
+                            data[m].dataset.global_totals.avg_image_mb else 'N/A' }} MB</div>
+                    </td>
+                    {% endfor %}
+                </tr>
             </tbody>
         </table>
     </div>
@@ -254,7 +289,7 @@
                 type: 'line',
                 data: {
                     labels: rawData.aliases,
-                    datasets: [{ label: 'Frames Por Segundo (FPS)', data: rawData.fps, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 }]
+                    datasets: [{ label: 'Frames Per Second (FPS)', data: rawData.fps, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 }]
                 },
                 options: {
                     responsive: true,
@@ -280,9 +315,9 @@
                 data: {
                     labels: rawData.aliases,
                     datasets: [
-                        { label: 'Red Neuronal (Inferencia)', data: rawData.inf_time, backgroundColor: '#3498db', stack: 'Stack 0' },
-                        { label: 'Limpieza (NMS)', data: rawData.nms_time, backgroundColor: '#e67e22', stack: 'Stack 0' },
-                        { label: 'Pre-proceso', data: rawData.pre_time, backgroundColor: '#95a5a6', stack: 'Stack 0', hidden: true }
+                        { label: 'Neural Network (Inference)', data: rawData.inf_time, backgroundColor: '#3498db', stack: 'Stack 0' },
+                        { label: 'Cleaning (NMS)', data: rawData.nms_time, backgroundColor: '#e67e22', stack: 'Stack 0' },
+                        { label: 'Pre-processing', data: rawData.pre_time, backgroundColor: '#95a5a6', stack: 'Stack 0', hidden: true }
                     ]
                 },
                 options: {
@@ -311,7 +346,7 @@
                 type: 'line',
                 data: {
                     labels: rawData.aliases,
-                    datasets: [{ label: 'Segundos / Frame (Isaac Sim)', data: rawData.gen_time, borderColor: '#27ae60', backgroundColor: 'rgba(39, 174, 96, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 }]
+                    datasets: [{ label: 'Seconds / Frame (Isaac Sim)', data: rawData.gen_time, borderColor: '#27ae60', backgroundColor: 'rgba(39, 174, 96, 0.2)', tension: 0.3, fill: true, borderWidth: 3, pointRadius: 5 }]
                 },
                 options: {
                     responsive: true,
@@ -356,14 +391,14 @@
             const ctxConf = document.getElementById('vsConfChart').getContext('2d');
             vsConfChart = new Chart(ctxConf, {
                 type: 'bar',
-                data: { labels: ['Aciertos (TP Mean)', 'Fallos (FP Mean)'], datasets: [] },
+                data: { labels: ['Hits (Global TP Mean)', 'Misses (Global FP Mean)'], datasets: [] },
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 1.05 } } }
             });
 
             const ctxSpeed = document.getElementById('vsSpeedChart').getContext('2d');
             vsSpeedChart = new Chart(ctxSpeed, {
                 type: 'bar',
-                data: { labels: ['Pre-proceso', 'Inferencia (NN)', 'NMS (Limpieza)'], datasets: [] },
+                data: { labels: ['Pre-processing', 'Inference (NN)', 'NMS (Cleaning)'], datasets: [] },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
