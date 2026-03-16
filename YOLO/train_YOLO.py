@@ -221,6 +221,7 @@ def main():
 
     epochs_run = args.epochs
     best_epoch = -1
+    fitness = -1
 
     results_csv_path = os.path.join(PROJECT_NAME, experiment_name, 'results.csv')
     if os.path.exists(results_csv_path):
@@ -293,7 +294,8 @@ def main():
         "data_augmentation": aug_data,
         "metrics_test_set": {
             "mAP50_95": round(float(metrics.box.map), 4),
-            "mAP50": round(float(metrics.box.map50), 4)
+            "mAP50": round(float(metrics.box.map50), 4),
+            "fitness": round(float(fitness), 4)
         },
         "artifacts": {
             "best_weights": best_weight,

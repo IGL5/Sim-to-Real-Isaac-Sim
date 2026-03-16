@@ -319,8 +319,13 @@ if __name__ == "__main__":
     parser.add_argument('--video', type=str, default=None, help="Video: Path to the MP4/AVI file") 
     parser.add_argument('--save', action='store_true', help="Persistently save this evaluation in the model's folder")
     parser.add_argument('--keep', action='store_true', help="Do not delete the output directory before running (useful to combine reports)")
+    parser.add_argument('--conf', type=float, default=None, help="Confidence threshold for detection")
     
     args = parser.parse_args()
+
+    if args.conf is not None:
+        cvu.CONF_THRESHOLD = args.conf
+        print(f"\nConfidence threshold set to: {cvu.CONF_THRESHOLD}")
 
     # Ask for Model Name (or use default)
     selected_model_path = select_model_path()

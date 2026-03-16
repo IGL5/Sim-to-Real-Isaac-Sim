@@ -40,11 +40,11 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (2.0, 2.0) # (0.5, 7.0)
+OBJECTS_BUDGET_RANGE = (2.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
 OBJECTS_MAX_RADIUS = 3.0
 
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (15.0, 30.0) # (30.0, 75.0)
+DISTRACTOR_BUDGET_RANGE = (30.0, 75.0) # (15.0, 30.0)
 DISTRACTOR_MAX_RADIUS = 7.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
@@ -67,13 +67,13 @@ ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "bicycle": {
         "active": True,                     # Enable this object type
-        "pool_size": 1,                     # Number of bicycles in the pool
+        "pool_size": 13,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "cost_units": 2.0,                  # High cost (main character)
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
-        # "randomize_materials": ["frame"]    # List of prim names to randomize materials
+        "randomize_materials": ["frame"]    # List of prim names to randomize materials
     },
 }
 
@@ -81,7 +81,7 @@ OBJECTS_CONFIG = {
 # Keys must match folder names in assets/objects/distractors/
 DISTRACTOR_CONFIG = {
     "vegetation": {
-        "active": False,
+        "active": True,
         "pool_size": 25,
         "spawn_radius": (5.0, 25.0),
         "radius": 0.5,
@@ -90,7 +90,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.7, 1.5)
     },
     "trees": {
-        "active": False,
+        "active": True,
         "pool_size": 20,
         "spawn_radius": (5.0, 25.0),
         "radius": 2.0,
@@ -99,7 +99,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.6, 1.2)
     },
     "debris": {
-        "active": False,
+        "active": True,
         "pool_size": 50,
         "spawn_radius": (2.0, 15.0),
         "radius": 0.5,
@@ -108,7 +108,7 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.3, 1.0)
     },
     "manmade": {
-        "active": False,
+        "active": True,
         "pool_size": 30,
         "spawn_radius": (10.0, 40.0),
         "radius": 1.0,
