@@ -117,7 +117,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         shorten = lambda p: p[p.find("YOLO"):] if "YOLO" in p else p
         print(f"📂 Separating errors in: {shorten(path_fn)}, {shorten(path_fp)} and {shorten(path_poor)}")
 
-    reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD, prefix=prefix)
+    reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=cvu.CONF_THRESHOLD)
     model = YOLO(model_path)
 
     # Determine which folders to use
@@ -142,7 +142,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
             gt_boxes = []
 
         # Inference
-        results = model.predict(source=img, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
+        results = model.predict(source=img, conf=0.001, verbose=False)[0]
         speed_dict = results.speed
         
         pred_boxes = []
@@ -152,19 +152,24 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
             pred_boxes.append(coords)
             confidences.append(float(box.conf))
 
-        # Statistics
+        # Statistics recibe TODO
         img_stats = reporter.update(pred_boxes, gt_boxes, confidences, (h, w), speed_dict)
+
+        # Filtrar solo lo válido para dibujar las fotos en las carpetas
+        valid_pred_boxes = []
+        valid_confidences = []
+        for j, c in enumerate(confidences):
+            if c >= cvu.CONF_THRESHOLD:
+                valid_pred_boxes.append(pred_boxes[j])
+                valid_confidences.append(c)
 
         # Save and Organization Logic
         if i < cvu.LIMIT_IMAGES:
-            
-            # A. Check if there is any error in the image
             has_errors = img_stats["FN"] > 0 or img_stats["poor_bbox"] > 0 or img_stats["FP"] > 0
             
-            # B. Draw the boxes
             if draw_all or has_errors:
                 img_drawn = cvu.draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), label="REAL")
-                img_drawn = cvu.draw_boxes(img_drawn, pred_boxes, color=(255, 0, 0), confidences=confidences)
+                img_drawn = cvu.draw_boxes(img_drawn, valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences)
                 
                 # C. Save logic according to the mode
                 if draw_all:

@@ -8,9 +8,10 @@ from . import plot_generator
 
 
 class ReportGenerator:
-    def __init__(self, output_dir, iou_threshold=0.5, prefix="audit"):
+    def __init__(self, output_dir, iou_threshold=0.5, user_conf_threshold=0.5, prefix="audit"):
         self.output_dir = output_dir
         self.iou_threshold = iou_threshold
+        self.user_conf_threshold = user_conf_threshold
         self.prefix = prefix
         self.stats = {
             "TP": 0, "FP": 0, "FN": 0,
@@ -25,12 +26,7 @@ class ReportGenerator:
         os.makedirs(self.plots_dir, exist_ok=True)
 
     def update(self, pred_boxes, gt_boxes, confidences, img_shape, speed_dict=None):
-        """
-        Receive the boxes of ONE image, calculate matchings and update statistics.
-        """
         h, w = img_shape
-
-        matched_gt = set()
         self.stats["total_gt"] += len(gt_boxes)
         img_stats = {"TP": 0, "FP": 0, "FN": 0, "poor_bbox": 0}
 
@@ -38,17 +34,15 @@ class ReportGenerator:
             self.stats["speeds"]["preprocess"].append(speed_dict.get('preprocess', 0))
             self.stats["speeds"]["inference"].append(speed_dict.get('inference', 0))
             self.stats["speeds"]["postprocess"].append(speed_dict.get('postprocess', 0))
-        
-        # Save centers for Heatmap
-        for box in pred_boxes:
-            cx_abs = (box[0] + box[2]) / 2
-            cy_abs = (box[1] + box[3]) / 2
-            self.stats["bbox_centers"].append((cx_abs/w, cy_abs/h))
 
         iou_matrix = cvu.calculate_iou_matrix(pred_boxes, gt_boxes)
+        
+        matched_gt_all = set()    # Para el mAP (Todas las predicciones)
+        matched_gt_thresh = set() # Para el Dashboard (Solo >= Umbral)
 
-        # Comparamos predicciones con la realidad
         for i, pred in enumerate(pred_boxes):
+            conf = confidences[i]
+            
             if len(gt_boxes) > 0:
                 best_iou = np.max(iou_matrix[i])
                 best_gt_idx = np.argmax(iou_matrix[i]) 
@@ -56,34 +50,73 @@ class ReportGenerator:
                 best_iou = 0
                 best_gt_idx = -1
                 
+            # 1. GUARDADO ABSOLUTO (Para curva PR y mAP correcto)
             self.stats["all_predictions"].append({
-                "conf": confidences[i],
+                "conf": conf,
                 "iou": best_iou,
-                "is_duplicate": best_gt_idx in matched_gt
+                "is_duplicate": best_gt_idx in matched_gt_all
             })
-            
-            # Hit Criterion (TP)
-            if best_iou >= self.iou_threshold and best_gt_idx not in matched_gt:
-                self.stats["TP"] += 1
-                self.stats["confidences_TP"].append(confidences[i])
-                matched_gt.add(best_gt_idx)
-                img_stats["TP"] += 1
-            else:
-                self.stats["FP"] += 1 # False Positive global
-                self.stats["confidences_FP"].append(confidences[i])
+            if best_iou >= self.iou_threshold:
+                matched_gt_all.add(best_gt_idx)
                 
-                # Classify if it is a pure FP (invention/duplicate) or a poor box
-                if 0.1 <= best_iou < self.iou_threshold:
-                    img_stats["poor_bbox"] += 1
+            # 2. GUARDADO FILTRADO (Para las métricas de negocio y visualización)
+            if conf >= self.user_conf_threshold:
+                cx_abs = (pred[0] + pred[2]) / 2
+                cy_abs = (pred[1] + pred[3]) / 2
+                self.stats["bbox_centers"].append((cx_abs/w, cy_abs/h))
+                
+                if best_iou >= self.iou_threshold and best_gt_idx not in matched_gt_thresh:
+                    self.stats["TP"] += 1
+                    self.stats["confidences_TP"].append(conf)
+                    matched_gt_thresh.add(best_gt_idx)
+                    img_stats["TP"] += 1
                 else:
-                    img_stats["FP"] += 1
+                    self.stats["FP"] += 1
+                    self.stats["confidences_FP"].append(conf)
+                    if 0.1 <= best_iou < self.iou_threshold:
+                        img_stats["poor_bbox"] += 1
+                    else:
+                        img_stats["FP"] += 1
 
-        # What was not matched is False Negative
-        img_fn = len(gt_boxes) - len(matched_gt)
+        img_fn = len(gt_boxes) - len(matched_gt_thresh)
         self.stats["FN"] += img_fn
         img_stats["FN"] = img_fn
         
         return img_stats
+
+    def calculate_ap(self, iou_thresh):
+        preds = sorted(self.stats["all_predictions"], key=lambda x: x["conf"], reverse=True)
+        
+        tps = np.zeros(len(preds))
+        fps = np.zeros(len(preds))
+        confs = np.zeros(len(preds))
+        
+        for i, p in enumerate(preds):
+            confs[i] = p["conf"]
+            if p["iou"] >= iou_thresh and not p["is_duplicate"]:
+                tps[i] = 1
+            else:
+                fps[i] = 1
+                
+        tp_cumsum = np.cumsum(tps)
+        fp_cumsum = np.cumsum(fps)
+        
+        total_gt = self.stats["total_gt"] + 1e-6 
+        recalls = tp_cumsum / total_gt
+        precisions = tp_cumsum / (tp_cumsum + fp_cumsum + 1e-6)
+        
+        # Guardar F1 crudo antes de suavizar la curva
+        f1_scores = 2 * (precisions * recalls) / (precisions + recalls + 1e-6)
+        
+        p_smooth = np.concatenate(([1.0], precisions, [0.0]))
+        r_smooth = np.concatenate(([0.0], recalls, [1.0]))
+        for i in range(len(p_smooth) - 1, 0, -1):
+            p_smooth[i - 1] = np.maximum(p_smooth[i - 1], p_smooth[i])
+            
+        indices = np.where(r_smooth[1:] != r_smooth[:-1])[0]
+        ap = np.sum((r_smooth[indices + 1] - r_smooth[indices]) * p_smooth[indices + 1])
+        
+        return ap, p_smooth, r_smooth, confs, f1_scores
 
     def generate_plots(self):
         print("📊 Generating statistical plots...")
@@ -110,48 +143,19 @@ class ReportGenerator:
             cmap='inferno'
         )
 
-        # 4. Precision-Recall Curve
-        ap50, precisions, recalls = self.calculate_ap(0.5)
+        # 4. Precision-Recall Curve y F1 Curve
+        ap50, precisions, recalls, confs, f1_scores = self.calculate_ap(0.5)
         plot_generator.plot_pr_curve(
             precisions, recalls, ap50,
             os.path.join(self.plots_dir, "pr_curve.png")
         )
-
-    def calculate_ap(self, iou_thresh):
-        """ Calculate the Average Precision for a specific IoU threshold """
-        # Sort all predictions by confidence from highest to lowest
-        preds = sorted(self.stats["all_predictions"], key=lambda x: x["conf"], reverse=True)
         
-        tps = np.zeros(len(preds))
-        fps = np.zeros(len(preds))
-        
-        for i, p in enumerate(preds):
-            # It is a hit if it exceeds the threshold and is not a duplicate detection of the same object
-            if p["iou"] >= iou_thresh and not p["is_duplicate"]:
-                tps[i] = 1
-            else:
-                fps[i] = 1
-                
-        # Cumulative sums
-        tp_cumsum = np.cumsum(tps)
-        fp_cumsum = np.cumsum(fps)
-        
-        # Precision and Recall at each point
-        total_gt = self.stats["total_gt"] + 1e-6 
-        recalls = tp_cumsum / total_gt
-        precisions = tp_cumsum / (tp_cumsum + fp_cumsum + 1e-6)
-        
-        # Add extremes for the PR curve and smooth it (standard interpolation)
-        precisions = np.concatenate(([1.0], precisions, [0.0]))
-        recalls = np.concatenate(([0.0], recalls, [1.0]))
-        for i in range(len(precisions) - 1, 0, -1):
-            precisions[i - 1] = np.maximum(precisions[i - 1], precisions[i])
-            
-        # Calculate area under the curve
-        indices = np.where(recalls[1:] != recalls[:-1])[0]
-        ap = np.sum((recalls[indices + 1] - recalls[indices]) * precisions[indices + 1])
-        
-        return ap, precisions, recalls
+        if len(f1_scores) > 0:
+            best_idx = np.argmax(f1_scores)
+            plot_generator.plot_f1_curve(
+                confs, f1_scores, confs[best_idx], f1_scores[best_idx],
+                os.path.join(self.plots_dir, "f1_curve.png")
+            )
 
     def generate_html_report(self, experiment_name="yolov8_s_default"):
         """ Calculates final metrics and delegates HTML creation to Jinja2 """
@@ -165,12 +169,12 @@ class ReportGenerator:
         recall = self.stats["TP"] / total_real if total_real > 0 else 0
         f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
-        map50, _, _ = self.calculate_ap(0.5)
+        map50, *_ = self.calculate_ap(0.5)
         
         ap_sum = 0
         thresholds = np.arange(0.5, 1.0, 0.05)
         for t in thresholds:
-            ap_t, _, _ = self.calculate_ap(t)
+            ap_t, *_ = self.calculate_ap(t)
             ap_sum += ap_t
         map_50_95 = ap_sum / len(thresholds)
 

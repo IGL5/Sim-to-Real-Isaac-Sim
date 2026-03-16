@@ -36,10 +36,13 @@
     </div>
     <div class="plot-grid">
         <div class="card">
-            <h3>Confusion Matrix</h3><img src="plots/{{metrics.prefix}}/confusion_matrix.png">
+            <h3>Confusion Matrix</h3><img src="plots/{{ metrics.prefix }}/confusion_matrix.png">
         </div>
         <div class="card">
-            <h3>Precision-Recall Curve</h3><img src="plots/{{metrics.prefix}}/pr_curve.png">
+            <h3>Precision-Recall Curve</h3><img src="plots/{{ metrics.prefix }}/pr_curve.png">
+        </div>
+        <div class="card">
+            <h3>Threshold Optimization (F1 Curve)</h3><img src="plots/{{ metrics.prefix }}/f1_curve.png">
         </div>
     </div>
     <div class="card" style="margin-top:20px;">

@@ -64,3 +64,19 @@ def plot_pr_curve(precisions, recalls, ap50, output_path):
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(output_path)
     plt.close()
+
+def plot_f1_curve(confs, f1_scores, best_conf, best_f1, output_path):
+    """ Draws an F1-Score vs Confidence curve to find the optimal threshold """
+    plt.figure(figsize=(8, 5))
+    plt.plot(confs, f1_scores, color='green', lw=2, label=f'F1 Curve (Peak: {best_f1:.2f} @ {best_conf:.3f})')
+    plt.scatter([best_conf], [best_f1], color='red', zorder=5)
+    plt.axvline(x=best_conf, color='red', linestyle='--', alpha=0.5)
+    plt.xlabel('Confidence Threshold')
+    plt.ylabel('F1 Score')
+    plt.title('F1 vs Confidence (Threshold Optimization)')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.legend(loc="lower center")
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.savefig(output_path)
+    plt.close()

@@ -294,8 +294,7 @@ def main():
         "data_augmentation": aug_data,
         "metrics_test_set": {
             "mAP50_95": round(float(metrics.box.map), 4),
-            "mAP50": round(float(metrics.box.map50), 4),
-            "fitness": round(float(fitness), 4)
+            "mAP50": round(float(metrics.box.map50), 4)
         },
         "artifacts": {
             "best_weights": best_weight,
