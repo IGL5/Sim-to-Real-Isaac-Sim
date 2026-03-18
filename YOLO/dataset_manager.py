@@ -66,7 +66,7 @@ def create_dir_structure(append_mode):
     else:
         print(f"📂 Structure verified (Append mode).")
 
-def process_pair(filename_base, subset_name, unique_prefix):
+def process_pair(filename_base, subset_name, unique_prefix, move_mode=False):
     """
     Processes a pair of image/label, changes their name with a unique prefix
     and saves them in the corresponding subset.
@@ -140,8 +140,12 @@ def process_pair(filename_base, subset_name, unique_prefix):
     dest_img = os.path.join(BASE_OUTPUT, 'images', subset_name, new_filename + img_ext)
     dest_lbl = os.path.join(BASE_OUTPUT, 'labels', subset_name, new_filename + ".txt")
     
-    # Copy image
-    shutil.copy2(img_path, dest_img)
+    if move_mode:
+        shutil.move(img_path, dest_img)
+        if os.path.exists(kitti_path):
+            os.remove(kitti_path)
+    else:
+        shutil.copy2(img_path, dest_img)
     
     # Save new txt
     with open(dest_lbl, 'w') as f_out:
@@ -150,7 +154,7 @@ def process_pair(filename_base, subset_name, unique_prefix):
             
     return True, len(yolo_lines), bboxes_stats
 
-def process_subset(file_list, subset_name, batch_prefix):
+def process_subset(file_list, subset_name, batch_prefix, move_mode=False):
     count_imgs = 0
     count_objs = 0
     count_bgs = 0
@@ -159,7 +163,7 @@ def process_subset(file_list, subset_name, batch_prefix):
     all_areas, all_ars, all_cx, all_cy = [], [], [], []
     
     for fname in file_list:
-        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix)
+        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode)
         if success:
             count_imgs += 1
             count_objs += num_objects
@@ -197,6 +201,7 @@ def process_subset(file_list, subset_name, batch_prefix):
 def main():
     parser = argparse.ArgumentParser(description="Dataset manager from KITTI to YOLO")
     parser.add_argument('--append', action='store_true', help="Add new data to the existing dataset without deleting anything.")
+    parser.add_argument('--move', action='store_true', help="Move files instead of copying to save disk space (DELETES ORIGINALS).")
     args = parser.parse_args()
 
     if not os.path.exists(LABELS_KITTI) or not os.path.exists(IMAGES_DIR):
@@ -210,6 +215,9 @@ def main():
     # We use date and time until seconds to ensure uniqueness: "20231027_153022"
     batch_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
     print(f"🆔 ID of Batch (Batch ID): {batch_prefix}")
+
+    if args.move:
+        print("⚠️  WARNING: Flag '--move' active. Original files in _output_data will be DELETED to save space.")
 
     # 3. List files
     all_files = [os.path.splitext(f)[0] for f in os.listdir(LABELS_KITTI) if f.endswith(".txt")]
@@ -241,13 +249,13 @@ def main():
 
     # 5. Process passing the prefix
     print("🚀 Processing Train...")
-    train_stats = process_subset(train_files, 'train', batch_prefix)
+    train_stats = process_subset(train_files, 'train', batch_prefix, args.move)
     
     print("🚀 Processing Val...")
-    val_stats = process_subset(val_files, 'val', batch_prefix)
+    val_stats = process_subset(val_files, 'val', batch_prefix, args.move)
     
     print("🚀 Processing Test...")
-    test_stats = process_subset(test_files, 'test', batch_prefix)
+    test_stats = process_subset(test_files, 'test', batch_prefix, args.move)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
