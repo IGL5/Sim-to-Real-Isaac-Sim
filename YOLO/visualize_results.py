@@ -17,10 +17,20 @@ except ImportError:
     sys.exit(1)
 
 
-def select_model_path():
+def select_model_path(preselected_model=None):
     """
     Interactively selects the model path checking for available models.
     """
+
+    if preselected_model:
+        path = os.path.join(cvu.PROJECT_DIR, preselected_model, "weights", "best.pt")
+        if os.path.exists(path):
+            print(f"🤖 Auto-selected model: {preselected_model}")
+            return path
+        else:
+            print(f"❌ ERROR: Preselected model '{preselected_model}' not found.")
+            sys.exit(1)
+
     print("\n--- 🤖 MODEL SELECTION ---")
     
     # Check if project directory exists
@@ -198,7 +208,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         save_evaluation_results(exp_name, prefix)
 
 
-def run_inference_mode(model_path, source_folder, save_persistently=False):
+def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False):
     """ Inference Mode (New images without labels) """
     
     if not cvu.check_system_integrity(model_path, check_dataset=False):
@@ -209,6 +219,9 @@ def run_inference_mode(model_path, source_folder, save_persistently=False):
         return
 
     print(f"--- 🌍 REAL INFERENCE MODE ---")
+
+    if not keep:
+        if os.path.exists(cvu.OUTPUT_DIR): shutil.rmtree(cvu.OUTPUT_DIR)
     
     save_dir = os.path.join(cvu.OUTPUT_DIR, "inference_real")
     if os.path.exists(save_dir): shutil.rmtree(save_dir)
@@ -325,6 +338,7 @@ if __name__ == "__main__":
     parser.add_argument('--save', action='store_true', help="Persistently save this evaluation in the model's folder")
     parser.add_argument('--keep', action='store_true', help="Do not delete the output directory before running (useful to combine reports)")
     parser.add_argument('--conf', type=float, default=None, help="Confidence threshold for detection")
+    parser.add_argument('--model', type=str, default=None, help="Bypass interactive menu and specify model name directly")
     
     args = parser.parse_args()
 
@@ -333,7 +347,7 @@ if __name__ == "__main__":
         print(f"\nConfidence threshold set to: {cvu.CONF_THRESHOLD}")
 
     # Ask for Model Name (or use default)
-    selected_model_path = select_model_path()
+    selected_model_path = select_model_path(args.model)
 
     # Mode Selector
     if args.video:
@@ -344,7 +358,7 @@ if __name__ == "__main__":
                        custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep)
     elif args.source:
         # INFERENCE MODE (Has images)
-        run_inference_mode(selected_model_path, args.source, save_persistently=args.save)
+        run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep)
     else:
         # SYNTHETIC AUDIT MODE (Default, uses Isaac Sim test set)
         if args.labels:

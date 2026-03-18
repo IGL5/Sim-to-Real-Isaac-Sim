@@ -73,7 +73,7 @@ OBJECTS_CONFIG = {
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
-        "randomize_materials": ["frame"]    # List of prim names to randomize materials
+        # "randomize_materials": ["frame"]    # List of prim names to randomize materials
     },
 }
 
@@ -87,7 +87,8 @@ DISTRACTOR_CONFIG = {
         "radius": 0.5,
         "cost_units": 2.0,
         "selection_weight": 50,
-        "scale_range": (0.7, 1.5)
+        "scale_range": (0.7, 1.5),
+        # "randomize_materials": ["main"]
     },
     "trees": {
         "active": True,
@@ -96,7 +97,8 @@ DISTRACTOR_CONFIG = {
         "radius": 2.0,
         "cost_units": 5.0,
         "selection_weight": 20,
-        "scale_range": (0.6, 1.2)
+        "scale_range": (0.6, 1.2),
+        # "randomize_materials": ["main"]
     },
     "debris": {
         "active": True,
@@ -105,7 +107,8 @@ DISTRACTOR_CONFIG = {
         "radius": 0.5,
         "cost_units": 0.5,
         "selection_weight": 50,
-        "scale_range": (0.3, 1.0)
+        "scale_range": (0.3, 1.0),
+        # "randomize_materials": ["main"]
     },
     "manmade": {
         "active": True,
@@ -114,7 +117,8 @@ DISTRACTOR_CONFIG = {
         "radius": 1.0,
         "cost_units": 2.0,
         "selection_weight": 20,
-        "scale_range": (0.8, 1.2)
+        "scale_range": (0.8, 1.2),
+        # "randomize_materials": ["main", "sec"]
     }
 }
 

@@ -181,8 +181,8 @@ def main():
     # 3. Train
     model.train(
         data=yaml_file,
-        epochs=args.epochs, 
-        imgsz=IMG_SIZE,
+        epochs=args.epochs,
+        imgsz=args.img_size,
         batch=BATCH_SIZE,
         workers=WORKERS,
         project=PROJECT_NAME,
@@ -221,7 +221,6 @@ def main():
 
     epochs_run = args.epochs
     best_epoch = -1
-    fitness = -1
 
     results_csv_path = os.path.join(PROJECT_NAME, experiment_name, 'results.csv')
     if os.path.exists(results_csv_path):
