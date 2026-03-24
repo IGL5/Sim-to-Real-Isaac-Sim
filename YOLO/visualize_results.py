@@ -152,7 +152,10 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
             gt_boxes = []
 
         # Inference
-        results = model.predict(source=img, conf=0.001, verbose=False)[0]
+        if "coco" in model_path.lower():
+            results = model.predict(source=img, conf=0.001, verbose=False, classes=[1])[0]
+        else:
+            results = model.predict(source=img, conf=0.001, verbose=False)[0]
         speed_dict = results.speed
         
         pred_boxes = []
@@ -257,7 +260,10 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             h, w, _ = img_orig.shape
 
             # Run YOLO inference
-            res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
+            if "coco" in model_path.lower():
+                res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False, classes=[1])[0]
+            else:
+                res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
             speed_dict = res.speed
             
             pred_boxes = []
@@ -317,7 +323,10 @@ def run_video_mode(model_path, video_path):
     
     # save=True makes YOLO automatically save the video in runs/detect/predict...
     # stream=True saves memory on long videos
-    results = model.predict(source=video_path, save=True, conf=cvu.CONF_THRESHOLD, stream=True)
+    if "coco" in model_path.lower():
+        results = model.predict(source=video_path, save=True, conf=cvu.CONF_THRESHOLD, stream=True, classes=[1])
+    else:
+        results = model.predict(source=video_path, save=True, conf=cvu.CONF_THRESHOLD, stream=True)
     
     # We need to iterate over the generator to process the video
     for r in results:

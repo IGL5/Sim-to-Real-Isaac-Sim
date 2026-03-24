@@ -202,6 +202,8 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
     for i, spec in enumerate(candidates_specs):
         obj_radius = spec['radius']
         obj_wheelbase = spec.get('wheelbase', None)
+
+        s_min, s_max = spec.get('spawn_radius', (0.0, max_radius))
         
         placed = False
         attempts = 0
@@ -211,7 +213,7 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
             attempts += 1
             
             # 1. Generate candidate
-            r = random.uniform(0.0, max_radius) # Can be 0 to be very close
+            r = random.uniform(s_min, s_max) # Can be 0 to be very close
             theta = random.uniform(0, 2 * math.pi)
             
             cand_x = tx + r * math.cos(theta)
@@ -256,17 +258,26 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
     return valid_results
 
 
-def randomize_precalculated_shaders(stage, shader_paths):
+def randomize_precalculated_shaders(stage, shader_paths, soft_colors):
     """
     Applies a random tint directly to pre-calculated shader paths.
     """
     if not shader_paths: return
-    
-    color_val = Gf.Vec3f(
-        random.uniform(0.05, 1.0),
-        random.uniform(0.05, 1.0),
-        random.uniform(0.05, 1.0)
-    )
+
+    color_val = None
+    if  soft_colors:
+        base_light = random.uniform(0.4, 1.0)
+        color_val = Gf.Vec3f(
+            base_light * random.uniform(0.60, 1.0), # R
+            base_light * random.uniform(0.60, 1.0), # G
+            base_light * random.uniform(0.60, 1.0)  # B
+        )
+    else:
+        color_val = Gf.Vec3f(
+            random.uniform(0.05, 1.0),
+            random.uniform(0.05, 1.0),
+            random.uniform(0.05, 1.0)
+        )
     
     for spath in shader_paths:
         shader_prim = stage.GetPrimAtPath(spath)
@@ -313,7 +324,11 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         obj_data = working_pools[key].pop()
         cfg = config_map[key]
         
-        candidates_specs.append({'radius': cfg['radius'], 'wheelbase': cfg.get('wheelbase')})
+        candidates_specs.append({
+            'radius': cfg['radius'], 
+            'wheelbase': cfg.get('wheelbase'), 
+            'spawn_radius': cfg.get('spawn_radius', (0.0, max_radius))
+        })
         paths_candidates.append(obj_data["path"])
         shaders_candidates.append(obj_data["shaders"])
         keys_candidates.append(key)
@@ -338,7 +353,7 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         update_prim_pose_and_visibility(stage, path, pos, rot, scale, visible=True)
 
         if "randomize_materials" in cfg and cfg["randomize_materials"]:
-            randomize_precalculated_shaders(stage, shaders)
+            randomize_precalculated_shaders(stage, shaders, cfg.get("randomize_soft_colors", False))
         
         # Register success
         new_obstacles.append( (pos[0], pos[1], cfg['radius']) )

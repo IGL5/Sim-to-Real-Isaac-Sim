@@ -41,11 +41,11 @@ RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
 OBJECTS_BUDGET_RANGE = (2.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
-OBJECTS_MAX_RADIUS = 3.0
+OBJECTS_MAX_RADIUS = 3.5
 
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (30.0, 75.0) # (15.0, 30.0)
-DISTRACTOR_MAX_RADIUS = 7.0
+DISTRACTOR_BUDGET_RANGE = (800.0, 1000.0) # (15.0, 30.0), (30.0, 75.0)
+DISTRACTOR_MAX_RADIUS = 30.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
@@ -73,7 +73,8 @@ OBJECTS_CONFIG = {
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
-        # "randomize_materials": ["frame"]    # List of prim names to randomize materials
+        "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
 }
 
@@ -82,43 +83,47 @@ OBJECTS_CONFIG = {
 DISTRACTOR_CONFIG = {
     "vegetation": {
         "active": True,
-        "pool_size": 25,
-        "spawn_radius": (5.0, 25.0),
+        "pool_size": 30,
+        "spawn_radius": (0.0, 10.0),
         "radius": 0.5,
         "cost_units": 2.0,
-        "selection_weight": 50,
+        "selection_weight": 80,
         "scale_range": (0.7, 1.5),
-        # "randomize_materials": ["main"]
+        "randomize_materials": ["main"],
+        "randomize_soft_colors": True
     },
     "trees": {
         "active": True,
-        "pool_size": 20,
-        "spawn_radius": (5.0, 25.0),
+        "pool_size": 50,
+        "spawn_radius": (3.0, 30.0),
         "radius": 2.0,
         "cost_units": 5.0,
-        "selection_weight": 20,
+        "selection_weight": 150,
         "scale_range": (0.6, 1.2),
-        # "randomize_materials": ["main"]
+        "randomize_materials": ["main"],
+        "randomize_soft_colors": True
     },
     "debris": {
         "active": True,
-        "pool_size": 50,
-        "spawn_radius": (2.0, 15.0),
+        "pool_size": 100,
+        "spawn_radius": (0.0, 8.0),
         "radius": 0.5,
         "cost_units": 0.5,
-        "selection_weight": 50,
+        "selection_weight": 70,
         "scale_range": (0.3, 1.0),
-        # "randomize_materials": ["main"]
+        "randomize_materials": ["main"],
+        "randomize_soft_colors": True
     },
     "manmade": {
         "active": True,
-        "pool_size": 30,
-        "spawn_radius": (10.0, 40.0),
+        "pool_size": 60,
+        "spawn_radius": (4.0, 10.0),
         "radius": 1.0,
         "cost_units": 2.0,
-        "selection_weight": 20,
+        "selection_weight": 40,
         "scale_range": (0.8, 1.2),
-        # "randomize_materials": ["main", "sec"]
+        "randomize_materials": ["main", "sec"],
+        "randomize_soft_colors": True
     }
 }
 

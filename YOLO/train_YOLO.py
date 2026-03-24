@@ -154,7 +154,7 @@ def main():
     parser.add_argument('--epochs', type=int, default=DEFAULT_EPOCHS, help="Override number of epochs")
     parser.add_argument('--patience', type=int, default=DEFAULT_PATIENCE, help="Override patience (0 = disabled)")
     parser.add_argument('--freeze', type=int, default=FREEZE_LAYERS, help="Override freeze layers")
-    parser.add_argument('--img_size', type=int, default=IMG_SIZE, help="Override image size [640 (SD default), 1280 (HD)]")
+    parser.add_argument('--img_size', type=int, default=IMG_SIZE, help="Override image size [640 (SD default), 960 (1/2), 1280 (HD)]")
     args = parser.parse_args()
 
     start_time = time.time()

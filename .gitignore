@@ -218,3 +218,4 @@ YOLO/*_detector/
 YOLO/audit_report/
 YOLO/real_images/
 YOLO/comparison_report/
+_output_data_empty/

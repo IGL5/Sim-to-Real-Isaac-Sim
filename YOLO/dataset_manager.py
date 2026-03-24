@@ -10,8 +10,8 @@ from datetime import datetime
 # --- CONFIG ---
 
 # Input paths (where are your NEW data from Isaac Sim)
-LABELS_KITTI = os.path.join(os.getcwd(), "..", "_output_data", "DroneCamera", "object_detection")
-IMAGES_DIR = os.path.join(os.getcwd(), "..", "_output_data", "DroneCamera", "rgb")
+LABELS_KITTI = ""
+IMAGES_DIR = ""
 
 # Output path (where the dataset will be stored)
 BASE_OUTPUT = os.path.join(os.getcwd(), "dataset_yolo_output")
@@ -200,9 +200,15 @@ def process_subset(file_list, subset_name, batch_prefix, move_mode=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Dataset manager from KITTI to YOLO")
-    parser.add_argument('--append', action='store_true', help="Add new data to the existing dataset without deleting anything.")
-    parser.add_argument('--move', action='store_true', help="Move files instead of copying to save disk space (DELETES ORIGINALS).")
+    parser.add_argument('--append', action='store_true', help="Add new data to the existing dataset without deleting anything")
+    parser.add_argument('--move', action='store_true', help="Move files instead of copying to save disk space (DELETES ORIGINALS)")
+    parser.add_argument('--limit', type=int, default=0, help="Maximum number of images to process (0 = all)")
+    parser.add_argument('--source', type=str, default="_output_data", help="Source folder name relative to parent directory (default: _output_data)")
     args = parser.parse_args()
+
+    global LABELS_KITTI, IMAGES_DIR
+    LABELS_KITTI = os.path.join(os.getcwd(), "..", args.source, "DroneCamera", "object_detection")
+    IMAGES_DIR = os.path.join(os.getcwd(), "..", args.source, "DroneCamera", "rgb")
 
     if not os.path.exists(LABELS_KITTI) or not os.path.exists(IMAGES_DIR):
         print(f"❌ Error: Verify the input paths ({LABELS_KITTI})")
@@ -229,6 +235,12 @@ def main():
 
     # 4. Shuffle and divide
     random.shuffle(all_files)
+
+    if args.limit > 0:
+        limit = min(args.limit, total_files)
+        all_files = all_files[:limit]
+        total_files = len(all_files)
+        print(f"✂️  LIMIT ACTIVE: Processing reduced to {total_files} random images.")
 
     train_end = int(total_files * TRAIN_RATIO)
     val_end = train_end + int(total_files * VAL_RATIO)
