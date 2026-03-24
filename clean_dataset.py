@@ -19,9 +19,15 @@ def clean_dataset(args):
         print(f"[ERROR] No rgb folders found inside: {args.dir}")
         return
 
-    print(f"--- Starting cleaning in {len(rgb_folders)} camera folders ---")
+    # Load whitelist if cleaning labels
+    whitelist_data = {}
+    if args.clean_labels:
+        whitelist_data = load_whitelist(args.whitelist)
+        print(f"🛡️  Loaded whitelist with {len(whitelist_data)} frame rules.")
+
+    print(f"--- Starting processing in {len(rgb_folders)} camera folders ---")
     
-    stats = {"corrupted": 0, "empty": 0, "kept": 0, "reviewed": 0}
+    stats = {"corrupted": 0, "empty": 0, "kept": 0, "reviewed": 0, "labels_removed": 0}
     remove_empty_logic = args.empty or args.move_empty
 
     for rgb_folder in rgb_folders:
@@ -35,7 +41,7 @@ def clean_dataset(args):
         print(f"  -> Analyzing {len(png_files)} images...")
 
         for rgb_path in png_files:
-            process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_logic)
+            process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_logic, whitelist_data)
 
     print_summary(stats, args)
     if not args.dry:
@@ -44,57 +50,55 @@ def clean_dataset(args):
 # ==========================================
 # 2. FRAME PROCESSING FLOW
 # ==========================================
-def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_logic):
+def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_logic, whitelist_data):
     """ Applies the pipeline of checks to a single frame. """
     frame_id = Path(rgb_path).stem
     txt_path = os.path.join(camera_root, "object_detection", f"{frame_id}.txt")
     
-    # Read image once for all operations
     img = cv2.imread(rgb_path)
 
     # CHECK 1: Corrupted or Flat Image
     if is_image_corrupted(img, args.thresh_mean, args.thresh_std):
         handle_action(rgb_path, camera_root, "delete", args.dry, stats, "corrupted", frame_id)
-        return # Stop processing this frame
+        return
 
-    # CHECK 2: Empty Labels (Backgrounds)
+    # CHECK 2: Clean Labels (Removes bad bboxes directly from the .txt)
+    if args.clean_labels and os.path.exists(txt_path):
+        removed_count = apply_label_cleaning(txt_path, frame_id, args.area_thresh, whitelist_data, args.dry)
+        stats["labels_removed"] += removed_count
+
+    # CHECK 3: Empty Labels (Backgrounds) - Evaluated AFTER cleaning labels!
     if remove_empty_logic and is_label_empty(txt_path):
         action = "move" if args.move_empty else "delete"
         target_dir = f"{args.dir}_empty" if args.move_empty else None
         handle_action(rgb_path, camera_root, action, args.dry, stats, "empty", frame_id, target_dir)
-        return # Stop processing this frame
+        return
 
-    # CHECK 3: Review Mode (Suspicious labels)
+    # CHECK 4: Review Mode (Suspicious labels visualization)
     if args.review:
         is_suspicious, annotated_img = analyze_kitti_labels(img, txt_path, args.area_thresh)
         if is_suspicious:
             save_review_image(annotated_img, args.dir, camera_name, frame_id)
             stats["reviewed"] += 1
 
-    # If it survived all checks, we keep it
     stats["kept"] += 1
 
 # ==========================================
-# 3. ANALYSIS MODULES
+# 3. ANALYSIS & CLEANING MODULES
 # ==========================================
 def is_image_corrupted(img, thresh_mean, thresh_std):
-    """ Returns True if image is missing, too dark, or flat. """
     if img is None: return True
     if np.mean(img) < thresh_mean or np.std(img) < thresh_std: return True
     return False
 
 def is_label_empty(txt_path):
-    """ Returns True if label file doesn't exist or is empty. """
     if not os.path.exists(txt_path): return True
     with open(txt_path, 'r') as f:
         if not f.read().strip(): return True
     return False
 
 def analyze_kitti_labels(img, txt_path, area_thresh):
-    """ 
-    Parses KITTI format. Flags high occlusion, truncation, or tiny areas. 
-    Returns: (bool is_suspicious, numpy_array annotated_image)
-    """
+    """ Parses KITTI. Flags suspicious boxes and draws their LINE INDEX for whitelisting. """
     if not os.path.exists(txt_path) or img is None:
         return False, None
         
@@ -104,14 +108,13 @@ def analyze_kitti_labels(img, txt_path, area_thresh):
     img_review = None
     is_suspicious = False
     
-    for line in lines:
+    for idx, line in enumerate(lines):
         parts = line.strip().split()
-        if len(parts) >= 8: # Basic KITTI length check
+        if len(parts) >= 8:
             try:
                 truncated = float(parts[1])
                 occluded = int(float(parts[2]))
                 xmin, ymin, xmax, ymax = map(float, parts[4:8])
-                
                 area = (xmax - xmin) * (ymax - ymin)
                 
                 reasons = []
@@ -121,12 +124,11 @@ def analyze_kitti_labels(img, txt_path, area_thresh):
                 
                 if reasons:
                     is_suspicious = True
-                    if img_review is None:
-                        img_review = img.copy()
+                    if img_review is None: img_review = img.copy()
                     
-                    # Draw visual feedback
                     cv2.rectangle(img_review, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 0, 255), 2)
-                    reason_text = " | ".join(reasons)
+                    # Show the line index [#idx] so the user can whitelist it
+                    reason_text = f"[#{idx}] " + " | ".join(reasons)
                     cv2.putText(img_review, reason_text, (int(xmin), int(ymin) - 5), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1, cv2.LINE_AA)
             except ValueError:
@@ -134,24 +136,75 @@ def analyze_kitti_labels(img, txt_path, area_thresh):
                 
     return is_suspicious, img_review
 
+def load_whitelist(whitelist_path):
+    """ Loads whitelist file. Format: 'frame_id:line_index' or 'frame_id' to save all lines. """
+    whitelist_data = {}
+    if not os.path.exists(whitelist_path):
+        return whitelist_data
+        
+    with open(whitelist_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"): continue
+            
+            if ":" in line:
+                frame_id, idx_str = line.split(":")
+                whitelist_data.setdefault(frame_id, []).append(int(idx_str))
+            else:
+                whitelist_data.setdefault(line, []).append("ALL")
+    return whitelist_data
+
+def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_run):
+    """ Reads the .txt and overwrites it omitting suspicious lines (unless whitelisted). """
+    with open(txt_path, 'r') as f:
+        lines = f.readlines()
+        
+    keep_lines = []
+    removed_count = 0
+    
+    frame_whitelist = whitelist_data.get(frame_id, [])
+    
+    for idx, line in enumerate(lines):
+        parts = line.strip().split()
+        is_suspicious = False
+        
+        if len(parts) >= 8:
+            try:
+                truncated, occluded = float(parts[1]), int(float(parts[2]))
+                xmin, ymin, xmax, ymax = map(float, parts[4:8])
+                area = (xmax - xmin) * (ymax - ymin)
+                
+                if occluded in [2, 3] or truncated > 0.6 or area < area_thresh:
+                    is_suspicious = True
+            except ValueError:
+                pass
+        
+        # Check whitelist
+        if is_suspicious:
+            if "ALL" in frame_whitelist or idx in frame_whitelist:
+                is_suspicious = False # Saved by the user!
+                
+        if is_suspicious:
+            removed_count += 1
+        else:
+            keep_lines.append(line)
+            
+    if removed_count > 0 and not dry_run:
+        with open(txt_path, 'w') as f:
+            f.writelines(keep_lines)
+            
+    return removed_count
+
 # ==========================================
 # 4. ACTION & FILE SYSTEM MODULES
 # ==========================================
 def handle_action(rgb_path, camera_root, action, dry_run, stats, stat_key, frame_id, target_dir=None):
-    """ Executes file deletion or moving, respecting the dry_run flag. """
     stats[stat_key] += 1
-    
-    if dry_run:
-        print(f"  [DRY-RUN] Frame {frame_id} would be {action}d ({stat_key}).")
-        return
-        
-    if action == "delete":
-        delete_hierarchical_frame(rgb_path, camera_root)
-    elif action == "move" and target_dir:
-        move_hierarchical_frame(rgb_path, camera_root, target_dir)
+    if dry_run: return
+    if action == "delete": delete_hierarchical_frame(rgb_path, camera_root)
+    elif action == "move" and target_dir: move_hierarchical_frame(rgb_path, camera_root, target_dir)
 
 def save_review_image(annotated_img, data_dir, camera_name, frame_id):
-    """ Saves the flagged image into the review folder. """
     dest_folder = os.path.join(data_dir, "_review_occlusions", camera_name)
     os.makedirs(dest_folder, exist_ok=True)
     cv2.imwrite(os.path.join(dest_folder, f"{frame_id}.png"), annotated_img)
@@ -161,7 +214,7 @@ def delete_hierarchical_frame(rgb_path, camera_root):
     for folder in [f.path for f in os.scandir(camera_root) if f.is_dir()]:
         for f_path in glob.glob(os.path.join(folder, f"{frame_id}.*")):
             try: os.remove(f_path)
-            except OSError as e: print(f"  [ERROR] Could not delete {f_path}: {e}")
+            except OSError: pass
 
 def move_hierarchical_frame(rgb_path, camera_root, target_root_dir):
     frame_id = Path(rgb_path).stem
@@ -171,10 +224,9 @@ def move_hierarchical_frame(rgb_path, camera_root, target_root_dir):
     for folder in [f.path for f in os.scandir(camera_root) if f.is_dir()]:
         dest_folder = os.path.join(dest_camera_root, os.path.basename(folder))
         os.makedirs(dest_folder, exist_ok=True)
-        
         for f_path in glob.glob(os.path.join(folder, f"{frame_id}.*")):
             try: shutil.move(f_path, os.path.join(dest_folder, os.path.basename(f_path)))
-            except OSError as e: print(f"  [ERROR] Could not move {f_path}: {e}")
+            except OSError: pass
 
 # ==========================================
 # 5. METADATA & UI MODULES
@@ -185,10 +237,12 @@ def print_summary(stats, args):
     print(f"🗑️ Corrupted frames deleted: {stats['corrupted']}")
     if args.empty or args.move_empty or stats['empty'] > 0:
         print(f"📦 Empty frames handled: {stats['empty']}")
+    if args.clean_labels:
+        print(f"✂️  Bad bounding boxes removed from .txt files: {stats['labels_removed']}")
     if args.review:
         print(f"🔍 Frames flagged for manual review: {stats['reviewed']}")
     if args.dry:
-        print("⚠️  DRY-RUN: No files were actually moved or deleted.")
+        print("⚠️  DRY-RUN: No files were actually modified.")
 
 def update_metadata(data_dir, stats, args):
     metadata_path = os.path.join(data_dir, "generation_metadata.json")
@@ -196,27 +250,27 @@ def update_metadata(data_dir, stats, args):
         with open(metadata_path, 'r', encoding='utf-8') as f:
             meta = json.load(f)
         
-        meta["cleaning"] = {
+        meta.setdefault("cleaning", {}).update({
             "corrupted_deleted": stats["corrupted"],
             "empty_deleted": stats["empty"],
             "valid_kept": stats["kept"],
-            "empty_were_moved": args.move_empty,
-            "frames_flagged_for_review": stats["reviewed"] if args.review else 0
-        }
+            "bad_bboxes_removed": stats["labels_removed"]
+        })
         
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(meta, f, indent=4)
-        print(f"📝 Metadata updated in: {metadata_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Dataset cleaner for Isaac Sim datasets")
-    parser.add_argument("--dir", type=str, default="_output_data", help="Root directory of the dataset")
-    parser.add_argument("--dry", action="store_true", help="Dry run, do not delete files")
-    parser.add_argument("--thresh_mean", type=float, default=5.0, help="Darkness threshold (0-255)")
+    parser.add_argument("--dir", type=str, default="_output_data", help="Root directory")
+    parser.add_argument("--dry", action="store_true", help="Dry run, no modifications")
+    parser.add_argument("--thresh_mean", type=float, default=5.0, help="Darkness threshold")
     parser.add_argument("--empty", action="store_true", help="Delete pure backgrounds")
-    parser.add_argument("--move_empty", action="store_true", help="Move empty backgrounds instead of deleting")
-    parser.add_argument("--review", action="store_true", help="Generate a visual review of occluded/truncated bboxes")
-    parser.add_argument("--area_thresh", type=float, default=1000.0, help="Min area (px) for bounding boxes")
+    parser.add_argument("--move_empty", action="store_true", help="Move empty backgrounds")
+    parser.add_argument("--review", action="store_true", help="Generate review images of bad bboxes")
+    parser.add_argument("--clean_labels", action="store_true", help="Actually remove bad bboxes from .txt")
+    parser.add_argument("--whitelist", type=str, default="whitelist.txt", help="Path to whitelist file")
+    parser.add_argument("--area_thresh", type=float, default=1000.0, help="Min area for bboxes")
     
     args = parser.parse_args()
 
