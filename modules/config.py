@@ -73,8 +73,8 @@ OBJECTS_CONFIG = {
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
-        "randomize_materials": ["frame"],   # List of prim names to randomize materials
-        "randomize_soft_colors": True       # Randomize colors but keep the same material
+        # "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
 }
 
