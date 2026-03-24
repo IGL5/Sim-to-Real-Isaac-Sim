@@ -241,6 +241,14 @@ def print_summary(stats, args):
         print(f"✂️  Bad bounding boxes removed from .txt files: {stats['labels_removed']}")
     if args.review:
         print(f"🔍 Frames flagged for manual review: {stats['reviewed']}")
+
+        if stats['reviewed'] > 0:
+            print("\n💡 NEXT STEPS (Whitelist Guide):")
+            print("  1. Open the '_review_occlusions' folder and check the images.")
+            print("  2. If a bounding box is valid, note its frame ID and line number (e.g., [#1]).")
+            print("  3. Add it to 'whitelist.txt'. Format: 'frame_id:1' (saves line 1) or 'frame_id' (saves all).")
+            print("  4. Run the script again to apply changes: python clean_dataset.py --clean_labels")
+
     if args.dry:
         print("⚠️  DRY-RUN: No files were actually modified.")
 
