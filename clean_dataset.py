@@ -273,6 +273,7 @@ if __name__ == "__main__":
     parser.add_argument("--dir", type=str, default="_output_data", help="Root directory")
     parser.add_argument("--dry", action="store_true", help="Dry run, no modifications")
     parser.add_argument("--thresh_mean", type=float, default=5.0, help="Darkness threshold")
+    parser.add_argument("--thresh_std", type=float, default=5.0, help="Flatness/std threshold")
     parser.add_argument("--empty", action="store_true", help="Delete pure backgrounds")
     parser.add_argument("--move_empty", action="store_true", help="Move empty backgrounds")
     parser.add_argument("--review", action="store_true", help="Generate review images of bad bboxes")
