@@ -21,16 +21,23 @@ def clean_dataset(args):
 
     # Load whitelist if cleaning labels
     whitelist_data = {}
-    if args.clean_labels:
+    if args.clean_labels or args.review:
         whitelist_data = load_whitelist(args.whitelist)
         print(f"🛡️  Loaded whitelist with {len(whitelist_data)} frame rules.")
+
+    if args.review:
+        review_dir = os.path.join(args.dir, "_review_occlusions")
+        if os.path.exists(review_dir):
+            shutil.rmtree(review_dir)
+        os.makedirs(review_dir, exist_ok=True)
+        print("🧹 Cleared previous review folder.")
 
     print(f"--- Starting processing in {len(rgb_folders)} camera folders ---")
     
     stats = {
         "corrupted": 0, "empty": 0, "kept": 0, "reviewed": 0, 
         "labels_removed": 0, "labels_saved": 0, "total_labels": 0,
-        "reason_occ": 0, "reason_trunc": 0, "reason_area": 0
+        "reason_occ": 0, "reason_trunc": 0, "reason_area": 0, "reason_edge": 0
     }
     remove_empty_logic = args.empty or args.move_empty
 
@@ -68,13 +75,15 @@ def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_
 
     # CHECK 2: Clean Labels (Removes bad bboxes directly from the .txt)
     if args.clean_labels and os.path.exists(txt_path):
-        res = apply_label_cleaning(txt_path, frame_id, args.area_thresh, whitelist_data, args.dry)
+        img_h, img_w = img.shape[:2]
+        res = apply_label_cleaning(txt_path, frame_id, args.area_thresh, whitelist_data, args.dry, img_w, img_h)
         stats["labels_removed"] += res["removed"]
         stats["labels_saved"] += res["saved"]
         stats["total_labels"] += res["total"]
         stats["reason_occ"] += res["occ"]
         stats["reason_trunc"] += res["trunc"]
         stats["reason_area"] += res["area"]
+        stats["reason_edge"] += res["edge"]
 
     # CHECK 3: Empty Labels (Backgrounds) - Evaluated AFTER cleaning labels!
     if remove_empty_logic and is_label_empty(txt_path):
@@ -85,7 +94,7 @@ def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_
 
     # CHECK 4: Review Mode (Suspicious labels visualization)
     if args.review:
-        is_suspicious, annotated_img = analyze_kitti_labels(img, txt_path, args.area_thresh)
+        is_suspicious, annotated_img = analyze_kitti_labels(img, txt_path, args.area_thresh, whitelist_data, frame_id)
         if is_suspicious:
             save_review_image(annotated_img, args.dir, camera_name, frame_id)
             stats["reviewed"] += 1
@@ -106,7 +115,7 @@ def is_label_empty(txt_path):
         if not f.read().strip(): return True
     return False
 
-def analyze_kitti_labels(img, txt_path, area_thresh):
+def analyze_kitti_labels(img, txt_path, area_thresh, whitelist_data, frame_id):
     """ Parses KITTI. Flags suspicious boxes and draws their LINE INDEX for whitelisting. """
     if not os.path.exists(txt_path) or img is None:
         return False, None
@@ -115,7 +124,11 @@ def analyze_kitti_labels(img, txt_path, area_thresh):
         lines = f.readlines()
         
     img_review = None
-    is_suspicious = False
+    is_suspicious_overall = False
+    img_h, img_w = img.shape[:2]
+    
+    # Extract whitelist for this specific frame
+    frame_whitelist = whitelist_data.get(frame_id, [])
     
     for idx, line in enumerate(lines):
         parts = line.strip().split()
@@ -124,26 +137,38 @@ def analyze_kitti_labels(img, txt_path, area_thresh):
                 truncated = float(parts[1])
                 occluded = int(float(parts[2]))
                 xmin, ymin, xmax, ymax = map(float, parts[4:8])
-                area = (xmax - xmin) * (ymax - ymin)
+                
+                bbox_w = xmax - xmin
+                bbox_h = ymax - ymin
+                area = bbox_w * bbox_h
+                aspect_ratio = bbox_w / bbox_h if bbox_h > 0 else 0
+                
+                margin = 2
+                touches_edge = (xmin <= margin) or (ymin <= margin) or (xmax >= img_w - margin) or (ymax >= img_h - margin)
                 
                 reasons = []
                 if occluded in [2, 3]: reasons.append(f"Occ:{occluded}")
                 if truncated > 0.6: reasons.append(f"Trunc:{truncated:.2f}")
                 if area < area_thresh: reasons.append(f"Area:{area:.0f}")
+                if touches_edge and (aspect_ratio > 3.0 or aspect_ratio < 0.33): 
+                    reasons.append(f"EdgeAR:{aspect_ratio:.1f}")
                 
                 if reasons:
-                    is_suspicious = True
+                    # If the user has already saved it, we ignore it visually
+                    if "ALL" in frame_whitelist or idx in frame_whitelist:
+                        continue 
+                        
+                    is_suspicious_overall = True
                     if img_review is None: img_review = img.copy()
                     
                     cv2.rectangle(img_review, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 0, 255), 2)
-                    # Show the line index [#idx] so the user can whitelist it
                     reason_text = f"[#{idx}] " + " | ".join(reasons)
                     cv2.putText(img_review, reason_text, (int(xmin), int(ymin) - 5), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1, cv2.LINE_AA)
             except ValueError:
                 continue
                 
-    return is_suspicious, img_review
+    return is_suspicious_overall, img_review
 
 def load_whitelist(whitelist_path):
     """ Loads whitelist file. Format: 'frame_id:line_index' or 'frame_id' to save all lines. """
@@ -163,18 +188,14 @@ def load_whitelist(whitelist_path):
                 whitelist_data.setdefault(line, []).append("ALL")
     return whitelist_data
 
-def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_run):
+def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_run, img_w, img_h):
     """ Reads the .txt and overwrites it omitting suspicious lines (unless whitelisted). """
     with open(txt_path, 'r') as f:
         lines = f.readlines()
         
     keep_lines = []
-    
-    # Local counters
-    removed_count = 0
-    saved_count = 0
-    total_labels = 0
-    r_occ, r_trunc, r_area = 0, 0, 0
+    removed_count, saved_count, total_labels = 0, 0, 0
+    r_occ, r_trunc, r_area, r_edge = 0, 0, 0, 0
     
     frame_whitelist = whitelist_data.get(frame_id, [])
     
@@ -188,30 +209,35 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_ru
             try:
                 truncated, occluded = float(parts[1]), int(float(parts[2]))
                 xmin, ymin, xmax, ymax = map(float, parts[4:8])
-                area = (xmax - xmin) * (ymax - ymin)
+                
+                bbox_w = xmax - xmin
+                bbox_h = ymax - ymin
+                area = bbox_w * bbox_h
+                aspect_ratio = bbox_w / bbox_h if bbox_h > 0 else 0
+                touches_edge = (xmin <= 2) or (ymin <= 2) or (xmax >= img_w - 2) or (ymax >= img_h - 2)
                 
                 # Priority of reasons
                 if occluded in [2, 3]:
-                    is_suspicious = True
-                    primary_reason = "occ"
+                    is_suspicious, primary_reason = True, "occ"
+                elif touches_edge and (aspect_ratio > 3.0 or aspect_ratio < 0.33):
+                    is_suspicious, primary_reason = True, "edge"
                 elif truncated > 0.6:
-                    is_suspicious = True
-                    primary_reason = "trunc"
+                    is_suspicious, primary_reason = True, "trunc"
                 elif area < area_thresh:
-                    is_suspicious = True
-                    primary_reason = "area"
+                    is_suspicious, primary_reason = True, "area"
             except ValueError:
                 pass
         
         # Check whitelist
         if is_suspicious:
             if "ALL" in frame_whitelist or idx in frame_whitelist:
-                is_suspicious = False # Saved by the user!
+                is_suspicious = False
                 saved_count += 1
                 
         if is_suspicious:
             removed_count += 1
             if primary_reason == "occ": r_occ += 1
+            elif primary_reason == "edge": r_edge += 1
             elif primary_reason == "trunc": r_trunc += 1
             elif primary_reason == "area": r_area += 1
         else:
@@ -223,7 +249,7 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_ru
             
     return {
         "removed": removed_count, "saved": saved_count, "total": total_labels,
-        "occ": r_occ, "trunc": r_trunc, "area": r_area
+        "occ": r_occ, "trunc": r_trunc, "area": r_area, "edge": r_edge
     }
 
 # ==========================================
@@ -305,22 +331,31 @@ def update_metadata(data_dir, stats, args):
             
         # 3. ONLY update the label metrics if we are in --clean_labels mode
         if args.clean_labels:
-            perc_removed = 0.0
-            if stats["total_labels"] > 0:
-                perc_removed = round((stats["labels_removed"] / stats["total_labels"]) * 100, 2)
-            
             prev_labels = cleaning_meta.get("labels_stats", {})
             prev_reasons = prev_labels.get("removal_reasons", {})
             
+            # A) Accumulate the deleted ones and the reasons (because they physically disappear from the .txt)
+            accumulated_removed = prev_labels.get("labels_removed", 0) + stats["labels_removed"]
+            
+            # B) Calculate the TOTAL original historical (The ones read today + the ones already deleted yesterday)
+            real_total_labels = stats["total_labels"] + prev_labels.get("labels_removed", 0)
+            
+            # C) Calculate the percentage on the real historical total
+            perc_removed = 0.0
+            if real_total_labels > 0:
+                perc_removed = round((accumulated_removed / real_total_labels) * 100, 2)
+            
             cleaning_meta["labels_stats"] = {
-                "total_labels_found": stats["total_labels"],
-                "labels_removed": prev_labels.get("labels_removed", 0) + stats["labels_removed"],
-                "labels_saved_by_whitelist": prev_labels.get("labels_saved_by_whitelist", 0) + stats["labels_saved"],
+                "total_labels_found": real_total_labels,
+                "labels_removed": accumulated_removed,
+                # D) The saved ones are NOT accumulated
+                "labels_saved_by_whitelist": stats["labels_saved"],
                 "percentage_removed_percent": perc_removed,
                 "removal_reasons": {
                     "occlusion": prev_reasons.get("occlusion", 0) + stats["reason_occ"],
                     "truncation": prev_reasons.get("truncation", 0) + stats["reason_trunc"],
-                    "small_area": prev_reasons.get("small_area", 0) + stats["reason_area"]
+                    "small_area": prev_reasons.get("small_area", 0) + stats["reason_area"],
+                    "edge_cut": prev_reasons.get("edge_cut", 0) + stats["reason_edge"]
                 }
             }
         
