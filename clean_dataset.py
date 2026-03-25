@@ -76,7 +76,7 @@ def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_
     # CHECK 2: Clean Labels (Removes bad bboxes directly from the .txt)
     if args.clean_labels and os.path.exists(txt_path):
         img_h, img_w = img.shape[:2]
-        res = apply_label_cleaning(txt_path, frame_id, args.area_thresh, whitelist_data, args.dry, img_w, img_h)
+        res = apply_label_cleaning(txt_path, frame_id, args.area_thresh, args.max_area_ratio, whitelist_data, args.dry, img_w, img_h)
         stats["labels_removed"] += res["removed"]
         stats["labels_saved"] += res["saved"]
         stats["total_labels"] += res["total"]
@@ -84,6 +84,7 @@ def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_
         stats["reason_trunc"] += res["trunc"]
         stats["reason_area"] += res["area"]
         stats["reason_edge"] += res["edge"]
+        stats["reason_giant"] += res["giant"]
 
     # CHECK 3: Empty Labels (Backgrounds) - Evaluated AFTER cleaning labels!
     if remove_empty_logic and is_label_empty(txt_path):
@@ -94,7 +95,7 @@ def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_
 
     # CHECK 4: Review Mode (Suspicious labels visualization)
     if args.review:
-        is_suspicious, annotated_img = analyze_kitti_labels(img, txt_path, args.area_thresh, whitelist_data, frame_id)
+        is_suspicious, annotated_img = analyze_kitti_labels(img, txt_path, args.area_thresh, args.max_area_ratio, whitelist_data, frame_id)
         if is_suspicious:
             save_review_image(annotated_img, args.dir, camera_name, frame_id)
             stats["reviewed"] += 1
@@ -115,7 +116,7 @@ def is_label_empty(txt_path):
         if not f.read().strip(): return True
     return False
 
-def analyze_kitti_labels(img, txt_path, area_thresh, whitelist_data, frame_id):
+def analyze_kitti_labels(img, txt_path, area_thresh, max_area_ratio, whitelist_data, frame_id):
     """ Parses KITTI. Flags suspicious boxes and draws their LINE INDEX for whitelisting. """
     if not os.path.exists(txt_path) or img is None:
         return False, None
@@ -141,6 +142,7 @@ def analyze_kitti_labels(img, txt_path, area_thresh, whitelist_data, frame_id):
                 bbox_w = xmax - xmin
                 bbox_h = ymax - ymin
                 area = bbox_w * bbox_h
+                img_area = img_w * img_h
                 aspect_ratio = bbox_w / bbox_h if bbox_h > 0 else 0
                 
                 margin = 2
@@ -152,6 +154,8 @@ def analyze_kitti_labels(img, txt_path, area_thresh, whitelist_data, frame_id):
                 if area < area_thresh: reasons.append(f"Area:{area:.0f}")
                 if touches_edge and (aspect_ratio > 3.0 or aspect_ratio < 0.33): 
                     reasons.append(f"EdgeAR:{aspect_ratio:.1f}")
+                if (area / img_area) > max_area_ratio:  
+                    reasons.append(f"Giant:{(area/img_area)*100:.0f}%")
                 
                 if reasons:
                     # If the user has already saved it, we ignore it visually
@@ -188,14 +192,14 @@ def load_whitelist(whitelist_path):
                 whitelist_data.setdefault(line, []).append("ALL")
     return whitelist_data
 
-def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_run, img_w, img_h):
+def apply_label_cleaning(txt_path, frame_id, area_thresh, max_area_ratio, whitelist_data, dry_run, img_w, img_h):
     """ Reads the .txt and overwrites it omitting suspicious lines (unless whitelisted). """
     with open(txt_path, 'r') as f:
         lines = f.readlines()
         
     keep_lines = []
     removed_count, saved_count, total_labels = 0, 0, 0
-    r_occ, r_trunc, r_area, r_edge = 0, 0, 0, 0
+    r_occ, r_trunc, r_area, r_edge, r_giant = 0, 0, 0, 0, 0
     
     frame_whitelist = whitelist_data.get(frame_id, [])
     
@@ -219,6 +223,8 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_ru
                 # Priority of reasons
                 if occluded in [2, 3]:
                     is_suspicious, primary_reason = True, "occ"
+                elif (area / (img_w * img_h)) > max_area_ratio:
+                    is_suspicious, primary_reason = True, "giant"
                 elif touches_edge and (aspect_ratio > 3.0 or aspect_ratio < 0.33):
                     is_suspicious, primary_reason = True, "edge"
                 elif truncated > 0.6:
@@ -249,7 +255,7 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_ru
             
     return {
         "removed": removed_count, "saved": saved_count, "total": total_labels,
-        "occ": r_occ, "trunc": r_trunc, "area": r_area, "edge": r_edge
+        "occ": r_occ, "trunc": r_trunc, "area": r_area, "edge": r_edge, "giant": r_giant
     }
 
 # ==========================================
@@ -378,6 +384,7 @@ if __name__ == "__main__":
     parser.add_argument("--clean_labels", action="store_true", help="Actually remove bad bboxes from .txt")
     parser.add_argument("--whitelist", type=str, default="_output_data/whitelist.txt", help="Path to whitelist file")
     parser.add_argument("--area_thresh", type=float, default=1000.0, help="Min area for bboxes")
+    parser.add_argument("--max_area_ratio", type=float, default=0.70, help="Max percentage of the image a bbox can occupy (0.0 to 1.0)")
     
     args = parser.parse_args()
 
