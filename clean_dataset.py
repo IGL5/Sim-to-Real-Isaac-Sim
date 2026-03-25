@@ -27,7 +27,11 @@ def clean_dataset(args):
 
     print(f"--- Starting processing in {len(rgb_folders)} camera folders ---")
     
-    stats = {"corrupted": 0, "empty": 0, "kept": 0, "reviewed": 0, "labels_removed": 0}
+    stats = {
+        "corrupted": 0, "empty": 0, "kept": 0, "reviewed": 0, 
+        "labels_removed": 0, "labels_saved": 0, "total_labels": 0,
+        "reason_occ": 0, "reason_trunc": 0, "reason_area": 0
+    }
     remove_empty_logic = args.empty or args.move_empty
 
     for rgb_folder in rgb_folders:
@@ -64,8 +68,13 @@ def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_
 
     # CHECK 2: Clean Labels (Removes bad bboxes directly from the .txt)
     if args.clean_labels and os.path.exists(txt_path):
-        removed_count = apply_label_cleaning(txt_path, frame_id, args.area_thresh, whitelist_data, args.dry)
-        stats["labels_removed"] += removed_count
+        res = apply_label_cleaning(txt_path, frame_id, args.area_thresh, whitelist_data, args.dry)
+        stats["labels_removed"] += res["removed"]
+        stats["labels_saved"] += res["saved"]
+        stats["total_labels"] += res["total"]
+        stats["reason_occ"] += res["occ"]
+        stats["reason_trunc"] += res["trunc"]
+        stats["reason_area"] += res["area"]
 
     # CHECK 3: Empty Labels (Backgrounds) - Evaluated AFTER cleaning labels!
     if remove_empty_logic and is_label_empty(txt_path):
@@ -160,22 +169,37 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_ru
         lines = f.readlines()
         
     keep_lines = []
+    
+    # Local counters
     removed_count = 0
+    saved_count = 0
+    total_labels = 0
+    r_occ, r_trunc, r_area = 0, 0, 0
     
     frame_whitelist = whitelist_data.get(frame_id, [])
     
     for idx, line in enumerate(lines):
         parts = line.strip().split()
         is_suspicious = False
+        primary_reason = None
         
         if len(parts) >= 8:
+            total_labels += 1
             try:
                 truncated, occluded = float(parts[1]), int(float(parts[2]))
                 xmin, ymin, xmax, ymax = map(float, parts[4:8])
                 area = (xmax - xmin) * (ymax - ymin)
                 
-                if occluded in [2, 3] or truncated > 0.6 or area < area_thresh:
+                # Priority of reasons
+                if occluded in [2, 3]:
                     is_suspicious = True
+                    primary_reason = "occ"
+                elif truncated > 0.6:
+                    is_suspicious = True
+                    primary_reason = "trunc"
+                elif area < area_thresh:
+                    is_suspicious = True
+                    primary_reason = "area"
             except ValueError:
                 pass
         
@@ -183,9 +207,13 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_ru
         if is_suspicious:
             if "ALL" in frame_whitelist or idx in frame_whitelist:
                 is_suspicious = False # Saved by the user!
+                saved_count += 1
                 
         if is_suspicious:
             removed_count += 1
+            if primary_reason == "occ": r_occ += 1
+            elif primary_reason == "trunc": r_trunc += 1
+            elif primary_reason == "area": r_area += 1
         else:
             keep_lines.append(line)
             
@@ -193,7 +221,10 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, whitelist_data, dry_ru
         with open(txt_path, 'w') as f:
             f.writelines(keep_lines)
             
-    return removed_count
+    return {
+        "removed": removed_count, "saved": saved_count, "total": total_labels,
+        "occ": r_occ, "trunc": r_trunc, "area": r_area
+    }
 
 # ==========================================
 # 4. ACTION & FILE SYSTEM MODULES
@@ -246,7 +277,7 @@ def print_summary(stats, args):
             print("\n💡 NEXT STEPS (Whitelist Guide):")
             print("  1. Open the '_review_occlusions' folder and check the images.")
             print("  2. If a bounding box is valid, note its frame ID and line number (e.g., [#1]).")
-            print("  3. Add it to 'whitelist.txt'. Format: 'frame_id:1' (saves line 1) or 'frame_id' (saves all).")
+            print("  3. Add it to '_output_data/whitelist.txt'. Format: 'frame_id:1' (saves line 1) or 'frame_id' (saves all).")
             print("  4. Run the script again to apply changes: python clean_dataset.py --clean_labels")
 
     if args.dry:
@@ -258,12 +289,44 @@ def update_metadata(data_dir, stats, args):
         with open(metadata_path, 'r', encoding='utf-8') as f:
             meta = json.load(f)
         
-        meta.setdefault("cleaning", {}).update({
-            "corrupted_deleted": stats["corrupted"],
-            "empty_deleted": stats["empty"],
-            "valid_kept": stats["kept"],
-            "bad_bboxes_removed": stats["labels_removed"]
-        })
+        # Reference to the cleaning block
+        cleaning_meta = meta.setdefault("cleaning", {})
+        
+        # 1. ACCUMULATE the deleted ones
+        cleaning_meta["corrupted_deleted"] = cleaning_meta.get("corrupted_deleted", 0) + stats["corrupted"]
+        cleaning_meta["empty_deleted"] = cleaning_meta.get("empty_deleted", 0) + stats["empty"]
+        
+        # 2. OVERWRITE valid_kept
+        cleaning_meta["valid_kept"] = stats["kept"]
+        
+        # Save if move_empty has ever been used
+        if args.move_empty:
+            cleaning_meta["empty_were_moved"] = True
+            
+        # 3. ONLY update the label metrics if we are in --clean_labels mode
+        if args.clean_labels:
+            perc_removed = 0.0
+            if stats["total_labels"] > 0:
+                perc_removed = round((stats["labels_removed"] / stats["total_labels"]) * 100, 2)
+            
+            prev_labels = cleaning_meta.get("labels_stats", {})
+            prev_reasons = prev_labels.get("removal_reasons", {})
+            
+            cleaning_meta["labels_stats"] = {
+                "total_labels_found": stats["total_labels"],
+                "labels_removed": prev_labels.get("labels_removed", 0) + stats["labels_removed"],
+                "labels_saved_by_whitelist": prev_labels.get("labels_saved_by_whitelist", 0) + stats["labels_saved"],
+                "percentage_removed_percent": perc_removed,
+                "removal_reasons": {
+                    "occlusion": prev_reasons.get("occlusion", 0) + stats["reason_occ"],
+                    "truncation": prev_reasons.get("truncation", 0) + stats["reason_trunc"],
+                    "small_area": prev_reasons.get("small_area", 0) + stats["reason_area"]
+                }
+            }
+        
+        # Update the total number of valid frames generated in 'performance' if it exists
+        if "performance" in meta:
+            meta["performance"]["total_valid_frames_after_cleaning"] = stats["kept"]
         
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(meta, f, indent=4)
@@ -278,7 +341,7 @@ if __name__ == "__main__":
     parser.add_argument("--move_empty", action="store_true", help="Move empty backgrounds")
     parser.add_argument("--review", action="store_true", help="Generate review images of bad bboxes")
     parser.add_argument("--clean_labels", action="store_true", help="Actually remove bad bboxes from .txt")
-    parser.add_argument("--whitelist", type=str, default="whitelist.txt", help="Path to whitelist file")
+    parser.add_argument("--whitelist", type=str, default="_output_data/whitelist.txt", help="Path to whitelist file")
     parser.add_argument("--area_thresh", type=float, default=1000.0, help="Min area for bboxes")
     
     args = parser.parse_args()
