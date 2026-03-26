@@ -37,7 +37,8 @@ def clean_dataset(args):
     stats = {
         "corrupted": 0, "empty": 0, "kept": 0, "reviewed": 0, 
         "labels_removed": 0, "labels_saved": 0, "total_labels": 0,
-        "reason_occ": 0, "reason_trunc": 0, "reason_area": 0, "reason_edge": 0
+        "reason_occ": 0, "reason_trunc": 0, "reason_area": 0,
+        "reason_edge": 0, "reason_giant": 0
     }
     remove_empty_logic = args.empty or args.move_empty
 
@@ -361,7 +362,8 @@ def update_metadata(data_dir, stats, args):
                     "occlusion": prev_reasons.get("occlusion", 0) + stats["reason_occ"],
                     "truncation": prev_reasons.get("truncation", 0) + stats["reason_trunc"],
                     "small_area": prev_reasons.get("small_area", 0) + stats["reason_area"],
-                    "edge_cut": prev_reasons.get("edge_cut", 0) + stats["reason_edge"]
+                    "edge_cut": prev_reasons.get("edge_cut", 0) + stats["reason_edge"],
+                    "giant_bbox": prev_reasons.get("giant_bbox", 0) + stats["reason_giant"]
                 }
             }
         
