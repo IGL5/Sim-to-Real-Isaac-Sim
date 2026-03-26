@@ -87,6 +87,9 @@ def process_frame(rgb_path, camera_root, camera_name, args, stats, remove_empty_
         stats["reason_edge"] += res["edge"]
         stats["reason_giant"] += res["giant"]
 
+        if args.dry and res["removed"] > 0:
+            print(f"  [DRY-RUN] Frame {frame_id}: {res['removed']} bad bboxes would be removed.")
+
     # CHECK 3: Empty Labels (Backgrounds) - Evaluated AFTER cleaning labels!
     if remove_empty_logic and is_label_empty(txt_path):
         action = "move" if args.move_empty else "delete"
@@ -264,9 +267,15 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, max_area_ratio, whitel
 # ==========================================
 def handle_action(rgb_path, camera_root, action, dry_run, stats, stat_key, frame_id, target_dir=None):
     stats[stat_key] += 1
-    if dry_run: return
-    if action == "delete": delete_hierarchical_frame(rgb_path, camera_root)
-    elif action == "move" and target_dir: move_hierarchical_frame(rgb_path, camera_root, target_dir)
+    if dry_run: 
+        action_str = "moved" if action == "move" else "deleted"
+        print(f"  [DRY-RUN] Frame {frame_id} would be {action_str} (Reason: {stat_key.upper()})")
+        return
+        
+    if action == "delete": 
+        delete_hierarchical_frame(rgb_path, camera_root)
+    elif action == "move" and target_dir: 
+        move_hierarchical_frame(rgb_path, camera_root, target_dir)
 
 def save_review_image(annotated_img, data_dir, camera_name, frame_id):
     dest_folder = os.path.join(data_dir, "_review_occlusions", camera_name)
@@ -386,7 +395,7 @@ if __name__ == "__main__":
     parser.add_argument("--clean_labels", action="store_true", help="Actually remove bad bboxes from .txt")
     parser.add_argument("--whitelist", type=str, default="_output_data/whitelist.txt", help="Path to whitelist file")
     parser.add_argument("--area_thresh", type=float, default=1000.0, help="Min area for bboxes")
-    parser.add_argument("--max_area_ratio", type=float, default=0.70, help="Max percentage of the image a bbox can occupy (0.0 to 1.0)")
+    parser.add_argument("--max_area_ratio", type=float, default=0.50, help="Max percentage of the image a bbox can occupy (0.0 to 1.0)")
     
     args = parser.parse_args()
 
