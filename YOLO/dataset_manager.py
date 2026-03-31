@@ -66,7 +66,7 @@ def create_dir_structure(append_mode):
     else:
         print(f"📂 Structure verified (Append mode).")
 
-def process_pair(filename_base, subset_name, unique_prefix, move_mode=False):
+def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_yolo=False):
     """
     Processes a pair of image/label, changes their name with a unique prefix
     and saves them in the corresponding subset.
@@ -91,12 +91,11 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False):
         return False, 0, []
     height, width, _ = img.shape
 
-    # 2. Process KITTI label
+    # 2. Process label
     kitti_path = os.path.join(LABELS_KITTI, filename_base + ".txt")
     yolo_lines = []
     bboxes_stats = []
     
-    # If the label file doesn't exist (sometimes Isaac generates the image but fails the txt), skip it
     if not os.path.exists(kitti_path):
         return False, 0, []
 
@@ -105,36 +104,54 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False):
         
     for line in lines:
         parts = line.strip().split(' ')
-        class_name = parts[0]
-        
-        if class_name not in CLASES:
+        if len(parts) < 5: 
             continue
             
-        class_id = CLASES.index(class_name)
-        
-        try:
-            xmin, ymin = float(parts[4]), float(parts[5])
-            xmax, ymax = float(parts[6]), float(parts[7])
-            
-            bbox = change_coordinates((width, height), (xmin, xmax, ymin, ymax))
-            yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
+        if is_yolo:
+            try:
+                # YOLO format: class_id cx cy w h
+                class_id = int(parts[0])
+                cx, cy, w_box, h_box = map(float, parts[1:5])
+                
+                # Check if the class_id is valid according to our classes.txt
+                if class_id < 0 or class_id >= len(CLASES):
+                    continue
+                    
+                yolo_lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w_box:.6f} {h_box:.6f}")
+                
+                area = w_box * h_box
+                aspect_ratio = w_box / h_box if h_box > 0 else 0
+                
+                bboxes_stats.append({
+                    "area": area, "ar": aspect_ratio, "cx": cx, "cy": cy
+                })
+            except (ValueError, IndexError):
+                continue
+        else:
+            # KITTI original format
+            class_name = parts[0]
+            if class_name not in CLASES:
+                continue
+                
+            class_id = CLASES.index(class_name)
+            try:
+                xmin, ymin = float(parts[4]), float(parts[5])
+                xmax, ymax = float(parts[6]), float(parts[7])
+                
+                bbox = change_coordinates((width, height), (xmin, xmax, ymin, ymax))
+                yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
 
-            w, h = bbox[2], bbox[3]
-            area = w * h
-            aspect_ratio = w / h if h > 0 else 0
-            
-            bboxes_stats.append({
-                "area": area,
-                "ar": aspect_ratio,
-                "cx": bbox[0],
-                "cy": bbox[1]
-            })
-
-        except (ValueError, IndexError):
-            continue
+                w_k, h_k = bbox[2], bbox[3]
+                area = w_k * h_k
+                aspect_ratio = w_k / h_k if h_k > 0 else 0
+                
+                bboxes_stats.append({
+                    "area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]
+                })
+            except (ValueError, IndexError):
+                continue
 
     # 3. Save with NEW UNIQUE NAME
-    # Format: batch_20231027_rgb_0001.png
     new_filename = f"{unique_prefix}_{filename_base}"
     
     dest_img = os.path.join(BASE_OUTPUT, 'images', subset_name, new_filename + img_ext)
@@ -154,7 +171,7 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False):
             
     return True, len(yolo_lines), bboxes_stats
 
-def process_subset(file_list, subset_name, batch_prefix, move_mode=False):
+def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yolo=False):
     count_imgs = 0
     count_objs = 0
     count_bgs = 0
@@ -163,7 +180,7 @@ def process_subset(file_list, subset_name, batch_prefix, move_mode=False):
     all_areas, all_ars, all_cx, all_cy = [], [], [], []
     
     for fname in file_list:
-        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode)
+        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode, is_yolo)
         if success:
             count_imgs += 1
             count_objs += num_objects
@@ -203,7 +220,8 @@ def main():
     parser.add_argument('--append', action='store_true', help="Add new data to the existing dataset without deleting anything")
     parser.add_argument('--move', action='store_true', help="Move files instead of copying to save disk space (DELETES ORIGINALS)")
     parser.add_argument('--limit', type=int, default=0, help="Maximum number of images to process (0 = all)")
-    parser.add_argument('--source', type=str, default="_output_data", help="Source folder name relative to parent directory (default: _output_data)")
+    parser.add_argument('--source', type=str, default="_output_data", help="Source folder name relative to parent directory")
+    parser.add_argument('--is_yolo', action='store_true', help="Indicates that source labels are already in YOLO format")
     args = parser.parse_args()
 
     global LABELS_KITTI, IMAGES_DIR
@@ -261,13 +279,13 @@ def main():
 
     # 5. Process passing the prefix
     print("🚀 Processing Train...")
-    train_stats = process_subset(train_files, 'train', batch_prefix, args.move)
+    train_stats = process_subset(train_files, 'train', batch_prefix, args.move, args.is_yolo)
     
     print("🚀 Processing Val...")
-    val_stats = process_subset(val_files, 'val', batch_prefix, args.move)
+    val_stats = process_subset(val_files, 'val', batch_prefix, args.move, args.is_yolo)
     
     print("🚀 Processing Test...")
-    test_stats = process_subset(test_files, 'test', batch_prefix, args.move)
+    test_stats = process_subset(test_files, 'test', batch_prefix, args.move, args.is_yolo)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")

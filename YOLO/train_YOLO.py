@@ -5,6 +5,7 @@ import torch
 import argparse
 import time
 import json
+import sys
 import platform
 from datetime import datetime
 import pandas as pd
@@ -14,7 +15,7 @@ import modules.core_visual_utils as cvu
 # DEFAULT CONFIGURATION
 DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
 
-TRAIN_IMGS = "images/train" 
+TRAIN_IMGS = "images/train"
 VAL_IMGS = "images/val"
 TEST_REL  = "images/test"
 
@@ -146,6 +147,67 @@ def interactive_selection():
     print("--------------------------------------\n")
     return model_to_use, exp_name
 
+def select_existing_model():
+    """
+    Interactive flow to select an already trained model for fine-tuning.
+    """
+    print("\n--- 🤖 EXISTING MODEL SELECTION (FINE-TUNING) ---")
+    
+    if not os.path.exists(PROJECT_NAME):
+        print(f"❌ ERROR: Project directory '{PROJECT_NAME}' not found.")
+        sys.exit(1)
+        
+    available_models = []
+    for d in os.listdir(PROJECT_NAME):
+        model_dir = os.path.join(PROJECT_NAME, d)
+        if os.path.isdir(model_dir):
+            weights_path = os.path.join(model_dir, "weights", "best.pt")
+            if os.path.exists(weights_path):
+                available_models.append(d)
+                
+    if not available_models:
+        print(f"❌ ERROR: No trained models found in '{PROJECT_NAME}'.")
+        sys.exit(1)
+        
+    print("📂 Available trained models to fine-tune:")
+    for i, m in enumerate(available_models):
+        print(f"  [{i+1}] {m}")
+        
+    while True:
+        user_input = input(f"\nSelect a base model [1-{len(available_models)}] (default: 1): ").strip()
+        
+        if not user_input:
+            base_exp_name = available_models[0]
+            break
+        
+        if user_input.isdigit():
+            idx = int(user_input) - 1
+            if 0 <= idx < len(available_models):
+                base_exp_name = available_models[idx]
+                break
+            else:
+                print(f"  ⚠️  Number out of range. Please choose between 1 and {len(available_models)}.")
+        else:
+            if user_input in available_models:
+                base_exp_name = user_input
+                break
+            print("  ⚠️  Invalid input. Please enter a valid number.")
+            
+    path_to_weights = os.path.join(PROJECT_NAME, base_exp_name, "weights", "best.pt")
+    
+    # Ask for the new experiment name
+    default_name = f"{base_exp_name}_finetuned"
+    print("\nExperiment Naming:")
+    name_input = input(f"New Experiment Name? (default '{default_name}'): ").strip()
+    
+    exp_name = name_input if name_input else default_name
+    
+    print(f"✅ Selected base model: {base_exp_name}")
+    print(f"✅ New experiment name: {exp_name}")
+    print("--------------------------------------\n")
+    
+    return path_to_weights, exp_name
+
 
 def main():
     parser = argparse.ArgumentParser(description="YOLO Training Tool")
@@ -155,6 +217,8 @@ def main():
     parser.add_argument('--patience', type=int, default=DEFAULT_PATIENCE, help="Override patience (0 = disabled)")
     parser.add_argument('--freeze', type=int, default=FREEZE_LAYERS, help="Override freeze layers")
     parser.add_argument('--img_size', type=int, default=IMG_SIZE, help="Override image size [640 (SD default), 960 (1/2), 1280 (HD)]")
+    parser.add_argument('--finetune', action='store_true', help="Fine-tune an existing trained model instead of using a base COCO model")
+    parser.add_argument('--lr0', type=float, default=0.01, help="Initial learning rate (use 0.0001 for fine-tuning)")
     args = parser.parse_args()
 
     start_time = time.time()
@@ -163,9 +227,12 @@ def main():
     device, device_name = check_gpu()
 
     # Model selection logic
-    model_type, experiment_name = interactive_selection()
+    if args.finetune:
+        model_type, experiment_name = select_existing_model()
+    else:
+        model_type, experiment_name = interactive_selection()
 
-    print(f"🚀 Starting training: {model_type} | Epochs: {args.epochs} | Exp: {experiment_name}")
+    print(f"🚀 Starting training: {model_type} | Epochs: {args.epochs} | Exp: {experiment_name}| LR: {args.lr0}")
 
     # 1. Create the treasure map (YAML)
     yaml_file = create_yaml_config()
@@ -192,7 +259,8 @@ def main():
         save=True,                  # Save the best model
         exist_ok=True,              # If the experiment already exists, it will be overwritten.
         verbose=True,               # Show training progress
-        freeze=args.freeze          # Freeze the first 10 layers
+        freeze=args.freeze,         # Freeze the first 10 layers
+        lr0=args.lr0                # Initial learning rate
     )
 
     print("\n--- Training completed ---")
@@ -286,6 +354,7 @@ def main():
             "best_epoch": best_epoch,
             "patience": args.patience,
             "freeze_layers": args.freeze,
+            "learning_rate": args.lr0,
             "img_size": IMG_SIZE,
             "batch_size": BATCH_SIZE,
             "workers": WORKERS
