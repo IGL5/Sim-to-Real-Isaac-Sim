@@ -142,18 +142,23 @@ def interactive_selection():
     version_input = input("Select version [8/9/10/11/26] (default 8): ").strip()
 
     if version_input == "26":
-        ver_prefix = "yolov26"
+        model_prefix = "yolo26"
+        name_prefix = "yolov26"
     elif version_input == "11":
-        ver_prefix = "yolov11"
+        model_prefix = "yolo11"
+        name_prefix = "yolov11"
     elif version_input == "10":
-        ver_prefix = "yolov10"
+        model_prefix = "yolov10"
+        name_prefix = "yolov10"
     elif version_input == "9":
-        ver_prefix = "yolov9"
+        model_prefix = "yolov9"
+        name_prefix = "yolov9"
     else:
-        ver_prefix = "yolov8"
+        model_prefix = "yolov8"
+        name_prefix = "yolov8"
         version_input = "8"
 
-    print(f"   -> Selected: {ver_prefix.upper()}")
+    print(f"   -> Selected: {name_prefix.upper()}")
 
     # 2. Select model size
     print("\nModel Sizes:")
@@ -172,10 +177,10 @@ def interactive_selection():
         size_suffix = 's'
         print("   -> Selected: Small")
 
-    model_to_use = f"{ver_prefix}{size_suffix}.pt"
+    model_to_use = f"{model_prefix}{size_suffix}.pt"
 
     # 3. Select experiment name
-    prefix = get_next_experiment_prefix(ver_prefix, size_suffix)
+    prefix = get_next_experiment_prefix(name_prefix, size_suffix)
     print("\nExperiment Naming (Strict Policy):")
     print(f"   -> Mandatory Prefix: {prefix}")
     name_input = input("Custom description? (default 'custom'): ").strip()
