@@ -5,6 +5,7 @@ import torch
 import argparse
 import time
 import json
+import re
 import sys
 import platform
 from datetime import datetime
@@ -84,6 +85,39 @@ def create_yaml_config():
     return yaml_path
 
 
+def get_next_experiment_prefix(ver_prefix, size_suffix, base_model_idx=None):
+    """
+    Scans the project directory to find the next available experiment number
+    for a specific architecture, enforcing a strict naming convention.
+    """
+    if not os.path.exists(PROJECT_NAME):
+        os.makedirs(PROJECT_NAME, exist_ok=True)
+
+    max_n = 0
+    
+    # Regular expression to search for the main number (e.g: yolov8_s_14_)
+    pattern_n = re.compile(rf"^{ver_prefix}_{size_suffix}_(\d+)_")
+
+    for d in os.listdir(PROJECT_NAME):
+        if not os.path.isdir(os.path.join(PROJECT_NAME, d)): 
+            continue
+        
+        # Extract the global experiment number
+        match_n = pattern_n.search(d)
+        if match_n:
+            n = int(match_n.group(1))
+            if n > max_n: 
+                max_n = n
+
+    next_n = max_n + 1
+    
+    # If we pass the index of a base model, it builds the inheritance tag
+    if base_model_idx is not None:
+        return f"{ver_prefix}_{size_suffix}_{next_n}_finetuned{base_model_idx}_"
+    else:
+        return f"{ver_prefix}_{size_suffix}_{next_n}_"
+
+
 def interactive_selection():
     """
     Interactive flow to select version, size and name.
@@ -133,17 +167,15 @@ def interactive_selection():
     model_to_use = f"{ver_prefix}{size_suffix}.pt"
 
     # 3. Select experiment name
-    default_name = f"{ver_prefix}_{size_suffix}_custom"
-    print("\nExperiment Naming:")
-    name_input = input(f"Experiment Name? (default '{default_name}'): ").strip()
+    prefix = get_next_experiment_prefix(ver_prefix, size_suffix)
+    print("\nExperiment Naming (Strict Policy):")
+    print(f"   -> Mandatory Prefix: {prefix}")
+    name_input = input("Custom description? (default 'custom'): ").strip()
     
-    if name_input:
-        exp_name = name_input
-        print(f"   -> Name: {exp_name}")
-    else:
-        exp_name = default_name
-        print(f"   -> Name: {default_name} (Default)")
-
+    desc = name_input if name_input else "custom"
+    exp_name = f"{prefix}{desc}"
+    
+    print(f"   -> Final Name: {exp_name}")
     print("--------------------------------------\n")
     return model_to_use, exp_name
 
@@ -195,12 +227,26 @@ def select_existing_model():
             
     path_to_weights = os.path.join(PROJECT_NAME, base_exp_name, "weights", "best.pt")
     
-    # Ask for the new experiment name
-    default_name = f"{base_exp_name}_finetuned"
-    print("\nExperiment Naming:")
-    name_input = input(f"New Experiment Name? (default '{default_name}'): ").strip()
+    # Extract version, size and number of the base model (e.g: 'yolov8_s_12_custom')
+    match = re.search(r"^(yolo\w+)_([nsmxl])_(\d+)_", base_exp_name)
+    if match:
+        ver_prefix = match.group(1)
+        size_suffix = match.group(2)
+        base_idx = match.group(3)
+    else:
+        # Fallback security if the base model did not follow the regulations (e.g: manually created)
+        ver_prefix = "yolov8"
+        size_suffix = "s"
+        base_idx = "X" # Indicator of unknown origin model
+        
+    prefix = get_next_experiment_prefix(ver_prefix, size_suffix, base_model_idx=base_idx)
     
-    exp_name = name_input if name_input else default_name
+    print("\nExperiment Naming (Strict Policy):")
+    print(f"   -> Mandatory Prefix: {prefix}")
+    name_input = input("New Custom description? (default 'custom'): ").strip()
+    
+    desc = name_input if name_input else "custom"
+    exp_name = f"{prefix}{desc}"
     
     print(f"✅ Selected base model: {base_exp_name}")
     print(f"✅ New experiment name: {exp_name}")
