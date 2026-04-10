@@ -142,9 +142,9 @@ def interactive_selection():
     version_input = input("Select version [8/9/10/11/26] (default 8): ").strip()
 
     if version_input == "26":
-        ver_prefix = "yolo26"
+        ver_prefix = "yolov26"
     elif version_input == "11":
-        ver_prefix = "yolo11"
+        ver_prefix = "yolov11"
     elif version_input == "10":
         ver_prefix = "yolov10"
     elif version_input == "9":
