@@ -95,7 +95,7 @@ def get_next_experiment_prefix(ver_prefix, size_suffix, base_model_idx=None):
 
     max_n = 0
     
-    # Regular expression to search for the main number (e.g: yolov8_s_14_)
+    # Regular expression to search for the main number (e.g: yolov8_s_01_)
     pattern_n = re.compile(rf"^{ver_prefix}_{size_suffix}_(\d+)_")
 
     for d in os.listdir(PROJECT_NAME):
@@ -111,11 +111,19 @@ def get_next_experiment_prefix(ver_prefix, size_suffix, base_model_idx=None):
 
     next_n = max_n + 1
     
+    # Force it to have at least 2 digits
+    next_n_str = f"{next_n:02d}" 
+    
     # If we pass the index of a base model, it builds the inheritance tag
     if base_model_idx is not None:
-        return f"{ver_prefix}_{size_suffix}_{next_n}_finetuned{base_model_idx}_"
+        try:
+            base_str = f"{int(base_model_idx):02d}"
+        except ValueError:
+            base_str = str(base_model_idx)
+            
+        return f"{ver_prefix}_{size_suffix}_{next_n_str}_finetuned{base_str}_"
     else:
-        return f"{ver_prefix}_{size_suffix}_{next_n}_"
+        return f"{ver_prefix}_{size_suffix}_{next_n_str}_"
 
 
 def interactive_selection():
