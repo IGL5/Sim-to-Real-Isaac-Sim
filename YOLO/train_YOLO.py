@@ -5,6 +5,7 @@ import torch
 import argparse
 import time
 import json
+import glob
 import re
 import sys
 import platform
@@ -83,6 +84,40 @@ def create_yaml_config():
 
     print(f"📄 Config file created at: {yaml_path}")
     return yaml_path
+
+
+def recover_misplaced_runs(project_name, exp_name):
+    """
+    Looks for the last training saved in the default folder 'runs/' 
+    and moves it to the correct folder of our project.
+    """
+    expected_dir = os.path.join(project_name, exp_name)
+    expected_weights = os.path.join(expected_dir, 'weights', 'best.pt')
+    
+    if os.path.exists(expected_weights):
+        return
+    
+    search_path = os.path.join("runs", "**", "weights", "best.pt")
+    all_weights = glob.glob(search_path, recursive=True)
+    
+    if not all_weights:
+        return
+        
+    latest_weight = max(all_weights, key=os.path.getctime)
+    latest_train_dir = os.path.dirname(os.path.dirname(latest_weight))
+    
+    os.makedirs(expected_dir, exist_ok=True)
+    
+    # We move the content of the runs folder to our project folder
+    for item in os.listdir(latest_train_dir):
+        s = os.path.join(latest_train_dir, item)
+        d = os.path.join(expected_dir, item)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, dirs_exist_ok=True)
+        else:
+            shutil.copy2(s, d)
+            
+    print(f"✅ Archivos rescatados con éxito a: {expected_dir}")
 
 
 def get_next_experiment_prefix(ver_prefix, size_suffix, base_model_idx=None):
@@ -213,6 +248,14 @@ def select_existing_model():
     if not available_models:
         print(f"❌ ERROR: No trained models found in '{PROJECT_NAME}'.")
         sys.exit(1)
+
+    def get_yolo_version(model_name):
+        match = re.match(r'^yolov?(\d+)', model_name, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return 0 
+        
+    available_models.sort(key=get_yolo_version)
         
     print("📂 Available trained models to fine-tune:")
     for i, m in enumerate(available_models):
@@ -277,7 +320,7 @@ def main():
     parser.add_argument('--freeze', type=int, default=FREEZE_LAYERS, help="Override freeze layers")
     parser.add_argument('--img_size', type=int, default=IMG_SIZE, help="Override image size [640 (SD default), 960 (1/2), 1280 (HD)]")
     parser.add_argument('--finetune', action='store_true', help="Fine-tune an existing trained model instead of using a base COCO model")
-    parser.add_argument('--lr0', type=float, default=0.01, help="Initial learning rate (use 0.0001 for fine-tuning)")
+    parser.add_argument('--lr0', type=float, default=0.00, help="Initial learning rate (use 0.0001 for fine-tuning)")
     args = parser.parse_args()
 
     start_time = time.time()
@@ -304,23 +347,29 @@ def main():
         print(e)
         return
 
+    train_kwargs = {
+        'data': yaml_file,
+        'epochs': args.epochs,
+        'imgsz': args.img_size,
+        'batch': BATCH_SIZE,
+        'workers': WORKERS,
+        'project': PROJECT_NAME,
+        'name': experiment_name,
+        'device': device,
+        'patience': args.patience,
+        'save': True,
+        'exist_ok': True,
+        'verbose': True,
+        'freeze': args.freeze
+    }
+
     # 3. Train
-    model.train(
-        data=yaml_file,
-        epochs=args.epochs,
-        imgsz=args.img_size,
-        batch=BATCH_SIZE,
-        workers=WORKERS,
-        project=PROJECT_NAME,
-        name=experiment_name,
-        device=device,
-        patience=args.patience,     # If it doesn't improve in x epochs, stop (0 = disabled).
-        save=True,                  # Save the best model
-        exist_ok=True,              # If the experiment already exists, it will be overwritten.
-        verbose=True,               # Show training progress
-        freeze=args.freeze,         # Freeze the first 10 layers
-        lr0=args.lr0                # Initial learning rate
-    )
+    if args.lr0 > 0.00:
+        train_kwargs['lr0'] = args.lr0
+
+    model.train(**train_kwargs)
+    
+    recover_misplaced_runs(PROJECT_NAME, experiment_name)
 
     print("\n--- Training completed ---")
     best_weight = os.path.join(PROJECT_NAME, experiment_name, 'weights', 'best.pt')

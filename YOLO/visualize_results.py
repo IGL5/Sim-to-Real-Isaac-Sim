@@ -4,6 +4,7 @@ import shutil
 import glob
 import argparse
 import sys
+import re
 from ultralytics import YOLO
 import modules.core_visual_utils as cvu
 
@@ -52,6 +53,14 @@ def select_model_path(preselected_model=None):
         print(f"❌ ERROR: No trained models found in '{cvu.PROJECT_DIR}'.")
         print("   (Folders exist, but none contain 'weights/best.pt')")
         sys.exit(1)
+
+    def get_yolo_version(model_name):
+        match = re.match(r'^yolov?(\d+)', model_name, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return 0 
+        
+    available_models.sort(key=get_yolo_version)
         
     print("📂 Available trained models:")
     for i, m in enumerate(available_models):
