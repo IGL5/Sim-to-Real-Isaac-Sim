@@ -82,15 +82,17 @@ python clean_dataset.py --dir _output_data
 ```
 
 
-## 🧠 Model Training (YOLOv8)
+## 🧠 Model Training (YOLOv8 to YOLO26)
 
-This repository includes a complete pipeline to train a YOLOv8 object detector using the generated synthetic data. The training tools are located in the YOLO/ directory.
+This repository includes a complete pipeline to train various YOLO architectures (v8, v9, v10, 11, 26) using the generated synthetic data. The training tools are located in the YOLO/ directory.
 
 The pipeline includes:
 
 - **Automatic ETL:** Converts Isaac Sim (Kitti) data to YOLO format and manages Train/Val/Test splits with session history tracking.
-- **Training Management:** Automates fine-tuning, handles early stopping, and logs hyperparameter history.
+- **Training Management:** Automates fine-tuning from COCO or existing models, handles early stopping, logs hyperparameter history, and exports to ONNX.
 - **Interactive Auditing:** Generates comprehensive, tabbed HTML reports (using Jinja2) containing Confusion Matrices, Heatmaps, confidence distributions, and Sim-to-Real metadata to validate model performance.
+- **Batch Auditing:** Automates the evaluation of multiple models at once across synthetic, real, and video datasets.
+- **Explainable AI (XAI):** Includes a dedicated suite (`xai_YOLO.py`) for Spatial analysis (Grad-CAM layer heatmaps) and Structural analysis (weight drift, bias shift, and catastrophic forgetting).
 - **Model Benchmarking:** A built-in CLI tool to compare multiple experiments side-by-side, generating a dynamic and interactive JavaScript dashboard (Chart.js) to track metric improvements and model drift.
 
 👉 [Go to Training Documentation](YOLO/README.md)
