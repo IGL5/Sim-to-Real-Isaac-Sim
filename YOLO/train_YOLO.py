@@ -203,8 +203,12 @@ def interactive_selection():
     size_input = input("Model Size? [n/s/m] (default s): ").strip().lower()
     
     if size_input == 'n':
-        size_suffix = 'n'
-        print("   -> Selected: Nano")
+        if version_input == "9":
+            size_suffix = 't'
+            print("   -> Selected: Tiny")
+        else:
+            size_suffix = 'n'
+            print("   -> Selected: Nano")
     elif size_input == 'm':
         size_suffix = 'm'
         print("   -> Selected: Medium")

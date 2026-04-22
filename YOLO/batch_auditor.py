@@ -1,6 +1,7 @@
 import os
 import subprocess
 import argparse
+import re
 import modules.core_visual_utils as cvu
 
 def get_available_models():
@@ -54,6 +55,14 @@ def main():
     if not models:
         print("❌ No models found.")
         return
+
+    def get_yolo_version(model_name):
+        match = re.match(r'^yolov?(\d+)', model_name, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return 0 
+        
+    models.sort(key=get_yolo_version)
         
     selected_models = select_models(models)
     if not selected_models:
