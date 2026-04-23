@@ -63,7 +63,7 @@ def check_system_integrity(model_path, check_dataset=False):
     return True
 
 def parse_kitti_label(label_path, width, height):
-    """ Converts txt to list of boxes [x1, y1, x2, y2] """
+    """ Converts txt to list of boxes [class_id, x1, y1, x2, y2] """
     boxes = []
     if not os.path.exists(label_path): return boxes
     
@@ -71,13 +71,17 @@ def parse_kitti_label(label_path, width, height):
         with open(label_path, 'r') as f:
             for line in f:
                 p = line.strip().split()
-                # YOLO format: id xc yc w h
+                # YOLO format: class_id xc yc w h
+                class_id = int(p[0])
                 xc, yc, w, h = float(p[1]), float(p[2]), float(p[3]), float(p[4])
+                
                 x1 = (xc - w/2) * width
                 y1 = (yc - h/2) * height
                 x2 = (xc + w/2) * width
                 y2 = (yc + h/2) * height
-                boxes.append([x1, y1, x2, y2])
+                
+                # <--- NUEVO: Añadimos class_id al principio de la lista
+                boxes.append([class_id, x1, y1, x2, y2]) 
     except Exception as e:
         print(f"⚠️ Error reading label {label_path}: {e}")
         
@@ -85,18 +89,33 @@ def parse_kitti_label(label_path, width, height):
 
 # --- Drawing ---
 
-def draw_boxes(img, boxes, color=(0, 255, 0), label="", confidences=None):
+def draw_boxes(img, boxes, color=(0, 255, 0), label="", confidences=None, classes=None, class_names=None):
     for i, b in enumerate(boxes):
-        x1, y1, x2, y2 = map(int, b)
+        # Extraemos de forma segura las últimas 4 posiciones (coordenadas)
+        x1, y1, x2, y2 = map(int, b[-4:])
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
         
-        # If there is a specific confidence, we use it. If not, we use the generic label
         text_to_draw = label
+        
+        # Si es Ground Truth (tiene 5 elementos), sacamos su clase real
+        if len(b) == 5 and class_names:
+            c_id = int(b[0])
+            text_to_draw = class_names.get(c_id, f"Clase {c_id}")
+        
+        # Si es una Predicción, miramos la lista de clases que le pasamos
+        elif classes is not None and i < len(classes) and class_names:
+            c_id = int(classes[i])
+            text_to_draw = class_names.get(c_id, f"Clase {c_id}")
+            
+        # Añadimos la confianza si la hay
         if confidences is not None and i < len(confidences):
-            text_to_draw = f"{confidences[i]:.2f}"
+            text_to_draw += f" {confidences[i]:.2f}"
             
         if text_to_draw: 
-            cv2.putText(img, text_to_draw, (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            # Ponemos un fondo de color para que el texto sea legible siempre
+            (w, h), _ = cv2.getTextSize(text_to_draw, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), color, -1)
+            cv2.putText(img, text_to_draw, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
     return img
 
 

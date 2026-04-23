@@ -324,3 +324,27 @@ th {
 th {
     background-color: #f8f9fa;
 }
+
+.class-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.class-table th {
+    background-color: #f8f9fa;
+    text-align: left;
+    padding: 12px;
+    border-bottom: 2px solid #dee2e6;
+    font-size: 0.85em;
+    color: #495057;
+}
+
+.class-table td {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+}
+
+.class-table tr:hover {
+    background-color: #f1f8ff;
+}

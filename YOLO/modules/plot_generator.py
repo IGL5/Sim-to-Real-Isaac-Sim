@@ -1,37 +1,56 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from collections import Counter
 
-def plot_confusion_matrix(tp, fp, fn, output_path):
-    """ Draws a confusion matrix """
-    tn = 0 
-    matrix = [[tp, fn], 
-              [fp, tn]]
+def plot_confusion_matrix(confusion_pairs, class_names, output_path):
+    """ Draws a dynamic Multi-Class confusion matrix including Background """
+    if not confusion_pairs:
+        return
 
-    plt.figure(figsize=(6, 5))
+    # Obtener todas las clases únicas involucradas, incluyendo -1 (Fondo)
+    unique_classes = set([c for pair in confusion_pairs for c in pair])
+    
+    # Ordenar clases (0, 1, 2...) y dejar el -1 al final
+    sorted_classes = sorted([c for c in unique_classes if c != -1])
+    if -1 in unique_classes:
+        sorted_classes.append(-1)
+        
+    labels = [class_names.get(c, f"Clase {c}") if c != -1 else "Fondo (BG)" for c in sorted_classes]
+    
+    # Crear matriz vacía de NxN
+    size = len(sorted_classes)
+    matrix = np.zeros((size, size), dtype=int)
+    
+    # Mapear el ID de clase a la fila/columna de la matriz
+    idx_map = {c: i for i, c in enumerate(sorted_classes)}
+    
+    # Rellenar la matriz contando los pares (Real, Predicho)
+    for real_c, pred_c in confusion_pairs:
+        matrix[idx_map[real_c], idx_map[pred_c]] += 1
+        
+    # Dibujar
+    plt.figure(figsize=(max(6, size*1.2), max(5, size*1.2)))
     ax = sns.heatmap(matrix, annot=True, fmt='d', cmap='Blues', cbar=False,
-                     xticklabels=['Pred Pos', 'Pred Neg'],
-                     yticklabels=['Real Pos', 'Real Neg'])
-    plt.title('Confusion Matrix')
+                     xticklabels=labels, yticklabels=labels)
+    plt.title('Matriz de Confusión Multi-Clase')
+    plt.ylabel('Etiqueta Real')
+    plt.xlabel('Predicción de YOLO')
     ax.set_yticklabels(ax.get_yticklabels(), rotation=90, va="center")
     plt.tight_layout()
     plt.savefig(output_path)
     plt.close()
 
 def plot_confidence_histogram(tp_kept, fp_kept, tp_disc, fp_disc, threshold, output_path, title="Confidence Distribution"):
-    """ Draws a confidence histogram including discarded detections in pastel colors """
+    """ Draws a confidence histogram (Kept Global for overall model health overview) """
     plt.figure(figsize=(8, 5))
     bins = np.linspace(0, 1, 21)
 
-    # Draw the discarded (pastel colors / transparent)
     plt.hist(tp_disc, bins=bins, alpha=0.4, color='lightgreen', label='Missed TP (Below Thresh)')
     plt.hist(fp_disc, bins=bins, alpha=0.4, color='lightcoral', label='Ignored FP (Below Thresh)')
-
-    # Draw the valid (solid colors)
     plt.hist(tp_kept, bins=bins, alpha=0.8, color='green', label='Valid Hits (TP)')
     plt.hist(fp_kept, bins=bins, alpha=0.8, color='red', label='Critical Errors (FP)')
 
-    # Draw the threshold line
     plt.axvline(x=threshold, color='black', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
 
     plt.title(title)
@@ -43,7 +62,7 @@ def plot_confidence_histogram(tp_kept, fp_kept, tp_disc, fp_disc, threshold, out
     plt.close()
 
 def plot_normalized_heatmap(centers, output_path, title="Normalized Detection Heatmap", cmap='inferno'):
-    """ Draws a normalized detection heatmap """
+    """ Draws a normalized detection heatmap (Kept Global) """
     if not centers:
         return
         
@@ -58,32 +77,39 @@ def plot_normalized_heatmap(centers, output_path, title="Normalized Detection He
     plt.savefig(output_path)
     plt.close()
 
-def plot_pr_curve(precisions, recalls, ap50, output_path):
-    """ Draws a Precision-Recall curve """
+def plot_pr_curve(curves_data, output_path):
+    """ Draws a PR curve per class """
     plt.figure(figsize=(8, 5))
-    plt.plot(recalls, precisions, color='blue', lw=2, label=f'PR Curve (mAP@50 = {ap50:.4f})')
+    
+    # Dibujar una línea por cada clase
+    for c_id, data in curves_data.items():
+        plt.plot(data['recalls'], data['precisions'], lw=2, label=f"{data['name']} (AP50={data['ap50']:.3f})")
+        
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.title('Precision-Recall Curve (IoU=0.50)')
+    plt.title('Precision-Recall Curve (Multi-Class IoU=0.50)')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.legend(loc="lower left")
+    plt.legend(loc="lower left", fontsize='small')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(output_path)
     plt.close()
 
-def plot_f1_curve(confs, f1_scores, best_conf, best_f1, output_path):
-    """ Draws an F1-Score vs Confidence curve to find the optimal threshold """
+def plot_f1_curve(curves_data, output_path):
+    """ Draws an F1 curve per class """
     plt.figure(figsize=(8, 5))
-    plt.plot(confs, f1_scores, color='green', lw=2, label=f'F1 Curve (Peak: {best_f1:.2f} @ {best_conf:.3f})')
-    plt.scatter([best_conf], [best_f1], color='red', zorder=5)
-    plt.axvline(x=best_conf, color='red', linestyle='--', alpha=0.5)
+    
+    # Dibujar una línea por cada clase
+    for c_id, data in curves_data.items():
+        line, = plt.plot(data['confs'], data['f1s'], lw=2, label=f"{data['name']} (Peak F1={data['best_f1']:.2f} @ {data['best_conf']:.2f})")
+        plt.scatter([data['best_conf']], [data['best_f1']], color=line.get_color(), zorder=5)
+        
     plt.xlabel('Confidence Threshold')
     plt.ylabel('F1 Score')
     plt.title('F1 vs Confidence (Threshold Optimization)')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.legend(loc="lower center")
+    plt.legend(loc="lower center", fontsize='small')
     plt.grid(True, linestyle='--', alpha=0.7)
     plt.savefig(output_path)
     plt.close()

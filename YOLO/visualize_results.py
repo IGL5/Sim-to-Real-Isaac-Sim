@@ -133,13 +133,31 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         os.makedirs(path_fn, exist_ok=True)
         os.makedirs(path_fp, exist_ok=True)
         os.makedirs(path_poor, exist_ok=True)
-        shorten = lambda p: p[p.find("YOLO"):] if "YOLO" in p else p
-        print(f"📂 Separating errors in: {shorten(path_fn)}, {shorten(path_fp)} and {shorten(path_poor)}")
 
-    reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=cvu.CONF_THRESHOLD)
+    # --- NUEVA LÓGICA DE TRADUCCIÓN Y FILTRADO DE CLASES ---
+    classes_path = os.path.join(os.getcwd(), "classes.txt")
+    dataset_classes = []
+    if os.path.exists(classes_path):
+        with open(classes_path, "r", encoding='utf-8') as f:
+            dataset_classes = [line.strip().lower() for line in f if line.strip()]
+    if not dataset_classes:
+        dataset_classes = ['bicycle'] # Fallback por seguridad
+        
+    dataset_class_names = {i: name.capitalize() for i, name in enumerate(dataset_classes)}
+    
     model = YOLO(model_path)
+    
+    # Mapeo: Si el modelo predice algo, ¿cuál es su ID real en nuestro dataset?
+    model_to_dataset_map = {}
+    for mod_idx, mod_name in model.names.items():
+        if mod_name.lower() in dataset_classes:
+            model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
+    
+    print(f"🧠 Clases activas en dataset: {dataset_class_names}")
+    # --------------------------------------------------------
 
-    # Determine which folders to use
+    reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=cvu.CONF_THRESHOLD, class_names=dataset_class_names)
+
     img_dir = custom_img_dir if is_real else cvu.DEFAULT_TEST_IMAGES
     lbl_dir = custom_lbl_dir if is_real else cvu.DEFAULT_TEST_LABELS
     
@@ -151,8 +169,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         txt_path = os.path.join(lbl_dir, os.path.splitext(filename)[0] + ".txt")
 
         img = cv2.imread(img_path)
-        if img is None:
-            continue
+        if img is None: continue
 
         h, w, _ = img.shape
         if os.path.exists(txt_path):
@@ -160,40 +177,43 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         else:
             gt_boxes = []
 
-        # Inference
-        if "coco" in model_path.lower():
-            results = model.predict(source=img, conf=0.001, verbose=False, classes=[1])[0]
-        else:
-            results = model.predict(source=img, conf=0.001, verbose=False)[0]
+        # Inference (siempre sacamos todo a 0.001 para la curva PR)
+        results = model.predict(source=img, conf=0.001, verbose=False)[0]
         speed_dict = results.speed
         
         pred_boxes = []
         confidences = []
+        pred_classes = []
+        
         for box in results.boxes:
-            coords = box.xyxy[0].cpu().numpy()
-            pred_boxes.append(coords)
-            confidences.append(float(box.conf))
+            mod_cls = int(box.cls[0])
+            # SOLO procesamos si la clase predicha pertenece a nuestro diccionario (filtro de basura)
+            if mod_cls in model_to_dataset_map:
+                dataset_cls = model_to_dataset_map[mod_cls] # Traducimos el ID de COCO a nuestro ID
+                coords = box.xyxy[0].cpu().numpy()
+                pred_boxes.append(coords)
+                confidences.append(float(box.conf))
+                pred_classes.append(dataset_cls)
 
-        # Statistics recibe TODO
-        img_stats = reporter.update(pred_boxes, gt_boxes, confidences, (h, w), speed_dict)
+        img_stats = reporter.update(pred_boxes, pred_classes, gt_boxes, confidences, (h, w), speed_dict)
 
-        # Filtrar solo lo válido para dibujar las fotos en las carpetas
         valid_pred_boxes = []
         valid_confidences = []
+        valid_classes = [] 
         for j, c in enumerate(confidences):
             if c >= cvu.CONF_THRESHOLD:
                 valid_pred_boxes.append(pred_boxes[j])
                 valid_confidences.append(c)
+                valid_classes.append(pred_classes[j]) 
 
-        # Save and Organization Logic
         if i < cvu.LIMIT_IMAGES:
             has_errors = img_stats["FN"] > 0 or img_stats["poor_bbox"] > 0 or img_stats["FP"] > 0
             
             if draw_all or has_errors:
-                img_drawn = cvu.draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), label="REAL")
-                img_drawn = cvu.draw_boxes(img_drawn, valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences)
+                # Dibujamos usando los nombres de clase de nuestro dataset traducido
+                img_drawn = cvu.draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), class_names=dataset_class_names)
+                img_drawn = cvu.draw_boxes(img_drawn, valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
                 
-                # C. Save logic according to the mode
                 if draw_all:
                     status = "OK"
                     if img_stats["FN"] > 0: status = "FN"
@@ -211,7 +231,6 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
                     if img_stats["FP"] > 0:
                         cv2.imwrite(os.path.join(path_fp, filename), img_drawn)
 
-    # Generate final report
     exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
     reporter.generate_plots()
     reporter.generate_html_report(exp_name)
