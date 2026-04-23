@@ -241,97 +241,79 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 
 def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False):
     """ Inference Mode (New images without labels) """
-    
-    if not cvu.check_system_integrity(model_path, check_dataset=False):
-        return
-
-    if not os.path.exists(source_folder):
-        print(f"❌ ERROR: Not finding the source folder: {source_folder}")
-        return
+    if not cvu.check_system_integrity(model_path, check_dataset=False): return
+    if not os.path.exists(source_folder): return
 
     print(f"--- 🌍 REAL INFERENCE MODE ---")
-
     if not keep:
         if os.path.exists(cvu.OUTPUT_DIR): shutil.rmtree(cvu.OUTPUT_DIR)
     
     save_dir = os.path.join(cvu.OUTPUT_DIR, "inference_real")
-    if os.path.exists(save_dir): shutil.rmtree(save_dir)
-    os.makedirs(save_dir)
-    
-    short_dir = save_dir[save_dir.find("YOLO"):] if "YOLO" in save_dir else save_dir
-    print(f"📂 Saving inference results in: {short_dir}")
+    os.makedirs(save_dir, exist_ok=True)
 
-    reporter = InferenceReportGenerator(save_dir, overlap_threshold=cvu.OVERLAP_THRESHOLD_ANALYSIS)
-    overlaps_dir_path = reporter.overlaps_dir
+    # --- TRADUCCIÓN DE CLASES (Igual que en Audit) ---
+    classes_path = os.path.join(os.getcwd(), "classes.txt")
+    dataset_classes = []
+    if os.path.exists(classes_path):
+        with open(classes_path, "r", encoding='utf-8') as f:
+            dataset_classes = [line.strip().lower() for line in f if line.strip()]
+    if not dataset_classes: dataset_classes = ['bicycle']
+        
+    dataset_class_names = {i: name.capitalize() for i, name in enumerate(dataset_classes)}
     
     model = YOLO(model_path)
+    model_to_dataset_map = {}
+    for mod_idx, mod_name in model.names.items():
+        if mod_name.lower() in dataset_classes:
+            model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
+    
+    reporter = InferenceReportGenerator(save_dir, overlap_threshold=cvu.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
+    overlaps_dir_path = reporter.overlaps_dir
+    
     image_files = [f for f in glob.glob(os.path.join(source_folder, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    print(f"📸 Processing {len(image_files)} images...")
     
-    if not image_files:
-        print("⚠️ No images found in the specified folder.")    
-        return
-
-    print(f"Processing {len(image_files)} images...")
-    
-    # Process each image for detection and quality analysis
     for i, img_path in enumerate(image_files):
         if i >= cvu.LIMIT_IMAGES: break
-
         filename = os.path.basename(img_path)
         
         try:
             img_orig = cv2.imread(img_path)
-            if img_orig is None:
-                print(f"⚠️ Warning: Could not read image {filename}. Skipping...")
-                continue
-
+            if img_orig is None: continue
             h, w, _ = img_orig.shape
 
-            # Run YOLO inference
-            if "coco" in model_path.lower():
-                res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False, classes=[1])[0]
-            else:
-                res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
+            # Inferencia pura (sin filtro de clases de COCO)
+            res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
             speed_dict = res.speed
             
-            pred_boxes = []
-            confidences = []
+            pred_boxes, confidences, pred_classes = [], [], []
             for box in res.boxes:
-                coords = box.xyxy[0].cpu().numpy()
-                pred_boxes.append(coords)
-                confidences.append(float(box.conf))
+                mod_cls = int(box.cls[0])
+                if mod_cls in model_to_dataset_map:
+                    dataset_cls = model_to_dataset_map[mod_cls]
+                    pred_boxes.append(box.xyxy[0].cpu().numpy())
+                    confidences.append(float(box.conf))
+                    pred_classes.append(dataset_cls)
                 
-            # Analyze predictions for overlapping boxes (potential double detections)
-            problematic_pairs = reporter.update(pred_boxes, confidences, (h, w), filename, speed_dict)
+            # Pasamos las clases al reportero para que analice superposiciones INTRA-CLASE
+            problematic_pairs = reporter.update(pred_boxes, pred_classes, confidences, (h, w), filename, speed_dict)
             
-            # Save visual evidence if overlaps are found
             if problematic_pairs:
-                img_overlap_evidence = img_orig.copy()
-                img_overlap_evidence = cvu.draw_overlapping_pairs(
-                    img_overlap_evidence, 
-                    pred_boxes, 
-                    problematic_pairs, 
-                    confidences
-                )
-                evidence_path = os.path.join(overlaps_dir_path, f"OVERLAP_{filename}")
-                cv2.imwrite(evidence_path, img_overlap_evidence)
+                img_overlap = cvu.draw_overlapping_pairs(img_orig.copy(), pred_boxes, problematic_pairs, confidences)
+                cv2.imwrite(os.path.join(overlaps_dir_path, f"OVERLAP_{filename}"), img_overlap)
             
-            # Save standard detection visualization
-            res_plotted = res.plot()
-            cv2.imwrite(os.path.join(save_dir, f"PRED_{filename}"), res_plotted)
+            # Dibujamos con nuestros propios colores y etiquetas traducidas
+            img_drawn = cvu.draw_boxes(img_orig.copy(), pred_boxes, color=(255, 0, 0), confidences=confidences, classes=pred_classes, class_names=dataset_class_names)
+            cv2.imwrite(os.path.join(save_dir, f"PRED_{filename}"), img_drawn)
             
         except Exception as e:
             print(f"Error processing {img_path}: {e}")
-            import traceback
-            traceback.print_exc()
             
-    # Finalize and generate the summary report
     exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
     reporter.generate_plots()
     reporter.generate_html_report(exp_name)
 
-    if save_persistently:
-        save_evaluation_results(exp_name, "inference")
+    if save_persistently: save_evaluation_results(exp_name, "inference")
 
 
 def run_video_mode(model_path, video_path):
