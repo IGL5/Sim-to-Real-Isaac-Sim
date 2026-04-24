@@ -66,7 +66,7 @@ def create_dir_structure(append_mode):
     else:
         print(f"📂 Structure verified (Append mode).")
 
-def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_yolo=False):
+def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_yolo=False, override_class=-1):
     """
     Processes a pair of image/label, changes their name with a unique prefix
     and saves them in the corresponding subset.
@@ -112,6 +112,9 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
                 # YOLO format: class_id cx cy w h
                 class_id = int(parts[0])
                 cx, cy, w_box, h_box = map(float, parts[1:5])
+
+                if override_class >= 0:
+                    class_id = override_class
                 
                 # Check if the class_id is valid according to our classes.txt
                 if class_id < 0 or class_id >= len(CLASES):
@@ -133,7 +136,10 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
             if class_name not in CLASES:
                 continue
                 
-            class_id = CLASES.index(class_name)
+            if override_class >= 0:
+                class_id = override_class
+            else:
+                class_id = CLASES.index(class_name)
             try:
                 xmin, ymin = float(parts[4]), float(parts[5])
                 xmax, ymax = float(parts[6]), float(parts[7])
@@ -171,7 +177,7 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
             
     return True, len(yolo_lines), bboxes_stats
 
-def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yolo=False):
+def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yolo=False, override_class=-1):
     count_imgs = 0
     count_objs = 0
     count_bgs = 0
@@ -180,7 +186,7 @@ def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yol
     all_areas, all_ars, all_cx, all_cy = [], [], [], []
     
     for fname in file_list:
-        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode, is_yolo)
+        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode, is_yolo, override_class)
         if success:
             count_imgs += 1
             count_objs += num_objects
@@ -222,6 +228,7 @@ def main():
     parser.add_argument('--limit', type=int, default=0, help="Maximum number of images to process (0 = all)")
     parser.add_argument('--source', type=str, default="_output_data", help="Source folder name relative to parent directory")
     parser.add_argument('--is_yolo', action='store_true', help="Indicates that source labels are already in YOLO format")
+    parser.add_argument('--override_class', type=int, default=-1, help="Override the class ID for all imported labels (Ej: --override_class 1)")
     args = parser.parse_args()
 
     global LABELS_KITTI, IMAGES_DIR
@@ -279,13 +286,13 @@ def main():
 
     # 5. Process passing the prefix
     print("🚀 Processing Train...")
-    train_stats = process_subset(train_files, 'train', batch_prefix, args.move, args.is_yolo)
+    train_stats = process_subset(train_files, 'train', batch_prefix, args.move, args.is_yolo, args.override_class)
     
     print("🚀 Processing Val...")
-    val_stats = process_subset(val_files, 'val', batch_prefix, args.move, args.is_yolo)
+    val_stats = process_subset(val_files, 'val', batch_prefix, args.move, args.is_yolo, args.override_class)
     
     print("🚀 Processing Test...")
-    test_stats = process_subset(test_files, 'test', batch_prefix, args.move, args.is_yolo)
+    test_stats = process_subset(test_files, 'test', batch_prefix, args.move, args.is_yolo, args.override_class)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
