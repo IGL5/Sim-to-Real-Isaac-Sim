@@ -41,7 +41,7 @@ RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
 OBJECTS_BUDGET_RANGE = (2.0, 25.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
-OBJECTS_MAX_RADIUS = 4.5
+OBJECTS_MAX_RADIUS = 10.0
 # DISTRACTOR BUDGET
 DISTRACTOR_BUDGET_RANGE = (800.0, 1000.0) # (15.0, 30.0), (30.0, 75.0)
 DISTRACTOR_MAX_RADIUS = 30.0
@@ -68,6 +68,7 @@ OBJECTS_CONFIG = {
         "active": True,                     # Enable this object type
         "pool_size": 13,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 4.0),
         "cost_units": 2.0,                  # High cost (main character)
         "selection_weight": 100,            # Always want to appear if there's space
         "wheelbase": 0.6,                   # For incline calculation
@@ -77,8 +78,9 @@ OBJECTS_CONFIG = {
     },
     "car": {
         "active": True,                     # Enable this object type
-        "pool_size": 12,                    # Number of bicycles in the pool
+        "pool_size": 14,                    # Number of bicycles in the pool
         "radius": 2.0,                      # Radius of safety
+        "spawn_radius": (3.0, 10.0),
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 70,             # Always want to appear if there's space
         "wheelbase": 2.0,                   # For incline calculation
