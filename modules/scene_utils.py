@@ -88,57 +88,91 @@ def get_drone_camera_pose(focus_target):
     return (cam_x, cam_y, cam_z)
 
 
-def calculate_pitch_on_terrain(stage, x, y, yaw_degrees, wheelbase):
+def calculate_vehicle_orientation_on_terrain(stage, x, y, yaw_degrees, wheelbase, track_width=None):
     """
-    Calculates the pitch and adjusted Z height so that an object
-    rests correctly on the terrain.
-    
-    Args:
-        x, y: Center coordinates of the object.
-        yaw_degrees: Object orientation (where it faces).
-        wheelbase: Distance between axles in METERS.
-    
-    Returns:
-        (pitch_degrees, z_center_adjusted): Pitch angle and new Z height.
-        Returns (None, None) if any raycast fails.
+    Calculates Pitch (camber), Roll (lateral tilt) and Z height.
+    Works for 2 wheels (bikes) and 4 wheels (cars).
     """
-    # 1. Convert direction angle (Yaw) to unit vector
     yaw_rad = math.radians(yaw_degrees)
+    # Forward vector
     dir_x = math.cos(yaw_rad)
     dir_y = math.sin(yaw_rad)
     
-    # 2. Calculate wheel positions (Front and Rear)
-    # Assume (x,y) is the center, so displace half the wheelbase
-    half_len = wheelbase / 2.0
-    
-    front_x = x + dir_x * half_len
-    front_y = y + dir_y * half_len
-    
-    back_x = x - dir_x * half_len
-    back_y = y - dir_y * half_len
-    
-    # 3. Raycast at each wheel
-    z_front = get_ground_height(front_x, front_y)
-    z_back = get_ground_height(back_x, back_y)
-    
-    # If any raycast returns the error value, abort
-    if z_front == -9999.0 or z_back == -9999.0: 
-        return None, None
+    half_wb = wheelbase / 2.0
 
-    # --- VISUAL DEBUG ---
-    if config.DEBUG_WHEEL_CONTACT:
-        draw_debug_cube(stage, (front_x, front_y, z_front))
-        draw_debug_cube(stage, (back_x, back_y, z_back))
+    # --- 2-WHEEL LOGIC (Bikes) ---
+    if track_width is None:
+        front_x = x + dir_x * half_wb
+        front_y = y + dir_y * half_wb
+        back_x = x - dir_x * half_wb
+        back_y = y - dir_y * half_wb
+        
+        z_front = get_ground_height(front_x, front_y)
+        z_back = get_ground_height(back_x, back_y)
+        
+        if z_front == -9999.0 or z_back == -9999.0: return None, None, None
 
-    # 4. Calculate pitch angle
-    delta_z = z_front - z_back
-    pitch_rad = math.atan2(delta_z, wheelbase)
-    pitch_deg = math.degrees(pitch_rad)
-    
-    # 5. Calculate center Z
-    z_center_adjusted = (z_front + z_back) / 2.0
-    
-    return pitch_deg, z_center_adjusted
+        # --- DEBUG DRAWING (Bikes) ---
+        if config.DEBUG_WHEEL_CONTACT:
+            draw_debug_cube(stage, (front_x, front_y, z_front))
+            draw_debug_cube(stage, (back_x, back_y, z_back))
+
+        # Pitch and Height
+        pitch_deg = math.degrees(math.atan2(z_front - z_back, wheelbase))
+        z_center = (z_front + z_back) / 2.0
+        
+        return pitch_deg, 0.0, z_center # Roll is 0 for bikes
+
+    # --- 4-WHEEL LOGIC (Cars) ---
+    else:
+        half_tw = track_width / 2.0
+        
+        # Right vector (perpendicular to forward vector)
+        right_x = dir_y
+        right_y = -dir_x
+        
+        # 4-wheel coordinates
+        fl_x = x + dir_x * half_wb - right_x * half_tw # Front-Left
+        fl_y = y + dir_y * half_wb - right_y * half_tw
+        
+        fr_x = x + dir_x * half_wb + right_x * half_tw # Front-Right
+        fr_y = y + dir_y * half_wb + right_y * half_tw
+        
+        bl_x = x - dir_x * half_wb - right_x * half_tw # Back-Left
+        bl_y = y - dir_y * half_wb - right_y * half_tw
+        
+        br_x = x - dir_x * half_wb + right_x * half_tw # Back-Right
+        br_y = y - dir_y * half_wb + right_y * half_tw
+        
+        # 4 Raycasts
+        z_fl = get_ground_height(fl_x, fl_y)
+        z_fr = get_ground_height(fr_x, fr_y)
+        z_bl = get_ground_height(bl_x, bl_y)
+        z_br = get_ground_height(br_x, br_y)
+        
+        if -9999.0 in (z_fl, z_fr, z_bl, z_br): return None, None, None
+
+        # --- VISUAL DEBUG (Cars) ---
+        if config.DEBUG_WHEEL_CONTACT:
+            draw_debug_cube(stage, (fl_x, fl_y, z_fl))
+            draw_debug_cube(stage, (fr_x, fr_y, z_fr))
+            draw_debug_cube(stage, (bl_x, bl_y, z_bl))
+            draw_debug_cube(stage, (br_x, br_y, z_br))
+        
+        # 1. Front vs Rear average to calculate Pitch
+        z_front_avg = (z_fl + z_fr) / 2.0
+        z_back_avg = (z_bl + z_br) / 2.0
+        pitch_deg = math.degrees(math.atan2(z_front_avg - z_back_avg, wheelbase))
+        
+        # 2. Left vs Right average to calculate Roll
+        z_left_avg = (z_fl + z_bl) / 2.0
+        z_right_avg = (z_fr + z_br) / 2.0
+        roll_deg = math.degrees(math.atan2(z_right_avg - z_left_avg, track_width))
+        
+        # 3. Exact center height
+        z_center = (z_fl + z_fr + z_bl + z_br) / 4.0
+        
+        return pitch_deg, roll_deg, z_center
 
 
 def draw_debug_cube(stage, position):
@@ -202,6 +236,7 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
     for i, spec in enumerate(candidates_specs):
         obj_radius = spec['radius']
         obj_wheelbase = spec.get('wheelbase', None)
+        obj_track_width = spec.get('track_width', None)
 
         s_min, s_max = spec.get('spawn_radius', (0.0, max_radius))
         
@@ -236,9 +271,12 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
                 
                 if obj_wheelbase is not None:
                     # Vehicle mode
-                    pitch_deg, z_adjusted = calculate_pitch_on_terrain(stage, cand_x, cand_y, angle_yaw, obj_wheelbase)
+                    pitch_deg, roll_deg, z_adjusted = calculate_vehicle_orientation_on_terrain(
+                        stage, cand_x, cand_y, angle_yaw, obj_wheelbase, obj_track_width
+                    )
                     if pitch_deg is None: continue
-                    rotation = (90, -pitch_deg, angle_yaw)
+                    
+                    rotation = (90 - roll_deg, -pitch_deg, angle_yaw)
                     z_final = z_adjusted
                 else:
                     # Static mode
@@ -325,8 +363,9 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         cfg = config_map[key]
         
         candidates_specs.append({
-            'radius': cfg['radius'], 
-            'wheelbase': cfg.get('wheelbase'), 
+            'radius': cfg['radius'],
+            'wheelbase': cfg.get('wheelbase', None),
+            'track_width': cfg.get('track_width', None),
             'spawn_radius': cfg.get('spawn_radius', (0.0, max_radius))
         })
         paths_candidates.append(obj_data["path"])

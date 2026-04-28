@@ -223,3 +223,4 @@ dataset_real/
 YOLO/xai_output/
 YOLO/dataset_yolo_output_/
 YOLO/merge_labels.py
+YOLO/extract_coco.py

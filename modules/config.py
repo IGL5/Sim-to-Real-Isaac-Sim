@@ -40,9 +40,8 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (2.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
-OBJECTS_MAX_RADIUS = 3.5
-
+OBJECTS_BUDGET_RANGE = (2.0, 25.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
+OBJECTS_MAX_RADIUS = 4.5
 # DISTRACTOR BUDGET
 DISTRACTOR_BUDGET_RANGE = (800.0, 1000.0) # (15.0, 30.0), (30.0, 75.0)
 DISTRACTOR_MAX_RADIUS = 30.0
@@ -71,9 +70,21 @@ OBJECTS_CONFIG = {
         "radius": 0.8,                      # Radius of safety
         "cost_units": 2.0,                  # High cost (main character)
         "selection_weight": 100,            # Always want to appear if there's space
-        "wheelbase": 0.6,                   # For incline calculation (None if not applicable)
+        "wheelbase": 0.6,                   # For incline calculation
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
         # "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "car": {
+        "active": True,                     # Enable this object type
+        "pool_size": 12,                    # Number of bicycles in the pool
+        "radius": 2.0,                      # Radius of safety
+        "cost_units": 4.0,                  # High cost (main character)
+        "selection_weight": 70,             # Always want to appear if there's space
+        "wheelbase": 2.0,                   # For incline calculation
+        "track_width": 1.1,                 # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        # "randomize_materials": ["chassis"],   # List of prim names to randomize materials
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
 }
@@ -118,8 +129,8 @@ DISTRACTOR_CONFIG = {
         "active": True,
         "pool_size": 60,
         "spawn_radius": (4.0, 10.0),
-        "radius": 1.0,
-        "cost_units": 2.0,
+        "radius": 0.9,
+        "cost_units": 1.8,
         "selection_weight": 40,
         "scale_range": (0.8, 1.2),
         "randomize_materials": ["main", "sec"],
@@ -128,4 +139,4 @@ DISTRACTOR_CONFIG = {
 }
 
 # --- DEBUGGING ---
-DEBUG_WHEEL_CONTACT = False
+DEBUG_WHEEL_CONTACT = True
