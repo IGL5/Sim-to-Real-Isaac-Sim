@@ -393,11 +393,14 @@ if __name__ == "__main__":
     parser.add_argument("--move_empty", action="store_true", help="Move empty backgrounds")
     parser.add_argument("--review", action="store_true", help="Generate review images of bad bboxes")
     parser.add_argument("--clean_labels", action="store_true", help="Actually remove bad bboxes from .txt")
-    parser.add_argument("--whitelist", type=str, default="_output_data/whitelist.txt", help="Path to whitelist file")
+    parser.add_argument("--whitelist", type=str, default=None, help="Path to whitelist file")
     parser.add_argument("--area_thresh", type=float, default=1000.0, help="Min area for bboxes")
     parser.add_argument("--max_area_ratio", type=float, default=0.50, help="Max percentage of the image a bbox can occupy (0.0 to 1.0)")
-    
+
     args = parser.parse_args()
+
+    if args.whitelist is None:
+        args.whitelist = os.path.join(args.dir, "whitelist.txt")
 
     if os.path.exists(args.dir):
         clean_dataset(args)

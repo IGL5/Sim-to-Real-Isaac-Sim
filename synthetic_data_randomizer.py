@@ -4,6 +4,7 @@ import math
 import time
 import carb
 import traceback
+import shutil
 import json
 from datetime import datetime
 
@@ -27,6 +28,10 @@ from modules import content
 rep.settings.carb_settings("/omni/replicator/RTSubframes", config.RT_SUBFRAMES)
 
 def main():
+    if os.path.exists(config.args.data_dir):
+        shutil.rmtree(config.args.data_dir)
+    os.makedirs(config.args.data_dir, exist_ok=True)
+
     # --- 1. LOAD MAP & SKY ---
     found_hdrs = content.discover_hdr_maps(config.HDR_MAPS_DIR)
     
