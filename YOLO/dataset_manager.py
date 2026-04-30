@@ -301,7 +301,7 @@ def main():
     print(f"Dataset located in: {BASE_OUTPUT}")
 
     # 6. Process JSON
-    source_meta_path = os.path.join(os.getcwd(), "..", "_output_data", "generation_metadata.json")
+    source_meta_path = os.path.join(os.getcwd(), "..", args.source, "generation_metadata.json")
     batch_meta = {"batch_id": batch_prefix} # Fallback if it doesn't exist
     
     if os.path.exists(source_meta_path):
