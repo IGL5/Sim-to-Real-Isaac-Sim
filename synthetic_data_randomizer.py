@@ -31,6 +31,9 @@ def main():
     if os.path.exists(config.args.data_dir):
         shutil.rmtree(config.args.data_dir)
     os.makedirs(config.args.data_dir, exist_ok=True)
+    
+    # Create or overwrite classes.txt
+    content.update_yolo_classes_txt()
 
     # --- 1. LOAD MAP & SKY ---
     found_hdrs = content.discover_hdr_maps(config.HDR_MAPS_DIR)

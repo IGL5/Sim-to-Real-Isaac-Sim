@@ -6,6 +6,43 @@ import omni.replicator.core as rep
 from modules import config
 
 
+def update_yolo_classes_txt():
+    """
+    Overwrites the YOLO classes.txt file.
+    Guarantees a strict order (alphabetical by main class and then sub-parts)
+    so that the IDs (0, 1, 2...) always match in the dataset_manager.
+    """
+    yolo_dir = os.path.abspath(os.path.join(os.getcwd(), "YOLO"))
+    classes_file = os.path.join(yolo_dir, "classes.txt")
+    
+    # We use a normal list to maintain the order, not a set()
+    final_classes = []
+    
+    # 1. Sort the config keys alphabetically to ensure determinism
+    sorted_keys = sorted(config.OBJECTS_CONFIG.keys())
+    
+    for main_class in sorted_keys:
+        cfg = config.OBJECTS_CONFIG[main_class]
+        if not cfg.get('active', True):
+            continue
+            
+        # Add the main class
+        if main_class not in final_classes:
+            final_classes.append(main_class)
+            
+        # Add its sorted sub-parts
+        if 'semantic_parts' in cfg:
+            sorted_subparts = sorted(cfg['semantic_parts'].values())
+            for sub_class in sorted_subparts:
+                if sub_class not in final_classes:
+                    final_classes.append(sub_class)
+                    
+    # 2. Overwrite the file (Delete and create new)
+    os.makedirs(yolo_dir, exist_ok=True)
+    with open(classes_file, "w") as f:
+        f.write("\n".join(final_classes))
+
+
 def discover_objective_assets(base_dir, obj_dir):
     """
     Scans automatically the assets folder to find objective models.
@@ -216,6 +253,31 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
                 binding_api.Bind(chosen_material)
 
 
+def apply_subpart_semantics(prim, semantic_parts):
+    """
+    Assigns specific semantics to child meshes within a USD prim
+    based on their name.
+    """
+    if not semantic_parts:
+        return
+
+    # Flatten the dictionary to lowercase once for efficiency
+    parts_lower = {k.lower(): v for k, v in semantic_parts.items()}
+
+    for child_prim in Usd.PrimRange(prim):
+        if not child_prim.IsA(UsdGeom.Mesh):
+            continue
+            
+        mesh_name = child_prim.GetName().lower()
+        
+        # Use next() to find the first match quickly
+        matched_class = next((v for k, v in parts_lower.items() if k in mesh_name), None)
+        
+        if matched_class:
+            with rep.get.prims(path_pattern=str(child_prim.GetPath())):
+                rep.modify.semantics([('class', matched_class)])
+
+
 def discover_hdr_maps(directory):
     """
     Looks for .hdr or .exr files in the given directory.
@@ -371,6 +433,10 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                 
                 # Hide
                 UsdGeom.Imageable(prim).MakeInvisible()
+
+                # Apply subpart semantics if specified
+                if apply_semantics:
+                    apply_subpart_semantics(prim, cfg.get("semantic_parts", {}))
 
                 shader_paths = []
                 if target_mat_names:

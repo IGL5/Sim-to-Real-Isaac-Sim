@@ -75,6 +75,9 @@ OBJECTS_CONFIG = {
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
         # "randomize_materials": ["frame"],   # List of prim names to randomize materials
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
+        "semantic_parts": {
+            "center": "pedal"
+        }
     },
     "car": {
         "active": True,                     # Enable this object type
