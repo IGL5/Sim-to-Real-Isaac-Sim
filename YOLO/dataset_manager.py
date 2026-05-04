@@ -132,8 +132,20 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
                 continue
         else:
             # KITTI original format
-            class_name = parts[0]
-            if class_name not in CLASES:
+            class_name_raw = parts[0]
+            class_name = None
+            
+            # Clean multiple labels (Ej: "bicycle,pedal" -> "pedal")
+            if ',' in class_name_raw:
+                for c in reversed(class_name_raw.split(',')):
+                    if c in CLASES:
+                        class_name = c
+                        break
+            else:
+                class_name = class_name_raw
+                
+            # If we don't find the class in classes.txt after cleaning, we ignore it
+            if class_name is None or class_name not in CLASES:
                 continue
                 
             if override_class >= 0:

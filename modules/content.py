@@ -255,27 +255,27 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
 
 def apply_subpart_semantics(prim, semantic_parts):
     """
-    Assigns specific semantics to child meshes within a USD prim
-    based on their name.
+    Assigns specific semantics to child meshes within a USD prim.
     """
     if not semantic_parts:
         return
 
-    # Flatten the dictionary to lowercase once for efficiency
     parts_lower = {k.lower(): v for k, v in semantic_parts.items()}
-
+    
     for child_prim in Usd.PrimRange(prim):
-        if not child_prim.IsA(UsdGeom.Mesh):
-            continue
-            
-        mesh_name = child_prim.GetName().lower()
+        prim_name = child_prim.GetName().lower()
         
-        # Use next() to find the first match quickly
-        matched_class = next((v for k, v in parts_lower.items() if k in mesh_name), None)
+        matched_class = next((v for k, v in parts_lower.items() if k in prim_name), None)
         
         if matched_class:
-            with rep.get.prims(path_pattern=str(child_prim.GetPath())):
-                rep.modify.semantics([('class', matched_class)])
+            if child_prim.IsA(UsdGeom.Mesh):
+                with rep.get.prims(path_pattern=str(child_prim.GetPath())):
+                    rep.modify.semantics([('class', matched_class)])
+            else:
+                for sub_child in Usd.PrimRange(child_prim):
+                    if sub_child.IsA(UsdGeom.Mesh):
+                        with rep.get.prims(path_pattern=str(sub_child.GetPath())):
+                            rep.modify.semantics([('class', matched_class)], mode="replace")
 
 
 def discover_hdr_maps(directory):
