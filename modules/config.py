@@ -40,8 +40,8 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (2.0, 25.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
-OBJECTS_MAX_RADIUS = 10.0
+OBJECTS_BUDGET_RANGE = (2.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
+OBJECTS_MAX_RADIUS = 4.0
 # DISTRACTOR BUDGET
 DISTRACTOR_BUDGET_RANGE = (800.0, 1000.0) # (15.0, 30.0), (30.0, 75.0)
 DISTRACTOR_MAX_RADIUS = 30.0
@@ -65,7 +65,7 @@ RANDOMIZE_TERRAIN = True
 ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
 OBJECTS_CONFIG = {
     "bicycle": {
-        "active": True,                     # Enable this object type
+        "active": False,                     # Enable this object type
         "pool_size": 13,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "spawn_radius": (0.0, 4.0),
@@ -76,11 +76,13 @@ OBJECTS_CONFIG = {
         # "randomize_materials": ["frame"],   # List of prim names to randomize materials
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
         "semantic_parts": {
-            "center": "pedal"
+            "center": "pedal",
+            "left": "pedal",
+            "right": "pedal"
         }
     },
     "car": {
-        "active": True,                     # Enable this object type
+        "active": False,                     # Enable this object type
         "pool_size": 14,                    # Number of bicycles in the pool
         "radius": 2.0,                      # Radius of safety
         "spawn_radius": (3.0, 10.0),
@@ -90,6 +92,42 @@ OBJECTS_CONFIG = {
         "track_width": 1.1,                 # For incline calculation
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
         # "randomize_materials": ["chassis"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "bicycle_street": {
+        "active": True,                     # Enable this object type
+        "pool_size": 6,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 4.0),
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        # "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "bicycle_racing": {
+        "active": True,                     # Enable this object type
+        "pool_size": 6,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 4.0),
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        # "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "bicycle_mountain": {
+        "active": True,                     # Enable this object type
+        "pool_size": 6,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 3.0),
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        # "randomize_materials": ["frame"],   # List of prim names to randomize materials
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
 }

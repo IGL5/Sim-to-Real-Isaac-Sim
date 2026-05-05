@@ -162,7 +162,7 @@ class ReportGenerator:
         return float(ap), p_smooth.tolist(), r_smooth.tolist(), confs.tolist(), f1_scores.tolist()
 
     def generate_plots(self):
-        print("📊 Generating Multi-Class statistical plots (including Spatial Data)...")
+        print("📊 Generating Multi-Class statistical plots...")
 
         plot_generator.plot_confusion_matrix(
             self.confusion_pairs, self.class_names,

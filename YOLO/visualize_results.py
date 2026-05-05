@@ -134,27 +134,25 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         os.makedirs(path_fp, exist_ok=True)
         os.makedirs(path_poor, exist_ok=True)
 
-    # --- NUEVA LÓGICA DE TRADUCCIÓN Y FILTRADO DE CLASES ---
+    # Logic for class translation and filtering
     classes_path = os.path.join(os.getcwd(), "classes.txt")
     dataset_classes = []
     if os.path.exists(classes_path):
         with open(classes_path, "r", encoding='utf-8') as f:
             dataset_classes = [line.strip().lower() for line in f if line.strip()]
     if not dataset_classes:
-        dataset_classes = ['bicycle'] # Fallback por seguridad
+        dataset_classes = ['bicycle']
         
     dataset_class_names = {i: name.capitalize() for i, name in enumerate(dataset_classes)}
     
     model = YOLO(model_path)
     
-    # Mapeo: Si el modelo predice algo, ¿cuál es su ID real en nuestro dataset?
     model_to_dataset_map = {}
     for mod_idx, mod_name in model.names.items():
         if mod_name.lower() in dataset_classes:
             model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
     
-    print(f"🧠 Clases activas en dataset: {dataset_class_names}")
-    # --------------------------------------------------------
+    print(f"🧠 Active classes in dataset: {dataset_class_names}")
 
     reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=cvu.CONF_THRESHOLD, class_names=dataset_class_names)
 
@@ -251,7 +249,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
     save_dir = os.path.join(cvu.OUTPUT_DIR, "inference_real")
     os.makedirs(save_dir, exist_ok=True)
 
-    # --- TRADUCCIÓN DE CLASES (Igual que en Audit) ---
+    # Logic for class translation and filtering
     classes_path = os.path.join(os.getcwd(), "classes.txt")
     dataset_classes = []
     if os.path.exists(classes_path):
@@ -282,7 +280,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             if img_orig is None: continue
             h, w, _ = img_orig.shape
 
-            # Inferencia pura (sin filtro de clases de COCO)
+            # Inference
             res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
             speed_dict = res.speed
             
@@ -295,14 +293,14 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
                     confidences.append(float(box.conf))
                     pred_classes.append(dataset_cls)
                 
-            # Pasamos las clases al reportero para que analice superposiciones INTRA-CLASE
+            # Pass the classes to the reporter so it analyzes INTRA-CLASS overlaps
             problematic_pairs = reporter.update(pred_boxes, pred_classes, confidences, (h, w), filename, speed_dict)
             
             if problematic_pairs:
                 img_overlap = cvu.draw_overlapping_pairs(img_orig.copy(), pred_boxes, problematic_pairs, confidences)
                 cv2.imwrite(os.path.join(overlaps_dir_path, f"OVERLAP_{filename}"), img_overlap)
             
-            # Dibujamos con nuestros propios colores y etiquetas traducidas
+            # Draw with our own colors and translated labels
             img_drawn = cvu.draw_boxes(img_orig.copy(), pred_boxes, color=(255, 0, 0), confidences=confidences, classes=pred_classes, class_names=dataset_class_names)
             cv2.imwrite(os.path.join(save_dir, f"PRED_{filename}"), img_drawn)
             
