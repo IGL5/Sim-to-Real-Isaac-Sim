@@ -17,7 +17,7 @@ class InferenceReportGenerator:
         
         self.overlap_threshold = overlap_threshold
         self.class_names = class_names if class_names else {}
-        self.MAX_OVERLAPS_HTML = 50  # Límite para no colapsar el navegador
+        self.MAX_OVERLAPS_HTML = 50
         
         self.stats = {
             "total_images": 0,
@@ -58,7 +58,7 @@ class InferenceReportGenerator:
             self.class_stats[c_id]["confidences"].append(confidences[i])
             self.class_stats[c_id]["bbox_centers"].append((cx_abs/w, cy_abs/h))
             
-        # Overlaps INTRA-CLASE (Solo nos preocupa si dos bicis se solapan)
+        # Overlaps INTRA-CLASS
         problematic_pairs_indices = []
         unique_classes = set(pred_classes)
         
@@ -85,7 +85,7 @@ class InferenceReportGenerator:
     def generate_plots(self):
         print("📊 Generating inference plots (Multi-Class)...")
         
-        # Histograma Global (Aprovechamos la nueva función)
+        # Global Histogram
         if self.stats["confidences"]:
             plot_generator.plot_confidence_histogram(
                 self.stats["confidences"], [], [], [], 
@@ -94,7 +94,7 @@ class InferenceReportGenerator:
                 title="Real World Confidence Distribution (Global)"
             )
 
-        # Heatmap Global
+        # Global Heatmap
         plot_generator.plot_normalized_heatmap(
             self.stats["bbox_centers_norm"],
             os.path.join(self.plots_dir, "inference_heatmap.png"),
@@ -102,7 +102,7 @@ class InferenceReportGenerator:
             cmap='magma'
         )
         
-        # Gráficos por clase
+        # Per-Class Plots
         for c_id, s in self.class_stats.items():
             c_name = self.class_names.get(c_id, f"Class_{c_id}")
             safe_name = c_name.replace(" ", "_")
@@ -126,7 +126,7 @@ class InferenceReportGenerator:
         
         avg_detections = self.stats["total_detections"] / max(1, self.stats["total_images"])
         
-        # Desglose de Clases para HTML
+        # Class Breakdown for HTML
         class_summary = {}
         for c_id, s in self.class_stats.items():
             c_name = self.class_names.get(c_id, f"Class {c_id}")
@@ -163,7 +163,7 @@ class InferenceReportGenerator:
             "fps": round(1000 / total_ms, 2) if total_ms > 0 else 0
         }
 
-        # Guardar JSON y llamar a Jinja
+        # Save JSON and call Jinja
         inference_json_path = os.path.join(self.output_dir, "..", "inference_metadata.json")
         try:
             with open(inference_json_path, "w", encoding='utf-8') as f:

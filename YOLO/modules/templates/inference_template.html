@@ -30,60 +30,118 @@
                     style="font-size: 0.5em;">FPS</span></div>
         </div>
     </div>
-    <div class="plot-grid">
-        <div class="card">
-            <h3>Confidence Distribution</h3>
-            <p style="font-size:0.9em; color:#666; margin-top: 0;">
-                <span style="color: #2980b9;"><strong>Predictions</strong></span> -> Mean: {{
-                "%.2f"|format(stats.confidence_stats.mean) }} | Std: {{ "%.2f"|format(stats.confidence_stats.std) }}
-            </p>
-            <img src="plots/inference/inference_conf_dist.png" style="margin-top: 10px;">
-        </div>
-        <div class="card">
-            <h3>Spatial Distribution (Heatmap)</h3>
-            <p style="font-size:0.9em; color:#666;">Normalized to 1x1 frame regardless of resolution.</p>
-            <img src="plots/inference/inference_heatmap.png">
-        </div>
-        <div class="card">
-            <h3>Positional Bias</h3>
-            <p style="font-size:0.9em; color:#666;">Based on Center of Mass and Dispersion (Predictions)</p>
-            <div style="text-align: center;">
-                <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
-                    viewBox="0 0 100 100">
-                    <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
-                    <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
 
-                    <ellipse cx="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
-                        cy="{{ stats.spatial_stats.center_of_mass_y * 100 }}"
-                        rx="{{ stats.spatial_stats.dispersion_x * 100 }}"
-                        ry="{{ stats.spatial_stats.dispersion_y * 100 }}" fill="#e74c3c" opacity="0.4" />
+    <div class="card" style="margin-top:20px; border-left-color: #3498db;">
+        <h3>📊 Detections per Class</h3>
+        <table class="class-table">
+            <thead>
+                <tr>
+                    <th>Class</th>
+                    <th>Total Detections</th>
+                    <th>Average Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for class_name, c_stats in stats.per_class.items() %}
+                <tr>
+                    <td><strong>{{ class_name }}</strong></td>
+                    <td style="color: #2980b9; font-weight: bold;">{{ c_stats.detections }}</td>
+                    <td>{{ "%.2f"|format(c_stats.avg_confidence * 100) }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
-                    <line x1="{{ (stats.spatial_stats.center_of_mass_x * 100) - 5 }}"
-                        y1="{{ stats.spatial_stats.center_of_mass_y * 100 }}"
-                        x2="{{ (stats.spatial_stats.center_of_mass_x * 100) + 5 }}"
-                        y2="{{ stats.spatial_stats.center_of_mass_y * 100 }}" stroke="#c0392b" stroke-width="2" />
-                    <line x1="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
-                        y1="{{ (stats.spatial_stats.center_of_mass_y * 100) - 5 }}"
-                        x2="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
-                        y2="{{ (stats.spatial_stats.center_of_mass_y * 100) + 5 }}" stroke="#c0392b" stroke-width="2" />
-                </svg>
+    <div
+        style="margin-top: 20px; text-align: center; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;">
+        <label for="classSelector" style="font-weight: bold; font-size: 1.1em; color: #2c3e50;">👁️ Select Spatial View:
+        </label>
+        <select id="classSelector" onchange="changeAnalysisClass(this.value)"
+            style="padding: 8px 15px; font-size: 1em; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer;">
+            <option value="Global">🌍 All Classes (Global)</option>
+            {% for class_name, c_stats in stats.per_class.items() %}
+            <option value="{{ c_stats.safe_name }}">🎯 {{ class_name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div id="analysis-Global" class="analysis-view" style="margin-top: 20px;">
+        <div class="plot-grid">
+            <div class="card">
+                <h3>Confidence Distribution</h3>
+                <p style="font-size:0.9em; color:#666; margin-top: 0;">Mean: {{
+                    "%.2f"|format(stats.confidence_stats.mean) }} | Std: {{ "%.2f"|format(stats.confidence_stats.std) }}
+                </p>
+                <img src="plots/inference/inference_conf_dist.png" style="margin-top: 10px;">
+            </div>
+            <div class="card">
+                <h3>Spatial Distribution (Heatmap)</h3>
+                <img src="plots/inference/inference_heatmap.png">
+            </div>
+            <div class="card">
+                <h3>Positional Bias</h3>
+                <div style="text-align: center;">
+                    <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
+                        viewBox="0 0 100 100">
+                        <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
+                        <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
+                        <ellipse cx="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                            cy="{{ stats.spatial_stats.center_of_mass_y * 100 }}"
+                            rx="{{ stats.spatial_stats.dispersion_x * 100 }}"
+                            ry="{{ stats.spatial_stats.dispersion_y * 100 }}" fill="#e74c3c" opacity="0.4" />
+                        <circle cx="{{ stats.spatial_stats.center_of_mass_x * 100 }}"
+                            cy="{{ stats.spatial_stats.center_of_mass_y * 100 }}" r="2" fill="#c0392b" />
+                    </svg>
+                </div>
             </div>
         </div>
     </div>
+
+    {% for class_name, c_stats in stats.per_class.items() %}
+    <div id="analysis-{{ c_stats.safe_name }}" class="analysis-view" style="display: none; margin-top: 20px;">
+        <div class="plot-grid">
+            <div class="card">
+                <h3>Confidence ({{ class_name }})</h3>
+                <p style="font-size:0.9em; color:#666; margin-top: 0;">Mean: {{
+                    "%.2f"|format(c_stats.confidence_stats.mean) }}</p>
+                <img src="plots/inference/inference_conf_dist_{{ c_stats.safe_name }}.png" style="margin-top: 10px;">
+            </div>
+            <div class="card">
+                <h3>Heatmap ({{ class_name }})</h3>
+                <img src="plots/inference/inference_heatmap_{{ c_stats.safe_name }}.png">
+            </div>
+            <div class="card">
+                <h3>Bias ({{ class_name }})</h3>
+                <div style="text-align: center;">
+                    <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
+                        viewBox="0 0 100 100">
+                        <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
+                        <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
+                        <ellipse cx="{{ c_stats.spatial_stats.center_of_mass_x * 100 }}"
+                            cy="{{ c_stats.spatial_stats.center_of_mass_y * 100 }}"
+                            rx="{{ c_stats.spatial_stats.dispersion_x * 100 }}"
+                            ry="{{ c_stats.spatial_stats.dispersion_y * 100 }}" fill="#3498db" opacity="0.4" />
+                        <circle cx="{{ c_stats.spatial_stats.center_of_mass_x * 100 }}"
+                            cy="{{ c_stats.spatial_stats.center_of_mass_y * 100 }}" r="2" fill="#2980b9" />
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
     <div class="card" style="margin-top:20px;">
         <h3>⚡ Inference Performance (Real Hardware)</h3>
         <div style="display: flex; justify-content: space-around; text-align: center;">
-            <div>
-                <span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Pure Inference</span>
+            <div><span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Pure Inference</span>
                 <div style="font-size: 1.2em; font-weight: bold;">{{ stats.speed_stats.inference_ms }} ms</div>
             </div>
-            <div>
-                <span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Non-Maximum
+            <div><span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Non-Maximum
                     Suppression</span>
                 <div style="font-size: 1.2em; font-weight: bold;">{{ stats.speed_stats.postprocess_ms }} ms</div>
             </div>
-            <div>
-                <span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Total Latency</span>
+            <div><span style="color: #7f8c8d; font-size: 0.8em; text-transform: uppercase;">Total Latency</span>
                 <div style="font-size: 1.2em; font-weight: bold; color: #e67e22;">{{ stats.speed_stats.total_ms }} ms
                 </div>
             </div>
@@ -92,19 +150,32 @@
 </div>
 
 <div id="Overlaps" class="tabcontent">
-    <h2>Suspicious Overlaps Evidence</h2>
-    <div class="plot-grid">
+    <h2>Suspicious Overlaps Evidence (IntRA-Class Only)</h2>
+    <p style="color: #7f8c8d; font-size: 0.9em;">Showing up to 50 overlap events where bounding boxes of the <b>same
+            class</b> heavily intersect.</p>
+
+    <div class="plot-grid"
+        style="max-height: 600px; overflow-y: auto; padding-right: 15px; border: 1px solid #eee; background: #fdfdfd; border-radius: 8px;">
         {% if not stats.overlap_events %}
-        <p>✅ No suspicious overlaps detected above threshold.</p>
+        <p style="padding: 20px;">✅ No suspicious intra-class overlaps detected.</p>
         {% else %}
         {% for event in stats.overlap_events %}
-        <div class="card" style="border-left-color: #e74c3c;">
+        <div class="card" style="border-left-color: #e74c3c; margin-bottom: 10px;">
             <p><strong>Source:</strong> {{ event.orig_filename }}</p>
             <p>Found <strong>{{ event.count }}</strong> risk pair(s)</p>
-            <img src="plots/inference/suspicious_overlaps_imgs/{{ event.evidence_filename }}" alt="Overlap Evidence">
+            <img src="plots/inference/suspicious_overlaps_imgs/{{ event.evidence_filename }}" alt="Overlap Evidence"
+                loading="lazy">
         </div>
         {% endfor %}
         {% endif %}
     </div>
 </div>
+
+<script>
+    function changeAnalysisClass(selectedValue) {
+        var views = document.getElementsByClassName('analysis-view');
+        for (var i = 0; i < views.length; i++) { views[i].style.display = 'none'; }
+        document.getElementById('analysis-' + selectedValue).style.display = 'block';
+    }
+</script>
 {% endblock %}

@@ -22,7 +22,7 @@ class ReportGenerator:
             "confidences_FP": [],
             "discarded_TP": [],
             "discarded_FP": [],
-            "bbox_centers": [], # <--- AÑADIDO: Rastreo espacial por clase
+            "bbox_centers": [],
             "total_gt": 0,
             "all_predictions": []
         })
@@ -87,7 +87,6 @@ class ReportGenerator:
             if conf >= self.user_conf_threshold:
                 cx_abs = (pred[0] + pred[2]) / 2
                 cy_abs = (pred[1] + pred[3]) / 2
-                # <--- AÑADIDO: Guardamos la coordenada globalmente y en su clase
                 self.global_stats["bbox_centers"].append((cx_abs/w, cy_abs/h))
                 self.class_stats[p_cls]["bbox_centers"].append((cx_abs/w, cy_abs/h))
                 
@@ -197,7 +196,6 @@ class ReportGenerator:
             c_name = self.class_names.get(c_id, f"Clase {c_id}")
             safe_name = c_name.replace(" ", "_")
             
-            # --- AÑADIDO: Generar Gráficos Espaciales PER-CLASS ---
             plot_generator.plot_confidence_histogram(
                 stats["confidences_TP"], stats["confidences_FP"], 
                 stats["discarded_TP"], stats["discarded_FP"],
@@ -210,7 +208,6 @@ class ReportGenerator:
                 os.path.join(self.plots_dir, f"heatmap_{safe_name}.png"),
                 title=f"Normalized Detection Heatmap ({c_name})", cmap='inferno'
             )
-            # -----------------------------------------------------
 
             pr_data[c_id] = {
                 'precisions': precisions, 'recalls': recalls, 
@@ -281,7 +278,7 @@ class ReportGenerator:
                 "ap_50": ap50, "ap_50_95": ap50_95,
                 "optimal_f1": best_f1, "optimal_conf": best_conf,
                 "tp": c_tp, "fp": c_fp, "fn": c_fn,
-                "safe_name": safe_name, # <--- AÑADIDO PARA EL HTML
+                "safe_name": safe_name, 
                 "confidence_stats": {
                     "True_Positives": cvu.calculate_1d_stats(stats["confidences_TP"]),
                     "False_Positives": cvu.calculate_1d_stats(stats["confidences_FP"]),

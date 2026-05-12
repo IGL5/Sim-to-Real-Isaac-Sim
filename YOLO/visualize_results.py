@@ -175,7 +175,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         else:
             gt_boxes = []
 
-        # Inference (siempre sacamos todo a 0.001 para la curva PR)
+        # Inference (always get all detections for PR curve)
         results = model.predict(source=img, conf=0.001, verbose=False)[0]
         speed_dict = results.speed
         
@@ -185,9 +185,8 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         
         for box in results.boxes:
             mod_cls = int(box.cls[0])
-            # SOLO procesamos si la clase predicha pertenece a nuestro diccionario (filtro de basura)
             if mod_cls in model_to_dataset_map:
-                dataset_cls = model_to_dataset_map[mod_cls] # Traducimos el ID de COCO a nuestro ID
+                dataset_cls = model_to_dataset_map[mod_cls]
                 coords = box.xyxy[0].cpu().numpy()
                 pred_boxes.append(coords)
                 confidences.append(float(box.conf))
@@ -208,7 +207,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
             has_errors = img_stats["FN"] > 0 or img_stats["poor_bbox"] > 0 or img_stats["FP"] > 0
             
             if draw_all or has_errors:
-                # Dibujamos usando los nombres de clase de nuestro dataset traducido
+                # Draw using translated class names from our dataset
                 img_drawn = cvu.draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), class_names=dataset_class_names)
                 img_drawn = cvu.draw_boxes(img_drawn, valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
                 
