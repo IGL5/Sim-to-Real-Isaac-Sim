@@ -1,3 +1,1 @@
-bicycle_mountain
-bicycle_racing
-bicycle_street
+bicycle

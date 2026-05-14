@@ -66,11 +66,13 @@ def create_dir_structure(append_mode):
     else:
         print(f"📂 Structure verified (Append mode).")
 
-def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_yolo=False, override_class=-1):
+def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
     """
     Processes a pair of image/label, changes their name with a unique prefix
     and saves them in the corresponding subset.
     """
+    if override_map is None:
+        override_map = {}
     
     # 1. Localize image
     img_path = None
@@ -113,8 +115,10 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
                 class_id = int(parts[0])
                 cx, cy, w_box, h_box = map(float, parts[1:5])
 
-                if override_class >= 0:
-                    class_id = override_class
+                if override_all >= 0:
+                    class_id = override_all
+                elif str(class_id) in override_map:
+                    class_id = override_map[str(class_id)]
                 
                 # Check if the class_id is valid according to our classes.txt
                 if class_id < 0 or class_id >= len(CLASES):
@@ -138,20 +142,28 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
             # Clean multiple labels (Ej: "bicycle,pedal" -> "pedal")
             if ',' in class_name_raw:
                 for c in reversed(class_name_raw.split(',')):
-                    if c in CLASES:
+                    if c in CLASES or c in override_map or override_all >= 0:
                         class_name = c
                         break
             else:
                 class_name = class_name_raw
                 
-            # If we don't find the class in classes.txt after cleaning, we ignore it
-            if class_name is None or class_name not in CLASES:
+            if class_name is None:
                 continue
                 
-            if override_class >= 0:
-                class_id = override_class
-            else:
+            # Override class logic
+            if override_all >= 0:
+                class_id = override_all
+            elif class_name in override_map:
+                class_id = override_map[class_name]
+            elif class_name in CLASES:
                 class_id = CLASES.index(class_name)
+            else:
+                continue  
+                
+            if class_id < 0 or class_id >= len(CLASES):
+                continue
+
             try:
                 xmin, ymin = float(parts[4]), float(parts[5])
                 xmax, ymax = float(parts[6]), float(parts[7])
@@ -162,10 +174,7 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
                 w_k, h_k = bbox[2], bbox[3]
                 area = w_k * h_k
                 aspect_ratio = w_k / h_k if h_k > 0 else 0
-                
-                bboxes_stats.append({
-                    "area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]
-                })
+                bboxes_stats.append({"area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]})
             except (ValueError, IndexError):
                 continue
 
@@ -189,7 +198,7 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
             
     return True, len(yolo_lines), bboxes_stats
 
-def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yolo=False, override_class=-1):
+def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
     count_imgs = 0
     count_objs = 0
     count_bgs = 0
@@ -198,7 +207,7 @@ def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yol
     all_areas, all_ars, all_cx, all_cy = [], [], [], []
     
     for fname in file_list:
-        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode, is_yolo, override_class)
+        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode, is_yolo, override_all, override_map)
         if success:
             count_imgs += 1
             count_objs += num_objects
@@ -240,7 +249,9 @@ def main():
     parser.add_argument('--limit', type=int, default=0, help="Maximum number of images to process (0 = all)")
     parser.add_argument('--source', type=str, default="_output_data", help="Source folder name relative to parent directory")
     parser.add_argument('--is_yolo', action='store_true', help="Indicates that source labels are already in YOLO format")
-    parser.add_argument('--override_class', type=int, default=-1, help="Override the class ID for all imported labels (Ej: --override_class 1)")
+    parser.add_argument('--override_class', nargs='+', default=[], help="Override classes. Use a single number to override ALL" \
+                        " (e.g., --override_class 0) or pairs to map specific classes " \
+                        "(e.g., --override_class mountain_bike=0 road_bike=0)")
     args = parser.parse_args()
 
     global LABELS_KITTI, IMAGES_DIR
@@ -250,6 +261,22 @@ def main():
     if not os.path.exists(LABELS_KITTI) or not os.path.exists(IMAGES_DIR):
         print(f"❌ Error: Verify the input paths ({LABELS_KITTI})")
         return
+
+    override_map = {}
+    override_all = -1
+    
+    if args.override_class:
+        if len(args.override_class) == 1 and args.override_class[0].isdigit():
+            override_all = int(args.override_class[0])
+            print(f"⚠️  Hammer mode: Converting ALL found classes to ID: {override_all}")
+        else:
+            for mapping in args.override_class:
+                if '=' in mapping:
+                    src, dst = mapping.split('=')
+                    override_map[src] = int(dst)
+                else:
+                    print(f"❌ Invalid format: {mapping}. Ignoring. Use origin=destination format (e.g., road_bike=0)")
+            print(f"🔀 Scalpel mode. Active mapping: {override_map}")
 
     # 1. Prepare structure
     create_dir_structure(args.append)
@@ -298,13 +325,13 @@ def main():
 
     # 5. Process passing the prefix
     print("🚀 Processing Train...")
-    train_stats = process_subset(train_files, 'train', batch_prefix, args.move, args.is_yolo, args.override_class)
+    train_stats = process_subset(train_files, 'train', batch_prefix, args.move, args.is_yolo, override_all, override_map)
     
     print("🚀 Processing Val...")
-    val_stats = process_subset(val_files, 'val', batch_prefix, args.move, args.is_yolo, args.override_class)
+    val_stats = process_subset(val_files, 'val', batch_prefix, args.move, args.is_yolo, override_all, override_map)
     
     print("🚀 Processing Test...")
-    test_stats = process_subset(test_files, 'test', batch_prefix, args.move, args.is_yolo, args.override_class)
+    test_stats = process_subset(test_files, 'test', batch_prefix, args.move, args.is_yolo, override_all, override_map)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
