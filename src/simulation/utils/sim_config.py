@@ -1,12 +1,13 @@
 import os
 import argparse
+from src.core import config
 
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", action="store_true", help="Launch script headless")
-parser.add_argument("--width", type=int, default=640, help="Width of image")     # 1280x720 (HD Resolution)
+parser.add_argument("--width", type=int, default=640, help="Width of image")      # 1280x720 (HD Resolution)
 parser.add_argument("--height", type=int, default=480, help="Height of image")    # 640x480 (SD Resolution)
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
-parser.add_argument("--data_dir", type=str, default=os.getcwd() + "/_output_data",
+parser.add_argument("--data_dir", type=str, default=config.RAW_DATA_DIR,
                     help="Location where data will be output")
 
 args, unknown_args = parser.parse_known_args()
@@ -49,11 +50,11 @@ DISTRACTOR_MAX_RADIUS = 30.0
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
     "Terrain",
-    "Terrain_flat",
-    # "Road",
-    # "Path",
-    # "Lake"
+    "Terrain_flat"
 ]
+
+# --- DEBUGGING ---
+DEBUG_WHEEL_CONTACT = False
 
 # --- DOMAIN RANDOMIZATION LIMITS ---
 MAX_PBR_MATERIALS = 30
@@ -180,6 +181,3 @@ DISTRACTOR_CONFIG = {
         "randomize_soft_colors": True
     }
 }
-
-# --- DEBUGGING ---
-DEBUG_WHEEL_CONTACT = False

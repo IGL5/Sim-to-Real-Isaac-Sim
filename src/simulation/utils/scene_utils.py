@@ -2,8 +2,8 @@ import math
 import random
 import carb
 from omni.physx import get_physx_scene_query_interface
-from pxr import UsdGeom, Gf, Semantics, UsdShade, Sdf
-from modules import config
+from pxr import UsdGeom, Gf, UsdShade, Sdf
+from src.simulation.utils import sim_config
 
 def find_prims_by_material_name(stage, material_names):
     """
@@ -40,9 +40,9 @@ def get_ground_height(x, y):
     Cast a ray from high up (z=500) downwards to find the ground.
     Returns the Z height of the hit point, or 0 if no hit.
     """
-    origin = carb.Float3(x, y, config.RAYCAST_START_HEIGHT)
+    origin = carb.Float3(x, y, sim_config.RAYCAST_START_HEIGHT)
     direction = carb.Float3(0, 0, -1.0)
-    distance = config.RAYCAST_DISTANCE
+    distance = sim_config.RAYCAST_DISTANCE
     
     hit = get_physx_scene_query_interface().raycast_closest(origin, direction, distance)
     
@@ -60,10 +60,10 @@ def get_drone_camera_pose(focus_target):
     
     # --- FLIGHT PARAMETERS ---
     # Distance to target (hypotenuse)
-    distance = random.uniform(config.CAMERA_DISTANCE_RANGE[0], config.CAMERA_DISTANCE_RANGE[1]) 
+    distance = random.uniform(sim_config.CAMERA_DISTANCE_RANGE[0], sim_config.CAMERA_DISTANCE_RANGE[1]) 
     
     # Angular height (Pitch):
-    elevation_deg = random.uniform(config.CAMERA_HEIGHT_RANGE[0], config.CAMERA_HEIGHT_RANGE[1])
+    elevation_deg = random.uniform(sim_config.CAMERA_HEIGHT_RANGE[0], sim_config.CAMERA_HEIGHT_RANGE[1])
     elevation_rad = math.radians(elevation_deg)
     
     # Angle around the target (Azimuth)
@@ -113,7 +113,7 @@ def calculate_vehicle_orientation_on_terrain(stage, x, y, yaw_degrees, wheelbase
         if z_front == -9999.0 or z_back == -9999.0: return None, None, None
 
         # --- DEBUG DRAWING (Bikes) ---
-        if config.DEBUG_WHEEL_CONTACT:
+        if sim_config.DEBUG_WHEEL_CONTACT:
             draw_debug_cube(stage, (front_x, front_y, z_front))
             draw_debug_cube(stage, (back_x, back_y, z_back))
 
@@ -153,7 +153,7 @@ def calculate_vehicle_orientation_on_terrain(stage, x, y, yaw_degrees, wheelbase
         if -9999.0 in (z_fl, z_fr, z_bl, z_br): return None, None, None
 
         # --- VISUAL DEBUG (Cars) ---
-        if config.DEBUG_WHEEL_CONTACT:
+        if sim_config.DEBUG_WHEEL_CONTACT:
             draw_debug_cube(stage, (fl_x, fl_y, z_fl))
             draw_debug_cube(stage, (fr_x, fr_y, z_fr))
             draw_debug_cube(stage, (bl_x, bl_y, z_bl))

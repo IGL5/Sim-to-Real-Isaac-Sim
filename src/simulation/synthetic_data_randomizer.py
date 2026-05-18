@@ -9,11 +9,11 @@ import json
 from datetime import datetime
 
 # --- MODULES ---
-from modules import config
+from src.simulation.utils import sim_config
 
 # --- ISAAC SIMULATION APP ---
 from isaacsim.simulation_app import SimulationApp
-simulation_app = SimulationApp(launch_config=config.CONFIG)
+simulation_app = SimulationApp(launch_config=sim_config.CONFIG)
 
 # --- ISAAC / USD / REP IMPORTS ---
 from isaacsim.core.utils.stage import get_current_stage, open_stage
@@ -21,29 +21,29 @@ from omni.timeline import get_timeline_interface
 from pxr import UsdPhysics, Sdf, UsdGeom, Gf, UsdLux
 import omni.replicator.core as rep
 
-from modules import scene_utils
-from modules import content
+from src.simulation.utils import scene_utils
+from src.simulation.utils import asset_manager
 
 # Increase subframes if shadows/ghosting appears of moving objects
-rep.settings.carb_settings("/omni/replicator/RTSubframes", config.RT_SUBFRAMES)
+rep.settings.carb_settings("/omni/replicator/RTSubframes", sim_config.RT_SUBFRAMES)
 
 def main():
-    if os.path.exists(config.args.data_dir):
-        shutil.rmtree(config.args.data_dir)
-    os.makedirs(config.args.data_dir, exist_ok=True)
+    if os.path.exists(sim_config.args.data_dir):
+        shutil.rmtree(sim_config.args.data_dir)
+    os.makedirs(sim_config.args.data_dir, exist_ok=True)
     
     # Create or overwrite classes.txt
-    content.update_yolo_classes_txt()
+    asset_manager.update_yolo_classes_txt()
 
     # --- 1. LOAD MAP & SKY ---
-    found_hdrs = content.discover_hdr_maps(config.HDR_MAPS_DIR)
+    found_hdrs = asset_manager.discover_hdr_maps(sim_config.HDR_MAPS_DIR)
     
     if found_hdrs:
-        config.AVAILABLE_HDRS = found_hdrs
+        sim_config.AVAILABLE_HDRS = found_hdrs
     else:
         print("[CRITICAL] No HDR files found!")
 
-    map_path = os.path.join(os.getcwd(), "assets", "map", config.MAP_NAME)
+    map_path = os.path.join(os.getcwd(), "assets", "map", sim_config.MAP_NAME)
     open_stage(map_path)
     stage = get_current_stage()
 
@@ -66,8 +66,8 @@ def main():
         dome_light.CreateTextureFormatAttr().Set(UsdLux.Tokens.latlong)
         
         # Apply initial HDR texture
-        if config.AVAILABLE_HDRS:
-            light_path = os.path.join(config.HDR_MAPS_DIR, config.AVAILABLE_HDRS[0])
+        if sim_config.AVAILABLE_HDRS:
+            light_path = os.path.join(sim_config.HDR_MAPS_DIR, sim_config.AVAILABLE_HDRS[0])
             dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(light_path))
             # High intensity to compete with the sun
             dome_light.CreateIntensityAttr().Set(600.0)
@@ -99,24 +99,24 @@ def main():
     timeline.play()
 
     # --- 3. MATERIAL SETUP ---
-    loaded_materials = content.load_pbr_materials(stage) 
-    terrain_paths_map = scene_utils.find_prims_by_material_name(stage, config.ENVIRONMENT_LOOKUP_KEYS)
-    content.setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
+    loaded_materials = asset_manager.load_pbr_materials(stage) 
+    terrain_paths_map = scene_utils.find_prims_by_material_name(stage, sim_config.ENVIRONMENT_LOOKUP_KEYS)
+    asset_manager.setup_scene_materials_initial(stage, terrain_paths_map, loaded_materials)
 
     # --- 4. LOAD ASSETS ---
     print("\n--- Loading Detectable Objects ---")
-    detectable_pools, n_distinct_assets_obj = content.create_class_pool(
+    detectable_pools, n_distinct_assets_obj = asset_manager.create_class_pool(
         stage, 
-        config.OBJECTS_CONFIG, 
-        config.ASSETS_ROOT_DIR, 
+        sim_config.OBJECTS_CONFIG, 
+        sim_config.ASSETS_ROOT_DIR, 
         apply_semantics=True
     )
     
     print("\n--- Loading Distractors ---")
-    distractor_pools, n_distinct_assets_distractor = content.create_class_pool(
+    distractor_pools, n_distinct_assets_distractor = asset_manager.create_class_pool(
         stage, 
-        config.DISTRACTOR_CONFIG, 
-        config.ASSETS_ROOT_DIR, 
+        sim_config.DISTRACTOR_CONFIG, 
+        sim_config.ASSETS_ROOT_DIR, 
         apply_semantics=False
     )
 
@@ -142,9 +142,9 @@ def main():
     
     # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
-    writer.initialize(output_dir=config.args.data_dir, omit_semantic_type=True)
+    writer.initialize(output_dir=sim_config.args.data_dir, omit_semantic_type=True)
     
-    render_product = rep.create.render_product(cam_rep, (config.CONFIG["width"], config.CONFIG["height"]))
+    render_product = rep.create.render_product(cam_rep, (sim_config.CONFIG["width"], sim_config.CONFIG["height"]))
     writer.attach(render_product)
 
     # Run physics warmup
@@ -157,18 +157,18 @@ def main():
     
     # Check Objects
     level_obj, msg_obj = scene_utils.validate_placement_config(
-        config.OBJECTS_CONFIG, 
-        config.OBJECTS_BUDGET_RANGE[1], # Use max of range
-        config.OBJECTS_MAX_RADIUS, 
+        sim_config.OBJECTS_CONFIG, 
+        sim_config.OBJECTS_BUDGET_RANGE[1], # Use max of range
+        sim_config.OBJECTS_MAX_RADIUS, 
         "Detectables"
     )
     print(msg_obj)
     
     # Check Distractors
     level_dist, msg_dist = scene_utils.validate_placement_config(
-        config.DISTRACTOR_CONFIG, 
-        config.DISTRACTOR_BUDGET_RANGE[1], 
-        config.DISTRACTOR_MAX_RADIUS, 
+        sim_config.DISTRACTOR_CONFIG, 
+        sim_config.DISTRACTOR_BUDGET_RANGE[1], 
+        sim_config.DISTRACTOR_MAX_RADIUS, 
         "Distractors"
     )
     print(msg_dist)
@@ -182,10 +182,10 @@ def main():
         time.sleep(10)
 
     # --- 7. MAIN LOOP ---
-    print(f"\nStarting generation of {config.CONFIG['num_frames']} frames...")
+    print(f"\nStarting generation of {sim_config.CONFIG['num_frames']} frames...")
 
     frames_generated = 0
-    max_attempts = config.CONFIG["num_frames"] * 5 # Avoid infinite loops
+    max_attempts = sim_config.CONFIG["num_frames"] * 5 # Avoid infinite loops
     attempts = 0
 
     # Timer global
@@ -196,7 +196,7 @@ def main():
     track_total_distractors = 0
     track_empty_target_frames = 0
     
-    while frames_generated < config.CONFIG["num_frames"] and attempts < max_attempts:
+    while frames_generated < sim_config.CONFIG["num_frames"] and attempts < max_attempts:
 
         # Timer frame
         frame_start_time = time.time()
@@ -205,20 +205,20 @@ def main():
         print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
 
         # A. APPLY MATERIAL & SKY RANDOMIZATION
-        content.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
+        asset_manager.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
 
         # Randomize sky
-        if config.AVAILABLE_HDRS and dome_prim.IsValid() and config.RANDOMIZE_SKY:
-            hdr_name = random.choice(config.AVAILABLE_HDRS)
-            light_path = os.path.join(config.HDR_MAPS_DIR, hdr_name)
+        if sim_config.AVAILABLE_HDRS and dome_prim.IsValid() and sim_config.RANDOMIZE_SKY:
+            hdr_name = random.choice(sim_config.AVAILABLE_HDRS)
+            light_path = os.path.join(sim_config.HDR_MAPS_DIR, hdr_name)
             
-            hdr_intensity = random.uniform(config.HDR_INTENSITY_RANGE[0] * 1000, 
-                                        config.HDR_INTENSITY_RANGE[1] * 1000)
+            hdr_intensity = random.uniform(sim_config.HDR_INTENSITY_RANGE[0] * 1000, 
+                                        sim_config.HDR_INTENSITY_RANGE[1] * 1000)
         
-            content.setup_dome_light(stage, dome_light_path, light_path, hdr_intensity)
+            asset_manager.setup_dome_light(stage, dome_light_path, light_path, hdr_intensity)
 
         # Randomize sun
-        if config.RANDOMIZE_SKY and sun_prim.IsValid():
+        if sim_config.RANDOMIZE_SKY and sun_prim.IsValid():
             elevation = random.uniform(15, 80)
             azimuth = random.uniform(0, 360)
             
@@ -228,8 +228,8 @@ def main():
                 ops[0].Set(Gf.Vec3f(0, elevation, azimuth))
 
         # B. CHOOSE TARGET
-        tx = random.uniform(config.WORLD_LIMITS[0], config.WORLD_LIMITS[1])
-        ty = random.uniform(config.WORLD_LIMITS[2], config.WORLD_LIMITS[3])
+        tx = random.uniform(sim_config.WORLD_LIMITS[0], sim_config.WORLD_LIMITS[1])
+        ty = random.uniform(sim_config.WORLD_LIMITS[2], sim_config.WORLD_LIMITS[3])
         tz = scene_utils.get_ground_height(tx, ty)
         
         # If it returns the error value (-9999) or is out of logical limits
@@ -241,7 +241,7 @@ def main():
         
         # C. POSITION CAMERA (Using Replicator LookAt)
         jitter_angle = random.uniform(0, 2 * math.pi)
-        jitter_dist = random.uniform(0, config.LOOKAT_JITTER_RADIUS)
+        jitter_dist = random.uniform(0, sim_config.LOOKAT_JITTER_RADIUS)
         jx = tx + jitter_dist * math.cos(jitter_angle)
         jy = ty + jitter_dist * math.sin(jitter_angle)
         camera_look_at_target = (jx, jy, tz)
@@ -254,10 +254,10 @@ def main():
         detectables_obstacles = scene_utils.place_objects_from_config(
             stage=stage,
             target_pos=current_target,
-            config_map=config.OBJECTS_CONFIG,
+            config_map=sim_config.OBJECTS_CONFIG,
             pools_paths_map=detectable_pools,
-            budget_range=config.OBJECTS_BUDGET_RANGE,
-            max_radius=config.OBJECTS_MAX_RADIUS,
+            budget_range=sim_config.OBJECTS_BUDGET_RANGE,
+            max_radius=sim_config.OBJECTS_MAX_RADIUS,
             previous_obstacles=[]
         )
         
@@ -267,10 +267,10 @@ def main():
         distractor_obstacles = scene_utils.place_objects_from_config(
             stage=stage,
             target_pos=current_target,
-            config_map=config.DISTRACTOR_CONFIG,
+            config_map=sim_config.DISTRACTOR_CONFIG,
             pools_paths_map=distractor_pools,
-            budget_range=config.DISTRACTOR_BUDGET_RANGE,
-            max_radius=config.DISTRACTOR_MAX_RADIUS,
+            budget_range=sim_config.DISTRACTOR_BUDGET_RANGE,
+            max_radius=sim_config.DISTRACTOR_MAX_RADIUS,
             previous_obstacles=all_obstacles
         )
 
@@ -282,7 +282,7 @@ def main():
             track_empty_target_frames += 1
 
         # F. SHOOT
-        rep.orchestrator.step(delta_time=0.0, rt_subframes=config.RT_SUBFRAMES)
+        rep.orchestrator.step(delta_time=0.0, rt_subframes=sim_config.RT_SUBFRAMES)
         rep.BackendDispatch.wait_until_done()
 
         # Calculate frame duration
@@ -307,26 +307,26 @@ def main():
     safe_frames = frames_generated if frames_generated > 0 else 1
 
     obj_mat_randomized = []
-    for k, v in config.OBJECTS_CONFIG.items():
+    for k, v in sim_config.OBJECTS_CONFIG.items():
         if v.get('active', True) and v.get('randomize_materials'):
             obj_mat_randomized.extend(v['randomize_materials'])
 
     dist_mat_randomized = []
-    for k, v in config.DISTRACTOR_CONFIG.items():
+    for k, v in sim_config.DISTRACTOR_CONFIG.items():
         if v.get('active', True) and v.get('randomize_materials'):
             dist_mat_randomized.extend(v['randomize_materials'])
     
     metadata = {
         "generation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "config": {
-            "width": config.CONFIG["width"],
-            "height": config.CONFIG["height"],
-            "renderer": config.CONFIG["renderer"],
-            "world_limits": config.WORLD_LIMITS,
-            "rt_subframes": config.RT_SUBFRAMES
+            "width": sim_config.CONFIG["width"],
+            "height": sim_config.CONFIG["height"],
+            "renderer": sim_config.CONFIG["renderer"],
+            "world_limits": sim_config.WORLD_LIMITS,
+            "rt_subframes": sim_config.RT_SUBFRAMES
         },
         "performance": {
-            "total_frames_requested": config.CONFIG["num_frames"],
+            "total_frames_requested": sim_config.CONFIG["num_frames"],
             "total_frames_generated": frames_generated,
             "total_attempts": attempts,
             "generation_efficiency_percent": round((frames_generated / attempts) * 100, 2) if attempts > 0 else 0,
@@ -340,10 +340,10 @@ def main():
             "total_detectables_spawned": track_total_detectables
         },
         "domain_randomization": {
-            "sky_active": config.RANDOMIZE_SKY,
-            "terrain_active": config.RANDOMIZE_TERRAIN,
-            "hdr_intensity_range": config.HDR_INTENSITY_RANGE,
-            "hdr_maps_available": len(config.AVAILABLE_HDRS),
+            "sky_active": sim_config.RANDOMIZE_SKY,
+            "terrain_active": sim_config.RANDOMIZE_TERRAIN,
+            "hdr_intensity_range": sim_config.HDR_INTENSITY_RANGE,
+            "hdr_maps_available": len(sim_config.AVAILABLE_HDRS),
             "pbr_materials_loaded": len(loaded_materials),
             "object_materials_randomized": list(set(obj_mat_randomized)),
             "distractor_materials_randomized": list(set(dist_mat_randomized)),
@@ -353,17 +353,17 @@ def main():
             }
         },
         "spatial_coverage": {
-            "camera_distance_range": config.CAMERA_DISTANCE_RANGE,
-            "camera_height_range": config.CAMERA_HEIGHT_RANGE,
-            "objects_max_radius": config.OBJECTS_MAX_RADIUS,
-            "distractor_max_radius": config.DISTRACTOR_MAX_RADIUS
+            "camera_distance_range": sim_config.CAMERA_DISTANCE_RANGE,
+            "camera_height_range": sim_config.CAMERA_HEIGHT_RANGE,
+            "objects_max_radius": sim_config.OBJECTS_MAX_RADIUS,
+            "distractor_max_radius": sim_config.DISTRACTOR_MAX_RADIUS
         },
-        "theoretical_distribution": content.calc_theoretical_distribution()
+        "theoretical_distribution": asset_manager.calc_theoretical_distribution()
     }
 
     # Create the metadata file and save it
-    metadata_path = os.path.join(config.args.data_dir, "generation_metadata.json")
-    os.makedirs(config.args.data_dir, exist_ok=True)
+    metadata_path = os.path.join(sim_config.args.data_dir, "generation_metadata.json")
+    os.makedirs(sim_config.args.data_dir, exist_ok=True)
     
     with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=4)

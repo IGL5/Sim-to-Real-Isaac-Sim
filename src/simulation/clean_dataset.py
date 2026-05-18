@@ -6,6 +6,7 @@ import json
 import numpy as np
 import shutil
 from pathlib import Path
+from src.core import config
 
 # ==========================================
 # 1. CORE LOGIC / ORCHESTRATOR
@@ -319,7 +320,7 @@ def print_summary(stats, args):
             print("\n💡 NEXT STEPS (Whitelist Guide):")
             print("  1. Open the '_review_occlusions' folder and check the images.")
             print("  2. If a bounding box is valid, note its frame ID and line number (e.g., [#1]).")
-            print("  3. Add it to '_output_data/whitelist.txt'. Format: 'frame_id:1' (saves line 1) or 'frame_id' (saves all).")
+            print("  3. Add it to 'data/01_raw/whitelist.txt'. Format: 'frame_id:1' (saves line 1) or 'frame_id' (saves all).")
             print("  4. Run the script again to apply changes: python clean_dataset.py --clean_labels")
 
     if args.dry:
@@ -385,7 +386,7 @@ def update_metadata(data_dir, stats, args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Dataset cleaner for Isaac Sim datasets")
-    parser.add_argument("--dir", type=str, default="_output_data", help="Root directory")
+    parser.add_argument("--dir", type=str, default=config.RAW_DATA_DIR, help="Root directory")
     parser.add_argument("--dry", action="store_true", help="Dry run, no modifications")
     parser.add_argument("--thresh_mean", type=float, default=5.0, help="Darkness threshold")
     parser.add_argument("--thresh_std", type=float, default=5.0, help="Flatness/std threshold")

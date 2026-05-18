@@ -7,6 +7,7 @@ import sys
 import re
 from ultralytics import YOLO
 import modules.core_visual_utils as cvu
+from src.core.config import DEFAULT_TEST_IMAGES
 
 # Import the class from the other file
 try:
@@ -16,6 +17,33 @@ except ImportError:
     print("❌ CRITICAL ERROR: Not finding 'audit_reporter.py' or 'inference_reporter.py'.")
     print("   Make sure both files are on 'modules' folder.")
     sys.exit(1)
+
+
+
+def check_system_integrity(model_path, check_dataset=False):
+    """
+    Checks that everything necessary exists before starting.
+    """
+    # 1. Check Model
+    if not os.path.exists(model_path):
+        print(f"❌ ERROR: Not finding the model file in:")
+        print(f"   -> {model_path}")
+        print("   Did you run the training script (train_YOLO.py)?")
+        return False
+
+    # 2. Check Dataset (only if we are going to audit)
+    if check_dataset:
+        if not os.path.exists(DEFAULT_TEST_IMAGES):
+            print(f"❌ ERROR: Not finding the test images folder:")
+            print(f"   -> {DEFAULT_TEST_IMAGES}")
+            return False
+        
+        # Check if not empty
+        if not os.listdir(DEFAULT_TEST_IMAGES):
+            print(f"⚠️ WARNING: The test folder is empty ({DEFAULT_TEST_IMAGES}).")
+            return False
+
+    return True
 
 
 def select_model_path(preselected_model=None):

@@ -3,7 +3,8 @@ import glob
 import random
 from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom, UsdLux
 import omni.replicator.core as rep
-from modules import config
+from src.simulation.utils import sim_config
+from src.core.config import CLASSES_PATH
 
 
 def update_yolo_classes_txt():
@@ -12,17 +13,18 @@ def update_yolo_classes_txt():
     Guarantees a strict order (alphabetical by main class and then sub-parts)
     so that the IDs (0, 1, 2...) always match in the dataset_manager.
     """
-    yolo_dir = os.path.abspath(os.path.join(os.getcwd(), "YOLO"))
-    classes_file = os.path.join(yolo_dir, "classes.txt")
+    classes_file = os.path.abspath(CLASSES_PATH)
+
+    os.makedirs(os.path.dirname(classes_file), exist_ok=True)
     
     # We use a normal list to maintain the order, not a set()
     final_classes = []
     
     # 1. Sort the config keys alphabetically to ensure determinism
-    sorted_keys = sorted(config.OBJECTS_CONFIG.keys())
+    sorted_keys = sorted(sim_config.OBJECTS_CONFIG.keys())
     
     for main_class in sorted_keys:
-        cfg = config.OBJECTS_CONFIG[main_class]
+        cfg = sim_config.OBJECTS_CONFIG[main_class]
         if not cfg.get('active', True):
             continue
             
@@ -38,9 +40,9 @@ def update_yolo_classes_txt():
                     final_classes.append(sub_class)
                     
     # 2. Overwrite the file (Delete and create new)
-    os.makedirs(yolo_dir, exist_ok=True)
-    with open(classes_file, "w") as f:
-        f.write("\n".join(final_classes))
+    with open(classes_file, "w", encoding='utf-8') as f:
+        for c in final_classes:
+            f.write(f"{c}\n")
 
 
 def discover_objective_assets(base_dir, obj_dir):
@@ -87,14 +89,14 @@ def load_pbr_materials(stage):
     Loads PBR materials and manually assigns textures to avoid API errors.
     Returns a list of UsdShade.Material.
     """
-    if not os.path.exists(config.TEXTURES_ROOT_DIR):
-        print(f"[ERROR] Texture directory not found: {config.TEXTURES_ROOT_DIR}")
+    if not os.path.exists(sim_config.TEXTURES_ROOT_DIR):
+        print(f"[ERROR] Texture directory not found: {sim_config.TEXTURES_ROOT_DIR}")
         return []
 
-    material_folders = [f.path for f in os.scandir(config.TEXTURES_ROOT_DIR) if f.is_dir()]
+    material_folders = [f.path for f in os.scandir(sim_config.TEXTURES_ROOT_DIR) if f.is_dir()]
 
     material_folders.sort()
-    limit = min(max(config.MAX_PBR_MATERIALS, len(config.ENVIRONMENT_LOOKUP_KEYS)), len(material_folders))
+    limit = min(max(sim_config.MAX_PBR_MATERIALS, len(sim_config.ENVIRONMENT_LOOKUP_KEYS)), len(material_folders))
     material_folders = material_folders[:limit]
 
     print(f"\n--- Found {len(material_folders)} texture folders (Limit: {limit}) ---")
@@ -219,9 +221,9 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
         if shader:
             # Scale logic based on terrain type
             if "flat" in key.lower():
-                s_min, s_max = config.MATERIAL_SCALE_FLAT
+                s_min, s_max = sim_config.MATERIAL_SCALE_FLAT
             else:
-                s_min, s_max = config.MATERIAL_SCALE_MOUNTAIN
+                s_min, s_max = sim_config.MATERIAL_SCALE_MOUNTAIN
 
             scale_val = random.uniform(s_min, s_max)
             rot_val = random.uniform(0, 360)
@@ -237,7 +239,7 @@ def randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_material
             shader.CreateInput("texture_scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(scale_val, scale_val))
             shader.CreateInput("texture_rotate", Sdf.ValueTypeNames.Float).Set(rot_val)
             
-            if config.RANDOMIZE_TERRAIN:
+            if sim_config.RANDOMIZE_TERRAIN:
                 shader.CreateInput("diffuse_tint", Sdf.ValueTypeNames.Color3f).Set(color_val)
                 shader.CreateInput("reflection_roughness_constant", Sdf.ValueTypeNames.Float).Set(random.uniform(0.7, 1.0))
                 shader.CreateInput("specular_level", Sdf.ValueTypeNames.Float).Set(random.uniform(0.1, 0.3))
@@ -298,7 +300,7 @@ def discover_hdr_maps(directory):
     files = [f for f in os.listdir(directory) if f.lower().endswith(supported_extensions)]
 
     files.sort()
-    limit = min(max(config.MAX_HDR_MAPS, 1), len(files))
+    limit = min(max(sim_config.MAX_HDR_MAPS, 1), len(files))
     files = files[:limit]
     
     print(f"\n--- Found {len(files)} HDR maps in local folder (Limit: {limit}) ---")
@@ -382,7 +384,7 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
         if not cfg.get("active", True): continue
             
         # Determine if it is recursive (if it is in distractors)
-        is_recursive = category in config.DISTRACTOR_CONFIG
+        is_recursive = category in sim_config.DISTRACTOR_CONFIG
         
         asset_files = discover_assets(root_dir, category, recursive=is_recursive)
         
@@ -472,8 +474,8 @@ def calc_theoretical_distribution():
     dist_dict = {}
     
     # Objectives
-    obj_budget_max = config.OBJECTS_BUDGET_RANGE[1]
-    active_objs = {k: v for k, v in config.OBJECTS_CONFIG.items() if v.get('active', True)}
+    obj_budget_max = sim_config.OBJECTS_BUDGET_RANGE[1]
+    active_objs = {k: v for k, v in sim_config.OBJECTS_CONFIG.items() if v.get('active', True)}
     total_obj_weight = sum(v.get('selection_weight', 1) for v in active_objs.values())
     
     for k, v in active_objs.items():
@@ -485,8 +487,8 @@ def calc_theoretical_distribution():
             dist_dict[k] = {"type": "detectable", "expected_max_count": expected_count}
             
     # Distractors
-    dist_budget_max = config.DISTRACTOR_BUDGET_RANGE[1]
-    active_dists = {k: v for k, v in config.DISTRACTOR_CONFIG.items() if v.get('active', True)}
+    dist_budget_max = sim_config.DISTRACTOR_BUDGET_RANGE[1]
+    active_dists = {k: v for k, v in sim_config.DISTRACTOR_CONFIG.items() if v.get('active', True)}
     total_dist_weight = sum(v.get('selection_weight', 1) for v in active_dists.values())
     
     for k, v in active_dists.items():
