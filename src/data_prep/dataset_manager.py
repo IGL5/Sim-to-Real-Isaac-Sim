@@ -6,24 +6,20 @@ import argparse
 import json
 import numpy as np
 from datetime import datetime
+from src.core import config
 
-# --- CONFIG ---
-
-# Input paths (where are your NEW data from Isaac Sim)
+# --- DATA IMPORT PATHS ---
 LABELS_KITTI = ""
 IMAGES_DIR = ""
 
-# Output path (where the dataset will be stored)
-BASE_OUTPUT = os.path.join(os.getcwd(), "dataset_yolo_output")
-
 # Classes to detect
-with open("classes.txt", "r") as f:
-    CLASES = [line.strip() for line in f.readlines() if line.strip()]
-
-# Split ratios
-TRAIN_RATIO = 0.7
-VAL_RATIO   = 0.2
-TEST_RATIO  = 0.1
+try:
+    with open(config.CLASSES_PATH, "r", encoding="utf-8") as f:
+        CLASES = [line.strip() for line in f.readlines() if line.strip()]
+except FileNotFoundError:
+    print(f"❌ ERROR: No se encontró el archivo de clases en {config.CLASSES_PATH}")
+    print("   Asegúrate de ejecutar el simulador al menos una vez para generarlo.")
+    exit(1)
 
 def change_coordinates(size, box):
     """ Converts from (Xmin, Xmax, Ymin, Ymax) to YOLO (CenterX, CenterY, W, H) normalized """
@@ -52,17 +48,17 @@ def create_dir_structure(append_mode):
     Creates the folder structure.
     If append_mode is False, erases what was there to start from scratch.
     """
-    if os.path.exists(BASE_OUTPUT) and not append_mode:
-        print(f"🧹 Reset mode: Deleting previous dataset in {BASE_OUTPUT}...")
-        shutil.rmtree(BASE_OUTPUT)
+    if os.path.exists(config.PROCESSED_DATA_DIR) and not append_mode:
+        print(f"🧹 Reset mode: Deleting previous dataset in {config.PROCESSED_DATA_DIR}...")
+        shutil.rmtree(config.PROCESSED_DATA_DIR)
     
     subsets = ['train', 'val', 'test']
     for subset in subsets:
-        os.makedirs(os.path.join(BASE_OUTPUT, 'images', subset), exist_ok=True)
-        os.makedirs(os.path.join(BASE_OUTPUT, 'labels', subset), exist_ok=True)
+        os.makedirs(os.path.join(config.PROCESSED_DATA_DIR, 'images', subset), exist_ok=True)
+        os.makedirs(os.path.join(config.PROCESSED_DATA_DIR, 'labels', subset), exist_ok=True)
     
     if not append_mode:
-        print(f"📂 Structure created clean in: {BASE_OUTPUT}")
+        print(f"📂 Structure created clean in: {config.PROCESSED_DATA_DIR}")
     else:
         print(f"📂 Structure verified (Append mode).")
 
@@ -181,8 +177,8 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
     # 3. Save with NEW UNIQUE NAME
     new_filename = f"{unique_prefix}_{filename_base}"
     
-    dest_img = os.path.join(BASE_OUTPUT, 'images', subset_name, new_filename + img_ext)
-    dest_lbl = os.path.join(BASE_OUTPUT, 'labels', subset_name, new_filename + ".txt")
+    dest_img = os.path.join(config.PROCESSED_DATA_DIR, 'images', subset_name, new_filename + img_ext)
+    dest_lbl = os.path.join(config.PROCESSED_DATA_DIR, 'labels', subset_name, new_filename + ".txt")
     
     if move_mode:
         shutil.move(img_path, dest_img)
@@ -247,7 +243,7 @@ def main():
     parser.add_argument('--append', action='store_true', help="Add new data to the existing dataset without deleting anything")
     parser.add_argument('--move', action='store_true', help="Move files instead of copying to save disk space (DELETES ORIGINALS)")
     parser.add_argument('--limit', type=int, default=0, help="Maximum number of images to process (0 = all)")
-    parser.add_argument('--source', type=str, default="_output_data", help="Source folder name relative to parent directory")
+    parser.add_argument('--source', type=str, default=config.RAW_DATA_DIR, help="Path to the raw dataset folder")
     parser.add_argument('--is_yolo', action='store_true', help="Indicates that source labels are already in YOLO format")
     parser.add_argument('--override_class', nargs='+', default=[], help="Override classes. Use a single number to override ALL" \
                         " (e.g., --override_class 0) or pairs to map specific classes " \
@@ -255,11 +251,13 @@ def main():
     args = parser.parse_args()
 
     global LABELS_KITTI, IMAGES_DIR
-    LABELS_KITTI = os.path.join(os.getcwd(), "..", args.source, "DroneCamera", "object_detection")
-    IMAGES_DIR = os.path.join(os.getcwd(), "..", args.source, "DroneCamera", "rgb")
+    LABELS_KITTI = os.path.join(args.source, config.RAW_LABELS_SUBPATH)
+    IMAGES_DIR = os.path.join(args.source, config.RAW_IMAGES_SUBPATH)
 
     if not os.path.exists(LABELS_KITTI) or not os.path.exists(IMAGES_DIR):
-        print(f"❌ Error: Verify the input paths ({LABELS_KITTI})")
+        print(f"❌ Error: Didn't find raw data.")
+        print(f"   Searching images in: {IMAGES_DIR}")
+        print(f"   Searching labels in: {LABELS_KITTI}")
         return
 
     override_map = {}
@@ -306,8 +304,8 @@ def main():
         total_files = len(all_files)
         print(f"✂️  LIMIT ACTIVE: Processing reduced to {total_files} random images.")
 
-    train_end = int(total_files * TRAIN_RATIO)
-    val_end = train_end + int(total_files * VAL_RATIO)
+    train_end = int(total_files * config.TRAIN_RATIO)
+    val_end = train_end + int(total_files * config.VAL_RATIO)
     
     train_files = all_files[:train_end]
     val_files = all_files[train_end:val_end]
@@ -337,7 +335,7 @@ def main():
     print("✅ PROCESSING COMPLETED")
     total_added_imgs = train_stats["images"] + val_stats["images"] + test_stats["images"]
     print(f"New files added: {total_added_imgs}")
-    print(f"Dataset located in: {BASE_OUTPUT}")
+    print(f"Dataset located in: {args.source}")
 
     # 6. Process JSON
     source_meta_path = os.path.join(os.getcwd(), "..", args.source, "generation_metadata.json")
@@ -355,7 +353,7 @@ def main():
         "total_added": total_added_imgs
     }
 
-    master_meta_path = os.path.join(BASE_OUTPUT, "dataset_metadata.json")
+    master_meta_path = os.path.join(args.source, "dataset_metadata.json")
     master_meta = {
         "global_totals": {
             "train": {"images": 0, "objects": 0, "backgrounds": 0},
@@ -386,8 +384,7 @@ def main():
         master_meta["global_totals"]["total_objects"] += stats["objects"]
         master_meta["global_totals"]["total_backgrounds"] += stats["backgrounds"]
 
-    images_dir = os.path.join(BASE_OUTPUT, 'images')
-    total_size_bytes = get_dir_size(images_dir)
+    total_size_bytes = get_dir_size(IMAGES_DIR)
     total_size_mb = round(total_size_bytes / (1024 * 1024), 2)
     
     total_imgs = master_meta["global_totals"]["total_images"]

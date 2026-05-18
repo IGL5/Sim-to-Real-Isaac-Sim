@@ -30,6 +30,9 @@ MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
 RT_SUBFRAMES = 32
 
 TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
+MAP_PATH = os.path.join(os.getcwd(), "assets", "map", MAP_NAME)
+SUN_PATH = "/World/Sun_Light"
+SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
 CAMERA_HEIGHT_RANGE = (0.0, 1.0)

@@ -9,9 +9,23 @@ RAW_DATA_DIR = "data/01_raw"
 PROCESSED_DATA_DIR = "data/02_processed"
 METRICS_DIR = "data/05_metrics"
 
-# Dataset directories
+# Simulation Camera Name
+CAMERA_NAME = "DroneCamera"
+
+# Data Split Ratios
+TRAIN_RATIO = 0.7
+VAL_RATIO   = 0.2
+TEST_RATIO  = 0.1
+
+# Dataset paths
 DATASET_TEST_IMAGES = os.path.join(PROCESSED_DATA_DIR, "images", "test")
 DATASET_TEST_LABELS = os.path.join(PROCESSED_DATA_DIR, "labels", "test")
+RAW_IMAGES_SUBPATH = os.path.join(CAMERA_NAME, "rgb")
+RAW_LABELS_SUBPATH = os.path.join(CAMERA_NAME, "object_detection")
+
+# Metadata paths
+GENERATION_METADATA_PATH = os.path.join(RAW_DATA_DIR, "generation_metadata.json")
+DATASET_METADATA_PATH = os.path.join(PROCESSED_DATA_DIR, "dataset_metadata.json")
 
 # Class file
 CLASSES_PATH = os.path.join("src", "core", "classes.txt")

@@ -4,7 +4,7 @@ import random
 from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom, UsdLux
 import omni.replicator.core as rep
 from src.simulation.utils import sim_config
-from src.core.config import CLASSES_PATH
+from src.core import config
 
 
 def update_yolo_classes_txt():
@@ -13,7 +13,7 @@ def update_yolo_classes_txt():
     Guarantees a strict order (alphabetical by main class and then sub-parts)
     so that the IDs (0, 1, 2...) always match in the dataset_manager.
     """
-    classes_file = os.path.abspath(CLASSES_PATH)
+    classes_file = os.path.abspath(config.CLASSES_PATH)
 
     os.makedirs(os.path.dirname(classes_file), exist_ok=True)
     

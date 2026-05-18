@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 
 # --- MODULES ---
+from src.core import config
 from src.simulation.utils import sim_config
 
 # --- ISAAC SIMULATION APP ---
@@ -43,8 +44,8 @@ def main():
     else:
         print("[CRITICAL] No HDR files found!")
 
-    map_path = os.path.join(os.getcwd(), "assets", "map", sim_config.MAP_NAME)
-    open_stage(map_path)
+    # Open scene
+    open_stage(sim_config.MAP_PATH)
     stage = get_current_stage()
 
     # Physics Scene
@@ -57,8 +58,7 @@ def main():
     print("--- Configuring Lights ---")
 
     # SkyDome
-    dome_light_path = "/World/SkyDome"
-    dome_prim = stage.GetPrimAtPath(dome_light_path)
+    dome_prim = stage.GetPrimAtPath(sim_config.SKY_PATH)
     
     if dome_prim.IsValid():
         print("   -> Found SkyDome. Configuring...")
@@ -75,8 +75,7 @@ def main():
         print("[WARN] SkyDome not found in USD. Background might be black.")
 
     # Sun
-    sun_path = "/World/Sun_Light"
-    sun_prim = stage.GetPrimAtPath(sun_path)
+    sun_prim = stage.GetPrimAtPath(sim_config.SUN_PATH)
     
     if sun_prim.IsValid():
         print("   -> Found Sun_Light. Randomizing time of day...")
@@ -126,12 +125,12 @@ def main():
         position=(0, 0, 0),
         rotation=(0, 0, 0),
         focal_length=18.0,
-        name="DroneCamera"
+        name=config.CAMERA_NAME
     )
 
     camera_path = None
     for prim in stage.Traverse():
-        if prim.GetName() == "DroneCamera":
+        if prim.GetName() == config.CAMERA_NAME:
             camera_path = str(prim.GetPath())
             break
     
@@ -215,7 +214,7 @@ def main():
             hdr_intensity = random.uniform(sim_config.HDR_INTENSITY_RANGE[0] * 1000, 
                                         sim_config.HDR_INTENSITY_RANGE[1] * 1000)
         
-            asset_manager.setup_dome_light(stage, dome_light_path, light_path, hdr_intensity)
+            asset_manager.setup_dome_light(stage, sim_config.SKY_PATH, light_path, hdr_intensity)
 
         # Randomize sun
         if sim_config.RANDOMIZE_SKY and sun_prim.IsValid():
@@ -362,13 +361,12 @@ def main():
     }
 
     # Create the metadata file and save it
-    metadata_path = os.path.join(sim_config.args.data_dir, "generation_metadata.json")
     os.makedirs(sim_config.args.data_dir, exist_ok=True)
     
-    with open(metadata_path, 'w', encoding='utf-8') as f:
+    with open(config.GENERATION_METADATA_PATH, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=4)
         
-    print(f"📊 Metadata exported successfully to: {metadata_path}")
+    print(f"📊 Metadata exported successfully to: {config.GENERATION_METADATA_PATH}")
 
 
 if __name__ == "__main__":
