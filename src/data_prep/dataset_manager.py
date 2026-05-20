@@ -7,6 +7,7 @@ import json
 import numpy as np
 from datetime import datetime
 import src.core.config as config
+from src.core.utils import math_utils as mu
 
 # --- DATA IMPORT PATHS ---
 LABELS_KITTI = ""
@@ -216,21 +217,14 @@ def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yol
                 all_ars.append(stat["ar"])
                 all_cx.append(stat["cx"])
                 all_cy.append(stat["cy"])
-    
-    def get_stats(arr):
-        if not arr: return {"mean": 0.0, "std": 0.0}
-        return {
-            "mean": round(float(np.mean(arr)), 4),
-            "std": round(float(np.std(arr)), 4)
-        }
         
     eda_stats = {
-        "bbox_area": get_stats(all_areas),
-        "aspect_ratio": get_stats(all_ars),
-        "center_x": get_stats(all_cx),
-        "center_y": get_stats(all_cy)
+        "bbox_area": mu.calculate_1d_stats(all_areas),
+        "aspect_ratio": mu.calculate_1d_stats(all_ars),
+        "center_x": mu.calculate_1d_stats(all_cx),
+        "center_y": mu.calculate_1d_stats(all_cy)
     }
-                
+
     return {
         "images": count_imgs, 
         "objects": count_objs, 
@@ -367,10 +361,8 @@ def main():
     }
 
     # If append mode, load the previous metadata
-    master_meta_path = os.path.join(args.source, config.FILE_DATASET_META)
-    
-    if args.append and os.path.exists(master_meta_path):
-        with open(master_meta_path, 'r', encoding='utf-8') as f:
+    if args.append and os.path.exists(config.DATASET_METADATA_PATH):
+        with open(config.DATASET_METADATA_PATH, 'r', encoding='utf-8') as f:
             loaded_meta = json.load(f)
             if isinstance(loaded_meta.get("global_totals", {}).get("train"), dict):
                 master_meta = loaded_meta
@@ -386,7 +378,8 @@ def main():
         master_meta["global_totals"]["total_objects"] += stats["objects"]
         master_meta["global_totals"]["total_backgrounds"] += stats["backgrounds"]
 
-    total_size_bytes = get_dir_size(IMAGES_DIR)
+    processed_images_dir = os.path.join(config.PROCESSED_DATA_DIR, 'images')
+    total_size_bytes = get_dir_size(processed_images_dir)
     total_size_mb = round(total_size_bytes / (1024 * 1024), 2)
     
     total_imgs = master_meta["global_totals"]["total_images"]
@@ -396,10 +389,10 @@ def main():
     master_meta["global_totals"]["avg_image_mb"] = avg_img_mb
 
     # Save Master Metadata
-    with open(master_meta_path, 'w', encoding='utf-8') as f:
+    with open(config.DATASET_METADATA_PATH, 'w', encoding='utf-8') as f:
         json.dump(master_meta, f, indent=4)
         
-    print(f"🧠 Master Metadata saved/updated in: {master_meta_path}")
+    print(f"🧠 Master Metadata saved/updated in: {config.DATASET_METADATA_PATH}")
 
 
 if __name__ == "__main__":

@@ -3,9 +3,10 @@ import numpy as np
 import json
 from datetime import datetime
 from collections import defaultdict
-from . import core_visual_utils as cvu
-from .html_generator import HTMLReportGenerator
-from . import plot_generator
+from src.evaluation.utils.html_generator import HTMLReportGenerator
+from src.evaluation.utils import plot_generator
+from src.core.utils import math_utils as mu
+from src.core import config
 
 class ReportGenerator:
     def __init__(self, output_dir, iou_threshold=0.5, user_conf_threshold=0.5, prefix="audit", class_names=None):
@@ -54,7 +55,7 @@ class ReportGenerator:
             gt_coords.append(gt[1:])
             self.class_stats[c_id]["total_gt"] += 1
             
-        iou_matrix = cvu.calculate_iou_matrix(pred_boxes, gt_coords)
+        iou_matrix = mu.calculate_iou_matrix(pred_boxes, gt_coords)
         
         matched_gt_all = set()   
         matched_gt_thresh = set() 
@@ -280,10 +281,10 @@ class ReportGenerator:
                 "tp": c_tp, "fp": c_fp, "fn": c_fn,
                 "safe_name": safe_name, 
                 "confidence_stats": {
-                    "True_Positives": cvu.calculate_1d_stats(stats["confidences_TP"]),
-                    "False_Positives": cvu.calculate_1d_stats(stats["confidences_FP"]),
+                    "True_Positives": mu.calculate_1d_stats(stats["confidences_TP"]),
+                    "False_Positives": mu.calculate_1d_stats(stats["confidences_FP"]),
                 },
-                "spatial_stats": cvu.calculate_spatial_stats(stats.get("bbox_centers", []))
+                "spatial_stats": mu.calculate_spatial_stats(stats.get("bbox_centers", []))
             }
 
         g_prec = global_tp / global_total_pred if global_total_pred > 0 else 0
@@ -305,10 +306,10 @@ class ReportGenerator:
         }
 
         metrics_dict["confidence_stats"] = {
-            "True_Positives": cvu.calculate_1d_stats(all_conf_tp),
-            "False_Positives": cvu.calculate_1d_stats(all_conf_fp),
+            "True_Positives": mu.calculate_1d_stats(all_conf_tp),
+            "False_Positives": mu.calculate_1d_stats(all_conf_fp),
         }
-        metrics_dict["spatial_stats"] = cvu.calculate_spatial_stats(self.global_stats["bbox_centers"])
+        metrics_dict["spatial_stats"] = mu.calculate_spatial_stats(self.global_stats["bbox_centers"])
 
         avg_pre = np.mean(self.global_stats["speeds"]["preprocess"]) if self.global_stats["speeds"]["preprocess"] else 0
         avg_inf = np.mean(self.global_stats["speeds"]["inference"]) if self.global_stats["speeds"]["inference"] else 0
@@ -334,6 +335,5 @@ class ReportGenerator:
         except Exception as e:
             print(f"⚠️ Could not save audit JSON: {e}")
 
-        templates_dir = os.path.join(os.getcwd(), "modules", "templates")
-        generator = HTMLReportGenerator(templates_dir, cvu.PROJECT_DIR, os.path.join(os.getcwd(), "dataset_yolo_output"))
+        generator = HTMLReportGenerator()
         generator.generate_audit_html(os.path.join(self.output_dir, f"{self.prefix}_report.html"), experiment_name, metrics_dict)

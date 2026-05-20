@@ -3,12 +3,13 @@ import math
 import json
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
+from src.core import config
 
 class HTMLReportGenerator:
-    def __init__(self, templates_dir, project_dir, dataset_out_dir):
-        self.env = Environment(loader=FileSystemLoader(templates_dir))
-        self.project_dir = project_dir
-        self.dataset_out_dir = dataset_out_dir
+    def __init__(self):
+        """Initialize HTML Report Generator with Jinja2 environment"""
+        self.env = Environment(loader=FileSystemLoader(config.TEMPLATES_DIR))
+        self.project_dir = config.PROJECT_DIR
 
     def _load_json_safe(self, filepath):
         if os.path.exists(filepath):

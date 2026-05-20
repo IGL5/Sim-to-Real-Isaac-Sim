@@ -8,6 +8,10 @@ DEFAULT_EXP_NAME = "yolov8_s_default"
 RAW_DATA_DIR = "data/01_raw"
 PROCESSED_DATA_DIR = "data/02_processed"
 METRICS_DIR = "data/05_metrics"
+TEMPLATES_DIR = "templates"
+
+# Temporary directories
+EVALUATION_OUTPUT_DIR = os.path.join(METRICS_DIR, "temp_eval")
 
 # Simulation Camera Name
 CAMERA_NAME = "DroneCamera"
@@ -25,6 +29,7 @@ RAW_LABELS_SUBPATH = os.path.join(CAMERA_NAME, "object_detection")
 
 # Metadata names
 METADATA_FOLDER_NAME = "metadata"
+SAVED_EVAL_FOLDER_NAME = "evaluations"
 
 FILE_GEN_META = "generation_metadata.json"
 FILE_DATASET_META = "dataset_metadata.json"
@@ -40,10 +45,12 @@ DATASET_METADATA_PATH = os.path.join(PROCESSED_DATA_DIR, FILE_DATASET_META)
 # Class file
 CLASSES_PATH = os.path.join("src", "core", "classes.txt")
 
+# Evaluation defaults
+LIMIT_IMAGES_PER_VIS = 100
+
 # Thresholds
 CONF_THRESHOLD = 0.4
 IOU_THRESHOLD = 0.5
-LIMIT_IMAGES = 100
 OVERLAP_THRESHOLD_ANALYSIS = 0.5
 
 def get_dynamic_project_name():

@@ -6,13 +6,14 @@ import argparse
 import sys
 import re
 from ultralytics import YOLO
-import modules.core_visual_utils as cvu
-from src.core.config import DEFAULT_TEST_IMAGES
+from src.core import config
+from src.evaluation.utils import data_utils as du
+from src.evaluation.utils import visual_utils as vu
 
 # Import the class from the other file
 try:
-    from modules.audit_reporter import ReportGenerator
-    from modules.inference_reporter import InferenceReportGenerator
+    from src.evaluation.utils.audit_reporter import ReportGenerator
+    from src.evaluation.utils.inference_reporter import InferenceReportGenerator
 except ImportError:
     print("❌ CRITICAL ERROR: Not finding 'audit_reporter.py' or 'inference_reporter.py'.")
     print("   Make sure both files are on 'modules' folder.")
@@ -33,14 +34,14 @@ def check_system_integrity(model_path, check_dataset=False):
 
     # 2. Check Dataset (only if we are going to audit)
     if check_dataset:
-        if not os.path.exists(DEFAULT_TEST_IMAGES):
+        if not os.path.exists(config.DATASET_TEST_IMAGES):
             print(f"❌ ERROR: Not finding the test images folder:")
-            print(f"   -> {DEFAULT_TEST_IMAGES}")
+            print(f"   -> {config.DATASET_TEST_IMAGES}")
             return False
         
         # Check if not empty
-        if not os.listdir(DEFAULT_TEST_IMAGES):
-            print(f"⚠️ WARNING: The test folder is empty ({DEFAULT_TEST_IMAGES}).")
+        if not os.listdir(config.DATASET_TEST_IMAGES):
+            print(f"⚠️ WARNING: The test folder is empty ({config.DATASET_TEST_IMAGES}).")
             return False
 
     return True
@@ -52,7 +53,7 @@ def select_model_path(preselected_model=None):
     """
 
     if preselected_model:
-        path = os.path.join(cvu.PROJECT_DIR, preselected_model, "weights", "best.pt")
+        path = os.path.join(config.PROJECT_DIR, preselected_model, "weights", "best.pt")
         if os.path.exists(path):
             print(f"🤖 Auto-selected model: {preselected_model}")
             return path
@@ -63,22 +64,22 @@ def select_model_path(preselected_model=None):
     print("\n--- 🤖 MODEL SELECTION ---")
     
     # Check if project directory exists
-    if not os.path.exists(cvu.PROJECT_DIR):
-        print(f"❌ ERROR: Project directory '{cvu.PROJECT_DIR}' not found.")
+    if not os.path.exists(config.PROJECT_DIR):
+        print(f"❌ ERROR: Project directory '{config.PROJECT_DIR}' not found.")
         print("   (You need to train a model first using train_YOLO.py)")
         sys.exit(1)
         
     # Loop through the project directory to find models with weights
     available_models = []
-    for d in os.listdir(cvu.PROJECT_DIR):
-        model_dir = os.path.join(cvu.PROJECT_DIR, d)
+    for d in os.listdir(config.PROJECT_DIR):
+        model_dir = os.path.join(config.PROJECT_DIR, d)
         if os.path.isdir(model_dir):
             weights_path = os.path.join(model_dir, "weights", "best.pt")
             if os.path.exists(weights_path):
                 available_models.append(d)
                 
     if not available_models:
-        print(f"❌ ERROR: No trained models found in '{cvu.PROJECT_DIR}'.")
+        print(f"❌ ERROR: No trained models found in '{config.PROJECT_DIR}'.")
         print("   (Folders exist, but none contain 'weights/best.pt')")
         sys.exit(1)
 
@@ -114,14 +115,14 @@ def select_model_path(preselected_model=None):
                 break
             print("  ⚠️  Invalid input. Please enter a valid number.")
             
-    path = os.path.join(cvu.PROJECT_DIR, exp_name, "weights", "best.pt")
+    path = os.path.join(config.PROJECT_DIR, exp_name, "weights", "best.pt")
     print(f"✅ Selected model: {exp_name}\n")
     return path
 
 
 def save_evaluation_results(exp_name, mode):
     """ Copies the temporary audit_report into a persistent iteration folder """
-    base_eval_dir = os.path.join(cvu.PROJECT_DIR, exp_name, "evaluations")
+    base_eval_dir = os.path.join(config.PROJECT_DIR, exp_name, config.SAVED_EVAL_FOLDER_NAME)
     os.makedirs(base_eval_dir, exist_ok=True)
     
     # Find the next iteration number
@@ -130,13 +131,13 @@ def save_evaluation_results(exp_name, mode):
     eval_dir = os.path.join(base_eval_dir, f"iter_{iter_num:03d}_{mode}")
     
     # Copy the entire workspace (HTML, Plots, JSON, Images)
-    shutil.copytree(cvu.OUTPUT_DIR, eval_dir)
+    shutil.copytree(config.EVALUATION_OUTPUT_DIR, eval_dir)
     print(f"\n📦 Persistent Evaluation saved at: {eval_dir}")
 
 
 def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep=False):
     """ Audit mode (Dataset Test with Labels) - Supports both Sim and Real """
-    if not cvu.check_system_integrity(model_path, check_dataset=(custom_img_dir is None)):
+    if not check_system_integrity(model_path, check_dataset=(custom_img_dir is None)):
         return
 
     is_real = custom_img_dir is not None and custom_lbl_dir is not None
@@ -146,12 +147,12 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     
     # 1. Prepare folders according to the mode
     if not keep:
-        if os.path.exists(cvu.OUTPUT_DIR): shutil.rmtree(cvu.OUTPUT_DIR)
+        if os.path.exists(config.EVALUATION_OUTPUT_DIR): shutil.rmtree(config.EVALUATION_OUTPUT_DIR)
     
-    path_fn = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_missed_FN")
-    path_fp = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_invented_FP")
-    path_poor = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_poor_bbox")
-    path_all = os.path.join(cvu.OUTPUT_DIR, prefix, f"{prefix}_all")
+    path_fn = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_missed_FN")
+    path_fp = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_invented_FP")
+    path_poor = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_poor_bbox")
+    path_all = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_all")
 
     if draw_all:
         os.makedirs(path_all, exist_ok=True)
@@ -163,10 +164,9 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         os.makedirs(path_poor, exist_ok=True)
 
     # Logic for class translation and filtering
-    classes_path = os.path.join(os.getcwd(), "classes.txt")
     dataset_classes = []
-    if os.path.exists(classes_path):
-        with open(classes_path, "r", encoding='utf-8') as f:
+    if os.path.exists(config.CLASSES_PATH):
+        with open(config.CLASSES_PATH, "r", encoding='utf-8') as f:
             dataset_classes = [line.strip().lower() for line in f if line.strip()]
     if not dataset_classes:
         dataset_classes = ['bicycle']
@@ -182,10 +182,10 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     
     print(f"🧠 Active classes in dataset: {dataset_class_names}")
 
-    reporter = ReportGenerator(cvu.OUTPUT_DIR, cvu.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=cvu.CONF_THRESHOLD, class_names=dataset_class_names)
+    reporter = ReportGenerator(config.EVALUATION_OUTPUT_DIR, config.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=config.CONF_THRESHOLD, class_names=dataset_class_names)
 
-    img_dir = custom_img_dir if is_real else cvu.DEFAULT_TEST_IMAGES
-    lbl_dir = custom_lbl_dir if is_real else cvu.DEFAULT_TEST_LABELS
+    img_dir = custom_img_dir if is_real else config.DATASET_TEST_IMAGES
+    lbl_dir = custom_lbl_dir if is_real else config.DATASET_TEST_LABELS
     
     image_files = [f for f in glob.glob(os.path.join(img_dir, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     print(f"📸 Processing {len(image_files)} images...")
@@ -199,7 +199,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 
         h, w, _ = img.shape
         if os.path.exists(txt_path):
-            gt_boxes = cvu.parse_kitti_label(txt_path, w, h)
+            gt_boxes = du.parse_kitti_label(txt_path, w, h)
         else:
             gt_boxes = []
 
@@ -226,18 +226,18 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         valid_confidences = []
         valid_classes = [] 
         for j, c in enumerate(confidences):
-            if c >= cvu.CONF_THRESHOLD:
+            if c >= config.CONF_THRESHOLD:
                 valid_pred_boxes.append(pred_boxes[j])
                 valid_confidences.append(c)
                 valid_classes.append(pred_classes[j]) 
 
-        if i < cvu.LIMIT_IMAGES:
+        if i < config.LIMIT_IMAGES_PER_VIS:
             has_errors = img_stats["FN"] > 0 or img_stats["poor_bbox"] > 0 or img_stats["FP"] > 0
             
             if draw_all or has_errors:
                 # Draw using translated class names from our dataset
-                img_drawn = cvu.draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), class_names=dataset_class_names)
-                img_drawn = cvu.draw_boxes(img_drawn, valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
+                img_drawn = vu.draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), class_names=dataset_class_names)
+                img_drawn = vu.draw_boxes(img_drawn, valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
                 
                 if draw_all:
                     status = "OK"
@@ -266,14 +266,14 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 
 def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False):
     """ Inference Mode (New images without labels) """
-    if not cvu.check_system_integrity(model_path, check_dataset=False): return
+    if not check_system_integrity(model_path, check_dataset=False): return
     if not os.path.exists(source_folder): return
 
     print(f"--- 🌍 REAL INFERENCE MODE ---")
     if not keep:
-        if os.path.exists(cvu.OUTPUT_DIR): shutil.rmtree(cvu.OUTPUT_DIR)
+        if os.path.exists(config.EVALUATION_OUTPUT_DIR): shutil.rmtree(config.EVALUATION_OUTPUT_DIR)
     
-    save_dir = os.path.join(cvu.OUTPUT_DIR, "inference_real")
+    save_dir = os.path.join(config.EVALUATION_OUTPUT_DIR, "inference_real")
     os.makedirs(save_dir, exist_ok=True)
 
     # Logic for class translation and filtering
@@ -292,14 +292,14 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
         if mod_name.lower() in dataset_classes:
             model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
     
-    reporter = InferenceReportGenerator(save_dir, overlap_threshold=cvu.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
+    reporter = InferenceReportGenerator(save_dir, overlap_threshold=config.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
     overlaps_dir_path = reporter.overlaps_dir
     
     image_files = [f for f in glob.glob(os.path.join(source_folder, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     print(f"📸 Processing {len(image_files)} images...")
     
     for i, img_path in enumerate(image_files):
-        if i >= cvu.LIMIT_IMAGES: break
+        if i >= config.LIMIT_IMAGES_PER_VIS: break
         filename = os.path.basename(img_path)
         
         try:
@@ -308,7 +308,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             h, w, _ = img_orig.shape
 
             # Inference
-            res = model.predict(img_path, conf=cvu.CONF_THRESHOLD, verbose=False)[0]
+            res = model.predict(img_path, conf=config.CONF_THRESHOLD, verbose=False)[0]
             speed_dict = res.speed
             
             pred_boxes, confidences, pred_classes = [], [], []
@@ -324,11 +324,11 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             problematic_pairs = reporter.update(pred_boxes, pred_classes, confidences, (h, w), filename, speed_dict)
             
             if problematic_pairs:
-                img_overlap = cvu.draw_overlapping_pairs(img_orig.copy(), pred_boxes, problematic_pairs, confidences)
+                img_overlap = vu.draw_overlapping_pairs(img_orig.copy(), pred_boxes, problematic_pairs, confidences)
                 cv2.imwrite(os.path.join(overlaps_dir_path, f"OVERLAP_{filename}"), img_overlap)
             
             # Draw with our own colors and translated labels
-            img_drawn = cvu.draw_boxes(img_orig.copy(), pred_boxes, color=(255, 0, 0), confidences=confidences, classes=pred_classes, class_names=dataset_class_names)
+            img_drawn = vu.draw_boxes(img_orig.copy(), pred_boxes, color=(255, 0, 0), confidences=confidences, classes=pred_classes, class_names=dataset_class_names)
             cv2.imwrite(os.path.join(save_dir, f"PRED_{filename}"), img_drawn)
             
         except Exception as e:
@@ -343,7 +343,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
 
 def run_video_mode(model_path, video_path):
     """ Video Mode """
-    if not cvu.check_system_integrity(model_path, check_dataset=False):
+    if not check_system_integrity(model_path, check_dataset=False):
         return
 
     if not os.path.exists(video_path):
@@ -359,9 +359,9 @@ def run_video_mode(model_path, video_path):
     # save=True makes YOLO automatically save the video in runs/detect/predict...
     # stream=True saves memory on long videos
     if "coco" in model_path.lower():
-        results = model.predict(source=video_path, save=True, conf=cvu.CONF_THRESHOLD, stream=True, classes=[1])
+        results = model.predict(source=video_path, save=True, conf=config.CONF_THRESHOLD, stream=True, classes=[1])
     else:
-        results = model.predict(source=video_path, save=True, conf=cvu.CONF_THRESHOLD, stream=True)
+        results = model.predict(source=video_path, save=True, conf=config.CONF_THRESHOLD, stream=True)
     
     # We need to iterate over the generator to process the video
     for r in results:
@@ -387,8 +387,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.conf is not None:
-        cvu.CONF_THRESHOLD = args.conf
-        print(f"\nConfidence threshold set to: {cvu.CONF_THRESHOLD}")
+        config.CONF_THRESHOLD = args.conf
+        print(f"\nConfidence threshold set to: {config.CONF_THRESHOLD}")
 
     # Ask for Model Name (or use default)
     selected_model_path = select_model_path(args.model)
