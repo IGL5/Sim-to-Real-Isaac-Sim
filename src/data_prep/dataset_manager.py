@@ -6,7 +6,7 @@ import argparse
 import json
 import numpy as np
 from datetime import datetime
-from src.core import config
+import src.core.config as config
 
 # --- DATA IMPORT PATHS ---
 LABELS_KITTI = ""
@@ -337,15 +337,15 @@ def main():
     print(f"New files added: {total_added_imgs}")
     print(f"Dataset located in: {args.source}")
 
-    # 6. Process JSON
-    source_meta_path = os.path.join(os.getcwd(), "..", args.source, "generation_metadata.json")
+    # 6. Get Generation Metadata
+    source_meta_path = os.path.join(args.source, config.FILE_GEN_META)
     batch_meta = {"batch_id": batch_prefix} # Fallback if it doesn't exist
     
     if os.path.exists(source_meta_path):
         with open(source_meta_path, 'r', encoding='utf-8') as f:
             batch_meta.update(json.load(f))
             
-    # Add the split data to the batch
+    # Add the split data to the previous metadata
     batch_meta["yolo_split"] = {
         "train": train_stats,
         "val": val_stats,
@@ -353,7 +353,7 @@ def main():
         "total_added": total_added_imgs
     }
 
-    master_meta_path = os.path.join(args.source, "dataset_metadata.json")
+    # Create new dataset metadata dictionary
     master_meta = {
         "global_totals": {
             "train": {"images": 0, "objects": 0, "backgrounds": 0},
@@ -366,7 +366,9 @@ def main():
         "sessions": []
     }
 
-    # If append mode
+    # If append mode, load the previous metadata
+    master_meta_path = os.path.join(args.source, config.FILE_DATASET_META)
+    
     if args.append and os.path.exists(master_meta_path):
         with open(master_meta_path, 'r', encoding='utf-8') as f:
             loaded_meta = json.load(f)

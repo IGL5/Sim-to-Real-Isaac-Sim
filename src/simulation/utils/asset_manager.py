@@ -4,7 +4,7 @@ import random
 from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom, UsdLux
 import omni.replicator.core as rep
 from src.simulation.utils import sim_config
-from src.core import config
+import src.core.config as config
 
 
 def update_yolo_classes_txt():

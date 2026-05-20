@@ -23,9 +23,19 @@ DATASET_TEST_LABELS = os.path.join(PROCESSED_DATA_DIR, "labels", "test")
 RAW_IMAGES_SUBPATH = os.path.join(CAMERA_NAME, "rgb")
 RAW_LABELS_SUBPATH = os.path.join(CAMERA_NAME, "object_detection")
 
+# Metadata names
+METADATA_FOLDER_NAME = "metadata"
+
+FILE_GEN_META = "generation_metadata.json"
+FILE_DATASET_META = "dataset_metadata.json"
+FILE_TRAIN_META = "training_metadata.json"
+FILE_AUDIT_META = "audit_metadata.json"
+FILE_REAL_AUDIT_META = "real_audit_metadata.json"
+FILE_INFERENCE_META = "inference_metadata.json"
+
 # Metadata paths
-GENERATION_METADATA_PATH = os.path.join(RAW_DATA_DIR, "generation_metadata.json")
-DATASET_METADATA_PATH = os.path.join(PROCESSED_DATA_DIR, "dataset_metadata.json")
+GENERATION_METADATA_PATH = os.path.join(RAW_DATA_DIR, FILE_GEN_META)
+DATASET_METADATA_PATH = os.path.join(PROCESSED_DATA_DIR, FILE_DATASET_META)
 
 # Class file
 CLASSES_PATH = os.path.join("src", "core", "classes.txt")

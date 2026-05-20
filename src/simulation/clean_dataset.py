@@ -6,7 +6,7 @@ import json
 import numpy as np
 import shutil
 from pathlib import Path
-from src.core import config
+import src.core.config as config
 
 # ==========================================
 # 1. CORE LOGIC / ORCHESTRATOR

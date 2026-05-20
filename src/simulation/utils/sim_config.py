@@ -1,6 +1,6 @@
 import os
 import argparse
-from src.core import config
+import src.core.config as config
 
 parser = argparse.ArgumentParser("Dataset generator")
 parser.add_argument("--headless", action="store_true", help="Launch script headless")

@@ -12,10 +12,8 @@ import platform
 from datetime import datetime
 import pandas as pd
 import shutil
-import modules.core_visual_utils as cvu
+import src.core.config as config
 
-# DEFAULT CONFIGURATION
-DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
 
 TRAIN_IMGS = "images/train"
 VAL_IMGS = "images/val"
@@ -23,7 +21,6 @@ TEST_REL  = "images/test"
 
 TRAIN_LABELS = "labels"
 
-PROJECT_NAME = cvu.PROJECT_NAME
 DEFAULT_EXP_NAME = "yolov8_s_default"
 
 # Model type
@@ -59,39 +56,38 @@ def create_yaml_config():
     """
     Creates a YAML config file for YOLO.
     """
-    abs_path = os.path.abspath(DATASET_ROOT)
 
     # Check if the dataset exists
-    if not os.path.exists(abs_path):
-        raise FileNotFoundError(f"Dataset not found in: {abs_path}. Has the script 1 been executed?")
+    if not os.path.exists(config.PROCESSED_DATA_DIR):
+        raise FileNotFoundError(f"Dataset not found in: {config.PROCESSED_DATA_DIR}. Has the script 1 been executed?")
 
     # Read classes from file
-    with open("classes.txt", "r") as f:
+    with open(config.CLASSES_PATH, "r", encoding="utf-8") as f:
         class_names = [line.strip() for line in f.readlines() if line.strip()]
 
-    config = {
-        'path': abs_path,
+    yaml_config = {
+        'path': config.PROCESSED_DATA_DIR,
         'train': TRAIN_IMGS,
         'val': VAL_IMGS,
         'test': TEST_REL,
         'names': {i: name for i, name in enumerate(class_names)}
     }
 
-    yaml_path = os.path.join(abs_path, 'dataset_config.yaml')
+    yaml_path = os.path.join(config.PROCESSED_DATA_DIR, 'dataset_config.yaml')
 
     with open(yaml_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
+        yaml.dump(yaml_config, f, default_flow_style=False)
 
     print(f"📄 Config file created at: {yaml_path}")
     return yaml_path
 
 
-def recover_misplaced_runs(project_name, exp_name):
+def recover_misplaced_runs(exp_name):
     """
     Looks for the last training saved in the default folder 'runs/' 
     and moves it to the correct folder of our project.
     """
-    expected_dir = os.path.join(project_name, exp_name)
+    expected_dir = os.path.join(config.PROJECT_DIR, exp_name)
     expected_weights = os.path.join(expected_dir, 'weights', 'best.pt')
     
     if os.path.exists(expected_weights):
@@ -125,16 +121,16 @@ def get_next_experiment_prefix(ver_prefix, size_suffix, base_model_idx=None):
     Scans the project directory to find the next available experiment number
     for a specific architecture, enforcing a strict naming convention.
     """
-    if not os.path.exists(PROJECT_NAME):
-        os.makedirs(PROJECT_NAME, exist_ok=True)
+    if not os.path.exists(config.PROJECT_DIR):
+        os.makedirs(config.PROJECT_DIR, exist_ok=True)
 
     max_n = 0
     
     # Regular expression to search for the main number (e.g: yolov8_s_01_)
     pattern_n = re.compile(rf"^{ver_prefix}_{size_suffix}_(\d+)_")
 
-    for d in os.listdir(PROJECT_NAME):
-        if not os.path.isdir(os.path.join(PROJECT_NAME, d)): 
+    for d in os.listdir(config.PROJECT_DIR):
+        if not os.path.isdir(os.path.join(config.PROJECT_DIR, d)): 
             continue
         
         # Extract the global experiment number
@@ -237,20 +233,20 @@ def select_existing_model():
     """
     print("\n--- 🤖 EXISTING MODEL SELECTION (FINE-TUNING) ---")
     
-    if not os.path.exists(PROJECT_NAME):
-        print(f"❌ ERROR: Project directory '{PROJECT_NAME}' not found.")
+    if not os.path.exists(config.PROJECT_DIR):
+        print(f"❌ ERROR: Project directory '{config.PROJECT_DIR}' not found.")
         sys.exit(1)
         
     available_models = []
-    for d in os.listdir(PROJECT_NAME):
-        model_dir = os.path.join(PROJECT_NAME, d)
+    for d in os.listdir(config.PROJECT_DIR):
+        model_dir = os.path.join(config.PROJECT_DIR, d)
         if os.path.isdir(model_dir):
             weights_path = os.path.join(model_dir, "weights", "best.pt")
             if os.path.exists(weights_path):
                 available_models.append(d)
                 
     if not available_models:
-        print(f"❌ ERROR: No trained models found in '{PROJECT_NAME}'.")
+        print(f"❌ ERROR: No trained models found in '{config.PROJECT_DIR}'.")
         sys.exit(1)
 
     def get_yolo_version(model_name):
@@ -285,7 +281,7 @@ def select_existing_model():
                 break
             print("  ⚠️  Invalid input. Please enter a valid number.")
             
-    path_to_weights = os.path.join(PROJECT_NAME, base_exp_name, "weights", "best.pt")
+    path_to_weights = os.path.join(config.PROJECT_DIR, base_exp_name, "weights", "best.pt")
     
     # Extract version, size and number of the base model (e.g: 'yolov8_s_12_custom')
     match = re.search(r"^(yolo\w+)_([nsmxl])_(\d+)_", base_exp_name)
@@ -357,7 +353,7 @@ def main():
         'imgsz': args.img_size,
         'batch': BATCH_SIZE,
         'workers': WORKERS,
-        'project': PROJECT_NAME,
+        'project': config.PROJECT_DIR,
         'name': experiment_name,
         'device': device,
         'patience': args.patience,
@@ -373,10 +369,10 @@ def main():
 
     model.train(**train_kwargs)
     
-    recover_misplaced_runs(PROJECT_NAME, experiment_name)
+    recover_misplaced_runs(experiment_name)
 
     print("\n--- Training completed ---")
-    best_weight = os.path.join(PROJECT_NAME, experiment_name, 'weights', 'best.pt')
+    best_weight = os.path.join(config.PROJECT_DIR, experiment_name, 'weights', 'best.pt')
     print(f"💾 Best model saved at: {best_weight}")
 
     # 4. Validation (TEST SET)
@@ -402,7 +398,7 @@ def main():
     epochs_run = args.epochs
     best_epoch = -1
 
-    results_csv_path = os.path.join(PROJECT_NAME, experiment_name, 'results.csv')
+    results_csv_path = os.path.join(config.PROJECT_DIR, experiment_name, 'results.csv')
     if os.path.exists(results_csv_path):
         try:
             df = pd.read_csv(results_csv_path)
@@ -424,7 +420,7 @@ def main():
     if epochs_run < args.epochs and best_epoch == -1:
         best_epoch = epochs_run - args.patience
 
-    args_yaml_path = os.path.join(PROJECT_NAME, experiment_name, 'args.yaml')
+    args_yaml_path = os.path.join(config.PROJECT_DIR, experiment_name, 'args.yaml')
     aug_data = {}
     if os.path.exists(args_yaml_path):
         try:
@@ -449,7 +445,7 @@ def main():
 
     training_metadata = {
         "experiment_info": {
-            "project_name": PROJECT_NAME,
+            "project_name": config.PROJECT_NAME,
             "experiment_name": experiment_name,
             "start_date": start_date_str,
             "duration_seconds": round(duration_secs, 2),
@@ -484,18 +480,17 @@ def main():
     }
 
     # Save metadata
-    metadata_dir = os.path.join(PROJECT_NAME, experiment_name, 'metadata')
+    metadata_dir = os.path.join(config.PROJECT_DIR, experiment_name, config.METADATA_FOLDER_NAME)
     os.makedirs(metadata_dir, exist_ok=True)
-    metadata_path = os.path.join(metadata_dir, 'training_metadata.json')
+    metadata_path = os.path.join(metadata_dir, config.FILE_TRAIN_META)
 
     with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump(training_metadata, f, indent=4)
 
-    dataset_meta_src = os.path.join(DATASET_ROOT, 'dataset_metadata.json')
-    if os.path.exists(dataset_meta_src):
-        shutil.copy2(dataset_meta_src, os.path.join(metadata_dir, 'dataset_metadata.json'))
+    if os.path.exists(config.DATASET_METADATA_PATH):
+        shutil.copy2(config.DATASET_METADATA_PATH, os.path.join(metadata_dir, config.FILE_DATASET_META))
 
-    print(f"💾 Training and Dataset metadata saved at: {metadata_path}")
+    print(f"💾 Training and Dataset metadata saved at: {metadata_dir}")
 
 
 if __name__ == '__main__':

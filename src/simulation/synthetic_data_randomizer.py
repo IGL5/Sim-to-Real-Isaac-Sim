@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 # --- MODULES ---
-from src.core import config
+import src.core.config as config
 from src.simulation.utils import sim_config
 
 # --- ISAAC SIMULATION APP ---
