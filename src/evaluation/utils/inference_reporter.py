@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import numpy as np
 import json
 from collections import defaultdict
@@ -10,8 +10,8 @@ from src.core import config
 class InferenceReportGenerator:
     def __init__(self, overlap_threshold=0.5, class_names=None):
         self.output_dir = config.EVALUATION_OUTPUT_DIR
-        self.plots_dir = os.path.join(config.PLOTS_EVAL_DIR, "inference")
-        os.makedirs(self.plots_dir, exist_ok=True)
+        self.plots_dir = Path(config.PLOTS_EVAL_DIR) / "inference"
+        self.plots_dir.mkdir(parents=True, exist_ok=True)
         
         self.overlap_threshold = overlap_threshold
         self.class_names = class_names if class_names else {}
@@ -88,14 +88,14 @@ class InferenceReportGenerator:
             plot_generator.plot_confidence_histogram(
                 self.stats["confidences"], [], [], [], 
                 threshold=0.0, 
-                output_path=os.path.join(self.plots_dir, f"inference_{config.CONFIDENCE_DIST_FILENAME}"),
+                output_path=str(self.plots_dir / f"inference_{config.CONFIDENCE_DIST_FILENAME}"),
                 title="Real World Confidence Distribution (Global)"
             )
 
         # Global Heatmap
         plot_generator.plot_normalized_heatmap(
             self.stats["bbox_centers_norm"],
-            os.path.join(self.plots_dir, f"inference_{config.SPATIAL_HEATMAP_FILENAME}"),
+            str(self.plots_dir / f"inference_{config.SPATIAL_HEATMAP_FILENAME}"),
             title="Normalized Detection Heatmap (Global)",
             cmap='magma'
         )
@@ -109,13 +109,13 @@ class InferenceReportGenerator:
                 plot_generator.plot_confidence_histogram(
                     s["confidences"], [], [], [], 
                     threshold=0.0, 
-                    output_path=os.path.join(self.plots_dir, f"inference_conf_dist_{safe_name}.png"),
+                    output_path=str(self.plots_dir / f"inference_conf_dist_{safe_name}.png"),
                     title=f"Confidence ({c_name})"
                 )
             if s["bbox_centers"]:
                 plot_generator.plot_normalized_heatmap(
                     s["bbox_centers"],
-                    os.path.join(self.plots_dir, f"inference_heatmap_{safe_name}.png"),
+                    str(self.plots_dir / f"inference_heatmap_{safe_name}.png"),
                     title=f"Heatmap ({c_name})", cmap='magma'
                 )
 
@@ -153,11 +153,12 @@ class InferenceReportGenerator:
         stats_dict["speed_stats"] = mu.calculate_speed_stats(self.stats["speeds"])
 
         # Save JSON and call Jinja
-        inference_json_path = os.path.join(self.output_dir, config.FILE_INFERENCE_META)
+        inference_json_path = Path(self.output_dir) / config.FILE_INFERENCE_META
         try:
             with open(inference_json_path, "w", encoding='utf-8') as f:
                 json.dump({"stats": stats_dict}, f, indent=4)
-        except: pass
+        except Exception as e:
+            print(f"⚠️ Could not save inference JSON: {e}")
         
         generator = HTMLReportGenerator()
-        generator.generate_inference_html(os.path.join(self.output_dir, "inference_report.html"), experiment_name, stats_dict, self.overlap_threshold)
+        generator.generate_inference_html(str(Path(self.output_dir) / "inference_report.html"), experiment_name, stats_dict, self.overlap_threshold)

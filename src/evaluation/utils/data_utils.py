@@ -1,10 +1,10 @@
-import os
+from pathlib import Path
 from src.core.utils import math_utils as mu
 
 def parse_kitti_label(label_path, width, height):
     """ Converts txt to list of boxes [class_id, x1, y1, x2, y2] """
     boxes = []
-    if not os.path.exists(label_path): return boxes
+    if not Path(label_path).exists(): return boxes
     
     try:
         with open(label_path, 'r') as f:

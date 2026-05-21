@@ -1,5 +1,4 @@
-import os
-import json
+from pathlib import Path
 from src.core.metadata.base_manager import BaseMetadataManager
 from src.core import config
 
@@ -25,16 +24,14 @@ class DatasetMetadata(BaseMetadataManager):
         if "sessions" not in self.data:
             self.data["sessions"] = []
 
-    def _get_dir_size(self, path):
+    def _get_dir_size(self, dir_path):
         """Calcula el tamaño total de un directorio en bytes de forma recursiva."""
         total = 0
-        if os.path.exists(path):
-            with os.scandir(path) as it:
-                for entry in it:
-                    if entry.is_file():
-                        total += entry.stat().st_size
-                    elif entry.is_dir():
-                        total += self._get_dir_size(entry.path)
+        path = Path(dir_path)
+        if path.exists():
+            for entry in path.rglob('*'):
+                if entry.is_file():
+                    total += entry.stat().st_size
         return total
 
     def record_session(self, batch_id, source_meta_path, train_stats, val_stats, test_stats, total_added_imgs):

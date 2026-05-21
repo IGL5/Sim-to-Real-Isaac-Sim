@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import sys
 import cv2
 import torch
@@ -20,8 +20,9 @@ from src.core import config
 
 def select_trained_model(prompt_title="AVAILABLE MODELS"):
     """Allows selecting a model showing a personalized title."""
-    if not os.path.exists(config.PROJECT_DIR):
-        print(f"❌ ERROR: No trained models found in '{config.PROJECT_DIR}'.")
+    project_dir = Path(config.PROJECT_DIR)
+    if not project_dir.exists():
+        print(f"❌ ERROR: No trained models found in '{project_dir}'.")
         sys.exit(1)
         
     available_models = pu.get_available_models()
@@ -40,7 +41,7 @@ def select_trained_model(prompt_title="AVAILABLE MODELS"):
             break
         print("  ⚠️ Invalid input.")
             
-    weights_path = os.path.join(config.PROJECT_DIR, exp_name, config.BEST_MODEL_SUBPATH)
+    weights_path = str(Path(config.PROJECT_DIR) / exp_name / config.BEST_MODEL_SUBPATH)
     print(f"✅ Model loaded: {exp_name}")
     return weights_path, exp_name
 
@@ -49,16 +50,16 @@ def select_image():
     print("\n--- 🖼️ IMAGE SELECTION ---")
     ruta = input("Image path (press Enter to take a random validation image): ").strip()
     
-    if ruta and os.path.exists(ruta):
+    if ruta and Path(ruta).exists():
         print(f"✅ Image selected: {ruta}")
         return ruta
     elif ruta:
         print("❌ Path not found. Using random image...")
             
+    val_images_dir = Path(config.DATASET_VAL_IMAGES)
     images = [
-        os.path.join(config.DATASET_VAL_IMAGES, f) 
-        for f in os.listdir(config.DATASET_VAL_IMAGES) 
-        if f.lower().endswith(config.VALID_IMAGE_EXTENSIONS)
+        str(f) for f in val_images_dir.iterdir()
+        if f.is_file() and f.name.lower().endswith(config.VALID_IMAGE_EXTENSIONS)
     ]
 
     if not images:
@@ -90,8 +91,8 @@ def analyze_spatial(model_path, img_path):
     results = model(img_path, verbose=False)[0]
     img_plotted = results.plot()
     
-    lbl_path = img_path.replace("images", "labels").replace(".jpg", ".txt").replace(".png", ".txt")
-    if os.path.exists(lbl_path):
+    lbl_path = Path(img_path.replace("images", "labels").replace(".jpg", ".txt").replace(".png", ".txt"))
+    if lbl_path.exists():
         with open(lbl_path, 'r') as f:
             lines = f.readlines()
             for line in lines:
@@ -113,7 +114,8 @@ def analyze_spatial(model_path, img_path):
     device = next(model.model.parameters()).device
     img_tensor = img_tensor.to(device)
 
-    os.makedirs(config.HEATMAPS_XAI_PATH, exist_ok=True)
+    heatmaps_dir = Path(config.HEATMAPS_XAI_PATH)
+    heatmaps_dir.mkdir(parents=True, exist_ok=True)
 
     for layer_idx in range(len(model.model.model)):
         target_layer = model.model.model[layer_idx]
@@ -141,9 +143,9 @@ def analyze_spatial(model_path, img_path):
                 superimposed_img = cv2.addWeighted(img_bgr, 0.5, heatmap_color, 0.5, 0)
 
                 cv2.putText(superimposed_img, f"L{layer_idx:02d} ({layer_type})", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.imwrite(os.path.join(config.HEATMAPS_XAI_PATH, f"layer_{layer_idx:02d}_heat.jpg"), superimposed_img)
-        except Exception:
-            pass
+                cv2.imwrite(str(heatmaps_dir / f"layer_{layer_idx:02d}_heat.jpg"), superimposed_img)
+        except Exception as e:
+            print(f"⚠️ Could not extract heatmap for layer {layer_idx}: {e}")
         finally:
             handle.remove()
     print(f"✅ Spatial heatmaps saved to: {config.HEATMAPS_XAI_PATH}")
@@ -259,9 +261,10 @@ def main():
     if not modo: modo = "3"
     
     # Prepare local directory
-    if os.path.exists(config.XAI_OUTPUT_DIR):
-        shutil.rmtree(config.XAI_OUTPUT_DIR)
-    os.makedirs(config.XAI_OUTPUT_DIR)
+    xai_out = Path(config.XAI_OUTPUT_DIR)
+    if xai_out.exists():
+        shutil.rmtree(str(xai_out))
+    xai_out.mkdir(parents=True, exist_ok=True)
 
     # Flow according to selection
     if modo == "1":

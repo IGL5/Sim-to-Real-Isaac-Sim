@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import math
 import json
 from datetime import datetime
@@ -12,7 +12,8 @@ class HTMLReportGenerator:
         self.project_dir = config.PROJECT_DIR
 
     def _load_json_safe(self, filepath):
-        if os.path.exists(filepath):
+        filepath = Path(filepath)
+        if filepath.exists():
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     return json.load(f)
@@ -22,8 +23,8 @@ class HTMLReportGenerator:
 
     def _get_common_context(self, experiment_name, report_title):
         """Load JSONs for template base injection"""
-        dataset_meta_path = os.path.join(self.project_dir, experiment_name, config.METADATA_FOLDER_NAME, config.FILE_DATASET_META)
-        train_meta_path = os.path.join(self.project_dir, experiment_name, config.METADATA_FOLDER_NAME, config.FILE_TRAIN_META)
+        dataset_meta_path = Path(self.project_dir) / experiment_name / config.METADATA_FOLDER_NAME / config.FILE_DATASET_META
+        train_meta_path = Path(self.project_dir) / experiment_name / config.METADATA_FOLDER_NAME / config.FILE_TRAIN_META
         
         dataset_meta = self._load_json_safe(dataset_meta_path)
         train_meta = self._load_json_safe(train_meta_path)

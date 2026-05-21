@@ -1,18 +1,14 @@
-import os
+from pathlib import Path
 import cv2
 import shutil
 import random
 import argparse
-import json
 from datetime import datetime
 import src.core.config as config
 from src.core.utils import math_utils as mu
 from src.core.utils import project_utils as pu
 from src.core.metadata.dataset_builder import DatasetMetadata
 
-# --- DATA IMPORT PATHS ---
-LABELS_KITTI = ""
-IMAGES_DIR = ""
 
 # Classes to detect
 CLASES = pu.get_project_classes()
@@ -25,21 +21,22 @@ def create_dir_structure(append_mode):
     Creates the folder structure.
     If append_mode is False, erases what was there to start from scratch.
     """
-    if os.path.exists(config.PROCESSED_DATA_DIR) and not append_mode:
+    processed_dir = Path(config.PROCESSED_DATA_DIR)
+    if processed_dir.exists() and not append_mode:
         print(f"🧹 Reset mode: Deleting previous dataset in {config.PROCESSED_DATA_DIR}...")
-        shutil.rmtree(config.PROCESSED_DATA_DIR)
+        shutil.rmtree(processed_dir)
     
     subsets = ['train', 'val', 'test']
     for subset in subsets:
-        os.makedirs(os.path.join(config.PROCESSED_DATA_DIR, 'images', subset), exist_ok=True)
-        os.makedirs(os.path.join(config.PROCESSED_DATA_DIR, 'labels', subset), exist_ok=True)
+        (processed_dir / 'images' / subset).mkdir(parents=True, exist_ok=True)
+        (processed_dir / 'labels' / subset).mkdir(parents=True, exist_ok=True)
     
     if not append_mode:
         print(f"📂 Structure created clean in: {config.PROCESSED_DATA_DIR}")
     else:
         print(f"📂 Structure verified (Append mode).")
 
-def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
+def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw_images_path, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
     """
     Processes a pair of image/label, changes their name with a unique prefix
     and saves them in the corresponding subset.
@@ -51,8 +48,8 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
     img_path = None
     img_ext = None
     for ext in config.VALID_IMAGE_EXTENSIONS:
-        temp_path = os.path.join(IMAGES_DIR, filename_base + ext)
-        if os.path.exists(temp_path):
+        temp_path = raw_images_path / (filename_base + ext)
+        if temp_path.exists():
             img_path = temp_path
             img_ext = ext
             break
@@ -61,17 +58,17 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
         return False, 0, []
 
     # Read dimensions
-    img = cv2.imread(img_path)
+    img = cv2.imread(str(img_path))
     if img is None:
         return False, 0, []
     height, width, _ = img.shape
 
     # 2. Process label
-    kitti_path = os.path.join(LABELS_KITTI, filename_base + ".txt")
+    kitti_path = raw_labels_path / f"{filename_base}.txt"
     yolo_lines = []
     bboxes_stats = []
     
-    if not os.path.exists(kitti_path):
+    if not kitti_path.exists():
         return False, 0, []
 
     with open(kitti_path, 'r') as f:
@@ -105,7 +102,8 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
                 bboxes_stats.append({
                     "area": area, "ar": aspect_ratio, "cx": cx, "cy": cy
                 })
-            except (ValueError, IndexError):
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing YOLO line in {filename_base}: {e} -> {line.strip()}")
                 continue
         else:
             # KITTI original format
@@ -148,21 +146,22 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
                 area = w_k * h_k
                 aspect_ratio = w_k / h_k if h_k > 0 else 0
                 bboxes_stats.append({"area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]})
-            except (ValueError, IndexError):
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing KITTI line in {filename_base}: {e} -> {line.strip()}")
                 continue
 
     # 3. Save with NEW UNIQUE NAME
     new_filename = f"{unique_prefix}_{filename_base}"
     
-    dest_img = os.path.join(config.PROCESSED_DATA_DIR, 'images', subset_name, new_filename + img_ext)
-    dest_lbl = os.path.join(config.PROCESSED_DATA_DIR, 'labels', subset_name, new_filename + ".txt")
+    dest_img = Path(config.PROCESSED_DATA_DIR) / 'images' / subset_name / f"{new_filename}{img_ext}"
+    dest_lbl = Path(config.PROCESSED_DATA_DIR) / 'labels' / subset_name / f"{new_filename}.txt"
     
     if move_mode:
-        shutil.move(img_path, dest_img)
-        if os.path.exists(kitti_path):
-            os.remove(kitti_path)
+        shutil.move(str(img_path), str(dest_img))
+        if kitti_path.exists():
+            kitti_path.unlink()
     else:
-        shutil.copy2(img_path, dest_img)
+        shutil.copy2(str(img_path), str(dest_img))
     
     # Save new txt
     with open(dest_lbl, 'w') as f_out:
@@ -171,7 +170,7 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
             
     return True, len(yolo_lines), bboxes_stats
 
-def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
+def process_subset(file_list, subset_name, batch_prefix, raw_labels_path, raw_images_path, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
     count_imgs = 0
     count_objs = 0
     count_bgs = 0
@@ -180,7 +179,7 @@ def process_subset(file_list, subset_name, batch_prefix, move_mode=False, is_yol
     all_areas, all_ars, all_cx, all_cy = [], [], [], []
     
     for fname in file_list:
-        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, move_mode, is_yolo, override_all, override_map)
+        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, raw_labels_path, raw_images_path, move_mode, is_yolo, override_all, override_map)
         if success:
             count_imgs += 1
             count_objs += num_objects
@@ -220,14 +219,13 @@ def main():
                         "(e.g., --override_class mountain_bike=0 road_bike=0)")
     args = parser.parse_args()
 
-    global LABELS_KITTI, IMAGES_DIR
-    LABELS_KITTI = os.path.join(args.source, config.RAW_LABELS_SUBPATH)
-    IMAGES_DIR = os.path.join(args.source, config.RAW_IMAGES_SUBPATH)
+    raw_labels_path = Path(args.source) / config.RAW_LABELS_SUBPATH
+    raw_images_path = Path(args.source) / config.RAW_IMAGES_SUBPATH
 
-    if not os.path.exists(LABELS_KITTI) or not os.path.exists(IMAGES_DIR):
+    if not raw_labels_path.exists() or not raw_images_path.exists():
         print(f"❌ Error: Didn't find raw data.")
-        print(f"   Searching images in: {IMAGES_DIR}")
-        print(f"   Searching labels in: {LABELS_KITTI}")
+        print(f"   Searching images in: {raw_images_path}")
+        print(f"   Searching labels in: {raw_labels_path}")
         return
 
     override_map = {}
@@ -258,7 +256,7 @@ def main():
         print("⚠️  WARNING: Flag '--move' active. Original files in _output_data will be DELETED to save space.")
 
     # 3. List files
-    all_files = [os.path.splitext(f)[0] for f in os.listdir(LABELS_KITTI) if f.endswith(".txt")]
+    all_files = [f.stem for f in raw_labels_path.glob("*.txt")]
     total_files = len(all_files)
     
     if total_files == 0:
@@ -293,13 +291,13 @@ def main():
 
     # 5. Process passing the prefix
     print("🚀 Processing Train...")
-    train_stats = process_subset(train_files, 'train', batch_prefix, args.move, args.is_yolo, override_all, override_map)
+    train_stats = process_subset(train_files, 'train', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, override_all, override_map)
     
     print("🚀 Processing Val...")
-    val_stats = process_subset(val_files, 'val', batch_prefix, args.move, args.is_yolo, override_all, override_map)
+    val_stats = process_subset(val_files, 'val', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, override_all, override_map)
     
     print("🚀 Processing Test...")
-    test_stats = process_subset(test_files, 'test', batch_prefix, args.move, args.is_yolo, override_all, override_map)
+    test_stats = process_subset(test_files, 'test', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, override_all, override_map)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
@@ -310,7 +308,7 @@ def main():
     # 6. Update Dataset Metadata
     meta_manager = DatasetMetadata(config.DATASET_METADATA_PATH)
     
-    source_meta_path = os.path.join(args.source, config.FILE_GEN_META)
+    source_meta_path = Path(args.source) / config.FILE_GEN_META
 
     meta_manager.record_session(
         batch_id=batch_prefix,

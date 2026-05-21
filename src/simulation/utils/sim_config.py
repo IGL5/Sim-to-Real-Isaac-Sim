@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import argparse
 import src.core.config as config
 
@@ -14,7 +14,7 @@ args, unknown_args = parser.parse_known_args()
 
 
 # Sky config
-HDR_MAPS_DIR = os.path.join(os.getcwd(), "assets", "hdr")
+HDR_MAPS_DIR = Path.cwd() / "assets" / "hdr"
 AVAILABLE_HDRS = []
 HDR_INTENSITY_RANGE = (0.8, 1.5)
 
@@ -29,8 +29,8 @@ MATERIAL_SCALE_FLAT = (0.6, 1.0)
 MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
 RT_SUBFRAMES = 32
 
-TEXTURES_ROOT_DIR = os.path.join(os.getcwd(), "assets", "textures")
-MAP_PATH = os.path.join(os.getcwd(), "assets", "map", MAP_NAME)
+TEXTURES_ROOT_DIR = Path.cwd() / "assets" / "textures"
+MAP_PATH = Path.cwd() / "assets" / "map" / MAP_NAME
 SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
@@ -66,7 +66,7 @@ RANDOMIZE_SKY = True
 RANDOMIZE_TERRAIN = True
 
 # ASSET POOLS
-ASSETS_ROOT_DIR = os.path.join(os.getcwd(), "assets", "objects")
+ASSETS_ROOT_DIR = Path.cwd() / "assets" / "objects"
 OBJECTS_CONFIG = {
     "bicycle": {
         "active": False,                     # Enable this object type

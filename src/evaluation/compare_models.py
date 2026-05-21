@@ -1,6 +1,5 @@
-import glob
+from pathlib import Path
 import json
-import os
 from src.core.utils.project_utils import get_available_models
 from src.evaluation.utils.comparison_reporter import ComparisonReporter
 from src.core import config
@@ -11,18 +10,18 @@ def find_audits_for_model(model_name, target_json="audit_metadata.json"):
     Searches for metadata files in the root of the model and in saved iterations.
     Returns ONLY valid audits for the selected environment.
     """
-    model_dir = os.path.join(config.PROJECT_DIR, model_name)
+    model_dir = Path(config.PROJECT_DIR) / model_name
     
     # 1. Search in the root (temporary / last audit)
-    base_audit = os.path.join(model_dir, target_json)
+    base_audit = model_dir / target_json
     
     # 2. Search in the persistent evaluations (iter_xxx)
-    eval_audits = glob.glob(os.path.join(model_dir, config.SAVED_EVAL_FOLDER_NAME, "*", target_json))
+    eval_audits = list((model_dir / config.SAVED_EVAL_FOLDER_NAME).glob(f"*/{target_json}"))
     
     all_audits = []
-    if os.path.exists(base_audit):
-        all_audits.append(base_audit)
-    all_audits.extend(eval_audits)
+    if base_audit.exists():
+        all_audits.append(str(base_audit))
+    all_audits.extend([str(p) for p in eval_audits])
     
     # 3. Read the JSONs to verify validity and extract the date
     audit_info = []
@@ -31,15 +30,15 @@ def find_audits_for_model(model_name, target_json="audit_metadata.json"):
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 date = data.get("audit_date", "Fecha desconocida")
-                parent_folder = os.path.basename(os.path.dirname(path))
+                parent_folder = Path(path).parent.name
                 
                 audit_info.append({
                     "path": path,
                     "date": date,
                     "folder": parent_folder
                 })
-        except Exception:
-            pass # If the JSON is corrupt, we ignore it automatically
+        except Exception as e:
+            print(f"⚠️ Could not read JSON at {path}: {e}")
             
     # Sort from most recent to oldest
     audit_info.sort(key=lambda x: x["date"], reverse=True)
@@ -252,8 +251,8 @@ def main():
     try:
         reporter = ComparisonReporter(final_audits_to_compare)
         reporter.generate_comparison()
-    except NameError:
-        pass
+    except NameError as e:
+        print(f"❌ ComparisonReporter not available: {e}")
 
 
 if __name__ == "__main__":

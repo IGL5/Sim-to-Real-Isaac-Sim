@@ -1,6 +1,6 @@
-import os
 import json
 from datetime import datetime
+from pathlib import Path
 
 class BaseMetadataManager:
     """
@@ -19,9 +19,10 @@ class BaseMetadataManager:
     @staticmethod
     def read_json(filepath):
         """Reads an external JSON file and returns its dictionary. Returns {} if not found or error."""
-        if os.path.exists(filepath):
+        path = Path(filepath)
+        if path.exists():
             try:
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
                 print(f"⚠️ [BaseMetadataManager] Error reading JSON from {filepath}: {e}")
@@ -45,10 +46,11 @@ class BaseMetadataManager:
         Persists the data in memory to the physical JSON file.
         Creates the necessary folders if they do not exist.
         """
-        os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
+        path = Path(self.filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
         
         try:
-            with open(self.filepath, 'w', encoding='utf-8') as f:
+            with open(path, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, indent=4)
             print(f"💾 Metadata successfully saved to: {self.filepath}")
         except Exception as e:

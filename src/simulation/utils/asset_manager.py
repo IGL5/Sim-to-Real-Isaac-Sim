@@ -1,5 +1,4 @@
-import os
-import glob
+from pathlib import Path
 import random
 from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom, UsdLux
 import omni.replicator.core as rep
@@ -13,9 +12,9 @@ def update_yolo_classes_txt():
     Guarantees a strict order (alphabetical by main class and then sub-parts)
     so that the IDs (0, 1, 2...) always match in the dataset_manager.
     """
-    classes_file = os.path.abspath(config.CLASSES_PATH)
+    classes_file = Path(config.CLASSES_PATH).resolve()
 
-    os.makedirs(os.path.dirname(classes_file), exist_ok=True)
+    classes_file.parent.mkdir(parents=True, exist_ok=True)
     
     # We use a normal list to maintain the order, not a set()
     final_classes = []
@@ -50,8 +49,8 @@ def discover_objective_assets(base_dir, obj_dir):
     Scans automatically the assets folder to find objective models.
     Expected structure: base_dir/obj_dir/[model_name]/[model_name].usd
     """
-    objective_root = os.path.join(base_dir, obj_dir)
-    if not os.path.exists(objective_root):
+    objective_root = Path(base_dir) / obj_dir
+    if not objective_root.exists():
          print(f"[WARN] Objective root directory not found: {objective_root}")
          return []
 
@@ -59,24 +58,24 @@ def discover_objective_assets(base_dir, obj_dir):
     discovered_paths = []
     
     try:
-        folder_names = [d for d in os.listdir(objective_root) if os.path.isdir(os.path.join(objective_root, d))]
+        folder_paths = [d for d in objective_root.iterdir() if d.is_dir()]
     except Exception as e:
         print(f"[ERROR] Could not list directories: {e}")
         return []
 
-    for folder_name in folder_names:
-        folder_path = os.path.join(objective_root, folder_name)
+    for folder_path in folder_paths:
+        folder_name = folder_path.name
         
         # STRONG STRATEGY:
-        expected_usd = os.path.join(folder_path, f"{folder_name}.usd")
+        expected_usd = folder_path / f"{folder_name}.usd"
         
-        if os.path.exists(expected_usd):
-            discovered_paths.append(expected_usd)
+        if expected_usd.exists():
+            discovered_paths.append(str(expected_usd))
         else:
             # If the exact file doesn't exist, we search for any .usd inside the folder.
-            fallback_search = glob.glob(os.path.join(folder_path, "*.usd*"))
+            fallback_search = list(folder_path.glob("*.usd*"))
             if fallback_search:
-                discovered_paths.append(fallback_search[0])
+                discovered_paths.append(str(fallback_search[0]))
             else:
                 print(f"[WARN] Skipping folder '{folder_name}': No USD file found inside.")
 
@@ -89,11 +88,12 @@ def load_pbr_materials(stage):
     Loads PBR materials and manually assigns textures to avoid API errors.
     Returns a list of UsdShade.Material.
     """
-    if not os.path.exists(sim_config.TEXTURES_ROOT_DIR):
-        print(f"[ERROR] Texture directory not found: {sim_config.TEXTURES_ROOT_DIR}")
+    textures_dir = Path(sim_config.TEXTURES_ROOT_DIR)
+    if not textures_dir.exists():
+        print(f"[ERROR] Texture directory not found: {textures_dir}")
         return []
 
-    material_folders = [f.path for f in os.scandir(sim_config.TEXTURES_ROOT_DIR) if f.is_dir()]
+    material_folders = [f for f in textures_dir.iterdir() if f.is_dir()]
 
     material_folders.sort()
     limit = min(max(sim_config.MAX_PBR_MATERIALS, len(sim_config.ENVIRONMENT_LOOKUP_KEYS)), len(material_folders))
@@ -104,22 +104,23 @@ def load_pbr_materials(stage):
     # 1. ROBUST CREATION
     for i, folder_path in enumerate(material_folders):
         try:
-            files = glob.glob(os.path.join(folder_path, "*.*"))
+            files = list(folder_path.glob("*.*"))
             found_maps = {"diffuse": None, "normal": None, "roughness": None, "ao": None, "emission": None, "metallic": None}
             normal_gl = None
             normal = None
             
             for f_path in files:
-                name = os.path.basename(f_path).lower()
-                if any(x in name for x in ["color", "diff", "alb"]): found_maps["diffuse"] = f_path
-                elif "rough" in name: found_maps["roughness"] = f_path
+                name = f_path.name.lower()
+                str_path = str(f_path)
+                if any(x in name for x in ["color", "diff", "alb"]): found_maps["diffuse"] = str_path
+                elif "rough" in name: found_maps["roughness"] = str_path
                 elif any(x in name for x in ["norm", "nor_"]):
                     if "gl" in name:
-                        normal_gl = f_path
-                    else: normal = f_path
-                elif any(x in name for x in ["ao", "ambientocclusion"]): found_maps["ao"] = f_path
-                elif any(x in name for x in ["emiss", "emit"]): found_maps["emission"] = f_path
-                elif any(x in name for x in ["metal", "met"]): found_maps["metallic"] = f_path
+                        normal_gl = str_path
+                    else: normal = str_path
+                elif any(x in name for x in ["ao", "ambientocclusion"]): found_maps["ao"] = str_path
+                elif any(x in name for x in ["emiss", "emit"]): found_maps["emission"] = str_path
+                elif any(x in name for x in ["metal", "met"]): found_maps["metallic"] = str_path
 
             if not found_maps["diffuse"]: continue
             found_maps["normal"] = normal_gl if normal_gl else normal
@@ -285,19 +286,20 @@ def discover_hdr_maps(directory):
     Looks for .hdr or .exr files in the given directory.
     Not recursive (searches only in the root of the folder).
     """
-    if not os.path.exists(directory):
+    dir_path = Path(directory)
+    if not dir_path.exists():
         print(f"[ERROR] HDR Directory not found: {directory}")
         # Try to create it to help the user
         try:
-            os.makedirs(directory, exist_ok=True)
+            dir_path.mkdir(parents=True, exist_ok=True)
             print(f"   -> Created directory: {directory}. Please add .hdr files there.")
-        except:
-            pass
+        except Exception as e:
+            print(f"   -> Failed to create directory: {e}")
         return []
 
     # Search for valid file extensions
     supported_extensions = ('.hdr', '.exr')
-    files = [f for f in os.listdir(directory) if f.lower().endswith(supported_extensions)]
+    files = [f.name for f in dir_path.iterdir() if f.name.lower().endswith(supported_extensions)]
 
     files.sort()
     limit = min(max(sim_config.MAX_HDR_MAPS, 1), len(files))
@@ -338,34 +340,34 @@ def discover_assets(root_dir, category_name, recursive=False):
     """
     Looks for USD files. Unifies the logic of 'Objetivos' and 'Distractores'.
     """
-    found_paths = []
+    root_path = Path(root_dir)
     
     # 1. Recursive Mode (Distractors): assets/objects/distractors/cat/**/*.usd
     if recursive:
-        search_path = os.path.join(root_dir, "distractors", category_name)
-        if os.path.exists(search_path):
-            found_paths = glob.glob(os.path.join(search_path, "**", "*.usd*"), recursive=True)
+        search_path = root_path / "distractors" / category_name
+        if search_path.exists():
+            found_paths = [str(p) for p in search_path.rglob("*.usd*")]
     
     # 2. Standard Mode (Objectives): assets/objects/cat/cat.usd
     if not found_paths:
-        search_path = os.path.join(root_dir, category_name)
-        if os.path.exists(search_path):
+        search_path = root_path / category_name
+        if search_path.exists():
             # Priority: File with the same name as the folder
             # (Ex: assets/objects/cyclist/cyclist.usd)
-            subfolders = [f.path for f in os.scandir(search_path) if f.is_dir()]
+            subfolders = [f for f in search_path.iterdir() if f.is_dir()]
             for folder in subfolders:
-                folder_name = os.path.basename(folder)
-                expected_usd = os.path.join(folder, f"{folder_name}.usd")
-                if os.path.exists(expected_usd):
-                    found_paths.append(expected_usd)
+                folder_name = folder.name
+                expected_usd = folder / f"{folder_name}.usd"
+                if expected_usd.exists():
+                    found_paths.append(str(expected_usd))
                 else:
                     # Fallback: any usd
-                    any_usd = glob.glob(os.path.join(folder, "*.usd*"))
-                    if any_usd: found_paths.append(any_usd[0])
+                    any_usd = list(folder.glob("*.usd*"))
+                    if any_usd: found_paths.append(str(any_usd[0]))
             
             # If no subfolders, look in the root of category
             if not found_paths:
-                found_paths = glob.glob(os.path.join(search_path, "*.usd*"))
+                found_paths = [str(p) for p in search_path.glob("*.usd*")]
 
     return found_paths
 

@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import json
 import src.core.config as config
 from src.evaluation.utils.html_generator import HTMLReportGenerator
@@ -7,12 +7,12 @@ class ComparisonReporter:
     def __init__(self, models_dict):
         self.models_dict = models_dict
         self.project_dir = config.PROJECT_DIR
-        self.output_dir = config.COMPARISON_OUTPUT_DIR
-        os.makedirs(self.output_dir, exist_ok=True)
+        self.output_dir = Path(config.COMPARISON_OUTPUT_DIR)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.data = {}
 
     def _load_json(self, path):
-        if os.path.exists(path):
+        if Path(path).exists():
             with open(path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return None
@@ -24,9 +24,9 @@ class ComparisonReporter:
             
             audit_meta = self._load_json(audit_path)
             
-            model_root = os.path.join(self.project_dir, real_model_name)
-            train_meta_path = os.path.join(model_root, config.METADATA_FOLDER_NAME, config.FILE_TRAIN_META)
-            dataset_meta_path = os.path.join(model_root, config.METADATA_FOLDER_NAME, config.FILE_DATASET_META)
+            model_root = Path(self.project_dir) / real_model_name
+            train_meta_path = model_root / config.METADATA_FOLDER_NAME / config.FILE_TRAIN_META
+            dataset_meta_path = model_root / config.METADATA_FOLDER_NAME / config.FILE_DATASET_META
             
             train_meta = self._load_json(train_meta_path)
             dataset_meta = self._load_json(dataset_meta_path)
@@ -126,4 +126,4 @@ class ComparisonReporter:
         
         generator = HTMLReportGenerator()
         # Pass both the raw data (for the table) and the graph data to Jinja2
-        generator.generate_comparison_html(os.path.join(self.output_dir, "comparison_report.html"), self.data, chart_data)
+        generator.generate_comparison_html(str(self.output_dir / "comparison_report.html"), self.data, chart_data)

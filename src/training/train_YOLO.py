@@ -1,11 +1,10 @@
-import os
+from pathlib import Path
 import yaml
 from ultralytics import YOLO
 import torch
 import argparse
 import time
 import json
-import glob
 import re
 import sys
 import platform
@@ -59,7 +58,7 @@ def create_yaml_config():
     """
 
     # Check if the dataset exists
-    if not os.path.exists(config.PROCESSED_DATA_DIR):
+    if not Path(config.PROCESSED_DATA_DIR).exists():
         raise FileNotFoundError(f"Dataset not found in: {config.PROCESSED_DATA_DIR}. Has the script 1 been executed?")
 
     # Read classes from file
@@ -73,13 +72,13 @@ def create_yaml_config():
         'names': {i: name for i, name in enumerate(class_names)}
     }
 
-    yaml_path = os.path.join(config.PROCESSED_DATA_DIR, 'dataset_config.yaml')
+    yaml_path = Path(config.PROCESSED_DATA_DIR) / 'dataset_config.yaml'
 
     with open(yaml_path, 'w') as f:
         yaml.dump(yaml_config, f, default_flow_style=False)
 
     print(f"📄 Config file created at: {yaml_path}")
-    return yaml_path
+    return str(yaml_path)
 
 
 def recover_misplaced_runs(exp_name):
@@ -87,31 +86,30 @@ def recover_misplaced_runs(exp_name):
     Looks for the last training saved in the default folder 'runs/' 
     and moves it to the correct folder of our project.
     """
-    expected_dir = os.path.join(config.PROJECT_DIR, exp_name)
-    expected_weights = os.path.join(expected_dir, config.BEST_MODEL_SUBPATH)
+    expected_dir = Path(config.PROJECT_DIR) / exp_name
+    expected_weights = expected_dir / config.BEST_MODEL_SUBPATH
     
-    if os.path.exists(expected_weights):
+    if expected_weights.exists():
         return
     
-    search_path = os.path.join("runs", "**", config.BEST_MODEL_SUBPATH)
-    all_weights = glob.glob(search_path, recursive=True)
+    search_path = Path("runs").rglob("best.pt")
+    all_weights = list(search_path)
     
     if not all_weights:
         return
         
-    latest_weight = max(all_weights, key=os.path.getctime)
-    latest_train_dir = os.path.dirname(os.path.dirname(latest_weight))
+    latest_weight = max(all_weights, key=lambda p: p.stat().st_ctime)
+    latest_train_dir = latest_weight.parent.parent
     
-    os.makedirs(expected_dir, exist_ok=True)
+    expected_dir.mkdir(parents=True, exist_ok=True)
     
     # We move the content of the runs folder to our project folder
-    for item in os.listdir(latest_train_dir):
-        s = os.path.join(latest_train_dir, item)
-        d = os.path.join(expected_dir, item)
-        if os.path.isdir(s):
-            shutil.copytree(s, d, dirs_exist_ok=True)
+    for item in latest_train_dir.iterdir():
+        d = expected_dir / item.name
+        if item.is_dir():
+            shutil.copytree(str(item), str(d), dirs_exist_ok=True)
         else:
-            shutil.copy2(s, d)
+            shutil.copy2(str(item), str(d))
             
     print(f"✅ Archivos rescatados con éxito a: {expected_dir}")
 
@@ -121,20 +119,21 @@ def get_next_experiment_prefix(ver_prefix, size_suffix, base_model_idx=None):
     Scans the project directory to find the next available experiment number
     for a specific architecture, enforcing a strict naming convention.
     """
-    if not os.path.exists(config.PROJECT_DIR):
-        os.makedirs(config.PROJECT_DIR, exist_ok=True)
+    project_dir = Path(config.PROJECT_DIR)
+    if not project_dir.exists():
+        project_dir.mkdir(parents=True, exist_ok=True)
 
     max_n = 0
     
     # Regular expression to search for the main number (e.g: yolov8_s_01_)
     pattern_n = re.compile(rf"^{ver_prefix}_{size_suffix}_(\d+)_")
 
-    for d in os.listdir(config.PROJECT_DIR):
-        if not os.path.isdir(os.path.join(config.PROJECT_DIR, d)): 
+    for d in project_dir.iterdir():
+        if not d.is_dir(): 
             continue
         
         # Extract the global experiment number
-        match_n = pattern_n.search(d)
+        match_n = pattern_n.search(d.name)
         if match_n:
             n = int(match_n.group(1))
             if n > max_n: 
@@ -233,8 +232,9 @@ def select_existing_model():
     """
     print("\n--- 🤖 EXISTING MODEL SELECTION (FINE-TUNING) ---")
     
-    if not os.path.exists(config.PROJECT_DIR):
-        print(f"❌ ERROR: Project directory '{config.PROJECT_DIR}' not found.")
+    project_dir = Path(config.PROJECT_DIR)
+    if not project_dir.exists():
+        print(f"❌ ERROR: Project directory '{project_dir}' not found.")
         sys.exit(1)
         
     available_models = pu.get_available_models()
@@ -263,7 +263,7 @@ def select_existing_model():
                 break
             print("  ⚠️  Invalid input. Please enter a valid number.")
             
-    path_to_weights = os.path.join(config.PROJECT_DIR, base_exp_name, config.BEST_MODEL_SUBPATH)
+    path_to_weights = str(Path(config.PROJECT_DIR) / base_exp_name / config.BEST_MODEL_SUBPATH)
     
     # Extract version, size and number of the base model (e.g: 'yolov8_s_12_custom')
     match = re.search(r"^(yolo\w+)_([nsmxl])_(\d+)_", base_exp_name)
@@ -326,7 +326,7 @@ def main():
         model = YOLO(model_type)
     except Exception as e:
         print(f"❌ Error loading model {model_type}. Make sure ultralytics is updated.")
-        print(e)
+        print(f"   Details: {e}")
         return
 
     train_kwargs = {
@@ -354,7 +354,7 @@ def main():
     recover_misplaced_runs(experiment_name)
 
     print("\n--- Training completed ---")
-    best_weight = os.path.join(config.PROJECT_DIR, experiment_name, config.BEST_MODEL_SUBPATH)
+    best_weight = Path(config.PROJECT_DIR) / experiment_name / config.BEST_MODEL_SUBPATH
     print(f"💾 Best model saved at: {best_weight}")
 
     # 4. Validation (TEST SET)
@@ -370,6 +370,7 @@ def main():
         print(f"✅ Model exported for deployment: {onnx_path}")
     except Exception as e:
         print(f"⚠️ Export to ONNX failed (non-critical): {e}")
+        onnx_path = None
 
     # 6. Compile metadata
     print("\n📝 Compiling training metadata...")
@@ -380,10 +381,10 @@ def main():
     epochs_run = args.epochs
     best_epoch = -1
 
-    results_csv_path = os.path.join(config.PROJECT_DIR, experiment_name, 'results.csv')
-    if os.path.exists(results_csv_path):
+    results_csv_path = Path(config.PROJECT_DIR) / experiment_name / 'results.csv'
+    if results_csv_path.exists():
         try:
-            df = pd.read_csv(results_csv_path)
+            df = pd.read_csv(str(results_csv_path))
             epochs_run = len(df)
             
             df.columns = df.columns.str.strip()
@@ -402,9 +403,9 @@ def main():
     if epochs_run < args.epochs and best_epoch == -1:
         best_epoch = epochs_run - args.patience
 
-    args_yaml_path = os.path.join(config.PROJECT_DIR, experiment_name, 'args.yaml')
+    args_yaml_path = Path(config.PROJECT_DIR) / experiment_name / 'args.yaml'
     aug_data = {}
-    if os.path.exists(args_yaml_path):
+    if args_yaml_path.exists():
         try:
             with open(args_yaml_path, 'r', encoding='utf-8') as f:
                 yolo_args = yaml.safe_load(f)
@@ -422,8 +423,8 @@ def main():
 
     
     weight_size_mb = 0.0
-    if os.path.exists(best_weight):
-        weight_size_mb = round(os.path.getsize(best_weight) / (1024 * 1024), 2)
+    if Path(best_weight).exists():
+        weight_size_mb = round(Path(best_weight).stat().st_size / (1024 * 1024), 2)
 
     training_metadata = {
         "experiment_info": {
@@ -462,15 +463,16 @@ def main():
     }
 
     # Save metadata
-    metadata_dir = os.path.join(config.PROJECT_DIR, experiment_name, config.METADATA_FOLDER_NAME)
-    os.makedirs(metadata_dir, exist_ok=True)
-    metadata_path = os.path.join(metadata_dir, config.FILE_TRAIN_META)
+    metadata_dir = Path(config.PROJECT_DIR) / experiment_name / config.METADATA_FOLDER_NAME
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    metadata_path = metadata_dir / config.FILE_TRAIN_META
 
     with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump(training_metadata, f, indent=4)
 
-    if os.path.exists(config.DATASET_METADATA_PATH):
-        shutil.copy2(config.DATASET_METADATA_PATH, os.path.join(metadata_dir, config.FILE_DATASET_META))
+    dataset_metadata = Path(config.DATASET_METADATA_PATH)
+    if dataset_metadata.exists():
+        shutil.copy2(str(dataset_metadata), str(metadata_dir / config.FILE_DATASET_META))
 
     print(f"💾 Training and Dataset metadata saved at: {metadata_dir}")
 

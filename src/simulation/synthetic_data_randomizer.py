@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import random
 import math
 import time
@@ -28,9 +28,10 @@ from src.simulation.utils import asset_manager
 rep.settings.carb_settings("/omni/replicator/RTSubframes", sim_config.RT_SUBFRAMES)
 
 def main():
-    if os.path.exists(sim_config.args.data_dir):
-        shutil.rmtree(sim_config.args.data_dir)
-    os.makedirs(sim_config.args.data_dir, exist_ok=True)
+    data_dir_path = Path(sim_config.args.data_dir)
+    if data_dir_path.exists():
+        shutil.rmtree(str(data_dir_path))
+    data_dir_path.mkdir(parents=True, exist_ok=True)
     
     # Create or overwrite classes.txt
     asset_manager.update_yolo_classes_txt()
@@ -66,8 +67,8 @@ def main():
         
         # Apply initial HDR texture
         if sim_config.AVAILABLE_HDRS:
-            light_path = os.path.join(sim_config.HDR_MAPS_DIR, sim_config.AVAILABLE_HDRS[0])
-            dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(light_path))
+            light_path = Path(sim_config.HDR_MAPS_DIR) / sim_config.AVAILABLE_HDRS[0]
+            dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(str(light_path)))
             # High intensity to compete with the sun
             dome_light.CreateIntensityAttr().Set(600.0)
     else:
@@ -208,7 +209,7 @@ def main():
         # Randomize sky
         if sim_config.AVAILABLE_HDRS and dome_prim.IsValid() and sim_config.RANDOMIZE_SKY:
             hdr_name = random.choice(sim_config.AVAILABLE_HDRS)
-            light_path = os.path.join(sim_config.HDR_MAPS_DIR, hdr_name)
+            light_path = Path(sim_config.HDR_MAPS_DIR) / hdr_name
             
             hdr_intensity = random.uniform(sim_config.HDR_INTENSITY_RANGE[0] * 1000, 
                                         sim_config.HDR_INTENSITY_RANGE[1] * 1000)

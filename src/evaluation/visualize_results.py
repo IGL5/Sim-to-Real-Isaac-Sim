@@ -1,7 +1,6 @@
-import os
+from pathlib import Path
 import cv2
 import shutil
-import glob
 import argparse
 import sys
 from ultralytics import YOLO
@@ -26,7 +25,7 @@ def check_system_integrity(model_path, check_dataset=False):
     Checks that everything necessary exists before starting.
     """
     # 1. Check Model
-    if not os.path.exists(model_path):
+    if not Path(model_path).exists():
         print(f"❌ ERROR: Not finding the model file in:")
         print(f"   -> {model_path}")
         print("   Did you run the training script (train_YOLO.py)?")
@@ -34,14 +33,15 @@ def check_system_integrity(model_path, check_dataset=False):
 
     # 2. Check Dataset (only if we are going to audit)
     if check_dataset:
-        if not os.path.exists(config.DATASET_TEST_IMAGES):
+        test_images_dir = Path(config.DATASET_TEST_IMAGES)
+        if not test_images_dir.exists():
             print(f"❌ ERROR: Not finding the test images folder:")
-            print(f"   -> {config.DATASET_TEST_IMAGES}")
+            print(f"   -> {test_images_dir}")
             return False
         
         # Check if not empty
-        if not os.listdir(config.DATASET_TEST_IMAGES):
-            print(f"⚠️ WARNING: The test folder is empty ({config.DATASET_TEST_IMAGES}).")
+        if not any(test_images_dir.iterdir()):
+            print(f"⚠️ WARNING: The test folder is empty ({test_images_dir}).")
             return False
 
     return True
@@ -53,8 +53,8 @@ def select_model_path(preselected_model=None):
     """
 
     if preselected_model:
-        path = os.path.join(config.PROJECT_DIR, preselected_model, config.BEST_MODEL_SUBPATH)
-        if os.path.exists(path):
+        path = str(Path(config.PROJECT_DIR) / preselected_model / config.BEST_MODEL_SUBPATH)
+        if Path(path).exists():
             print(f"🤖 Auto-selected model: {preselected_model}")
             return path
         else:
@@ -64,8 +64,9 @@ def select_model_path(preselected_model=None):
     print("\n--- 🤖 MODEL SELECTION ---")
     
     # Check if project directory exists
-    if not os.path.exists(config.PROJECT_DIR):
-        print(f"❌ ERROR: Project directory '{config.PROJECT_DIR}' not found.")
+    project_dir = Path(config.PROJECT_DIR)
+    if not project_dir.exists():
+        print(f"❌ ERROR: Project directory '{project_dir}' not found.")
         print("   (You need to train a model first using train_YOLO.py)")
         sys.exit(1)
         
@@ -95,23 +96,23 @@ def select_model_path(preselected_model=None):
                 break
             print("  ⚠️  Invalid input. Please enter a valid number.")
             
-    path = os.path.join(config.PROJECT_DIR, exp_name, config.BEST_MODEL_SUBPATH)
+    path = str(Path(config.PROJECT_DIR) / exp_name / config.BEST_MODEL_SUBPATH)
     print(f"✅ Selected model: {exp_name}\n")
     return path
 
 
 def save_evaluation_results(exp_name, mode):
     """ Copies the temporary audit_report into a persistent iteration folder """
-    base_eval_dir = os.path.join(config.PROJECT_DIR, exp_name, config.SAVED_EVAL_FOLDER_NAME)
-    os.makedirs(base_eval_dir, exist_ok=True)
+    base_eval_dir = Path(config.PROJECT_DIR) / exp_name / config.SAVED_EVAL_FOLDER_NAME
+    base_eval_dir.mkdir(parents=True, exist_ok=True)
     
     # Find the next iteration number
-    existing_dirs = [d for d in os.listdir(base_eval_dir) if os.path.isdir(os.path.join(base_eval_dir, d))]
+    existing_dirs = [d for d in base_eval_dir.iterdir() if d.is_dir()]
     iter_num = len(existing_dirs) + 1
-    eval_dir = os.path.join(base_eval_dir, f"iter_{iter_num:03d}_{mode}")
+    eval_dir = base_eval_dir / f"iter_{iter_num:03d}_{mode}"
     
     # Copy the entire workspace (HTML, Plots, JSON, Images)
-    shutil.copytree(config.EVALUATION_OUTPUT_DIR, eval_dir)
+    shutil.copytree(str(config.EVALUATION_OUTPUT_DIR), str(eval_dir))
     print(f"\n📦 Persistent Evaluation saved at: {eval_dir}")
 
 
@@ -127,21 +128,22 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     
     # 1. Prepare folders according to the mode
     if not keep:
-        if os.path.exists(config.EVALUATION_OUTPUT_DIR): shutil.rmtree(config.EVALUATION_OUTPUT_DIR)
+        eval_out = Path(config.EVALUATION_OUTPUT_DIR)
+        if eval_out.exists(): shutil.rmtree(str(eval_out))
     
-    path_fn = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_missed_FN")
-    path_fp = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_invented_FP")
-    path_poor = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_poor_bbox")
-    path_all = os.path.join(config.EVALUATION_OUTPUT_DIR, prefix, f"{prefix}_all")
+    path_fn = Path(config.EVALUATION_OUTPUT_DIR) / prefix / f"{prefix}_missed_FN"
+    path_fp = Path(config.EVALUATION_OUTPUT_DIR) / prefix / f"{prefix}_invented_FP"
+    path_poor = Path(config.EVALUATION_OUTPUT_DIR) / prefix / f"{prefix}_poor_bbox"
+    path_all = Path(config.EVALUATION_OUTPUT_DIR) / prefix / f"{prefix}_all"
 
     if draw_all:
-        os.makedirs(path_all, exist_ok=True)
-        short_all = path_all[path_all.find("YOLO"):] if "YOLO" in path_all else path_all
+        path_all.mkdir(parents=True, exist_ok=True)
+        short_all = str(path_all)[str(path_all).find("YOLO"):] if "YOLO" in str(path_all) else str(path_all)
         print(f"📂 Saving everything in: {short_all}")
     else:
-        os.makedirs(path_fn, exist_ok=True)
-        os.makedirs(path_fp, exist_ok=True)
-        os.makedirs(path_poor, exist_ok=True)
+        path_fn.mkdir(parents=True, exist_ok=True)
+        path_fp.mkdir(parents=True, exist_ok=True)
+        path_poor.mkdir(parents=True, exist_ok=True)
 
     # Logic for class translation and filtering
     dataset_classes = pu.get_project_classes(lowercase=True)
@@ -160,22 +162,22 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 
     reporter = ReportGenerator(config.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=config.CONF_THRESHOLD, class_names=dataset_class_names)
 
-    img_dir = custom_img_dir if is_real else config.DATASET_TEST_IMAGES
-    lbl_dir = custom_lbl_dir if is_real else config.DATASET_TEST_LABELS
+    img_dir = Path(custom_img_dir) if is_real else Path(config.DATASET_TEST_IMAGES)
+    lbl_dir = Path(custom_lbl_dir) if is_real else Path(config.DATASET_TEST_LABELS)
     
-    image_files = [f for f in glob.glob(os.path.join(img_dir, "*")) if f.lower().endswith(config.VALID_IMAGE_EXTENSIONS)]
+    image_files = [f for f in img_dir.iterdir() if f.is_file() and f.name.lower().endswith(config.VALID_IMAGE_EXTENSIONS)]
     print(f"📸 Processing {len(image_files)} images...")
 
     for i, img_path in enumerate(image_files):
-        filename = os.path.basename(img_path)
-        txt_path = os.path.join(lbl_dir, os.path.splitext(filename)[0] + ".txt")
+        filename = img_path.name
+        txt_path = lbl_dir / f"{img_path.stem}.txt"
 
-        img = cv2.imread(img_path)
+        img = cv2.imread(str(img_path))
         if img is None: continue
 
         h, w, _ = img.shape
-        if os.path.exists(txt_path):
-            gt_boxes = du.parse_kitti_label(txt_path, w, h)
+        if txt_path.exists():
+            gt_boxes = du.parse_kitti_label(str(txt_path), w, h)
         else:
             gt_boxes = []
 
@@ -221,18 +223,18 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
                     elif img_stats["poor_bbox"] > 0: status = "POOR"
                     elif img_stats["FP"] > 0: status = "FP"
                     
-                    save_path = os.path.join(path_all, f"{status}_{filename}")
-                    cv2.imwrite(save_path, img_drawn)
+                    save_path = path_all / f"{status}_{filename}"
+                    cv2.imwrite(str(save_path), img_drawn)
                     
                 else:
                     if img_stats["FN"] > 0:
-                        cv2.imwrite(os.path.join(path_fn, filename), img_drawn)
+                        cv2.imwrite(str(path_fn / filename), img_drawn)
                     if img_stats["poor_bbox"] > 0:
-                        cv2.imwrite(os.path.join(path_poor, filename), img_drawn)
+                        cv2.imwrite(str(path_poor / filename), img_drawn)
                     if img_stats["FP"] > 0:
-                        cv2.imwrite(os.path.join(path_fp, filename), img_drawn)
+                        cv2.imwrite(str(path_fp / filename), img_drawn)
 
-    exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
+    exp_name = Path(model_path).parent.parent.name
     reporter.generate_plots()
     reporter.generate_html_report(exp_name)
 
@@ -243,14 +245,15 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False):
     """ Inference Mode (New images without labels) """
     if not check_system_integrity(model_path, check_dataset=False): return
-    if not os.path.exists(source_folder): return
+    if not Path(source_folder).exists(): return
 
     print(f"--- 🌍 REAL INFERENCE MODE ---")
     if not keep:
-        if os.path.exists(config.EVALUATION_OUTPUT_DIR): shutil.rmtree(config.EVALUATION_OUTPUT_DIR)
+        eval_out = Path(config.EVALUATION_OUTPUT_DIR)
+        if eval_out.exists(): shutil.rmtree(str(eval_out))
     
-    images_output_dir = os.path.join(config.EVALUATION_OUTPUT_DIR, "inference_real")
-    os.makedirs(images_output_dir, exist_ok=True)
+    images_output_dir = Path(config.EVALUATION_OUTPUT_DIR) / "inference_real"
+    images_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Logic for class translation and filtering
     dataset_classes = pu.get_project_classes(lowercase=True)
@@ -265,18 +268,19 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
     
     reporter = InferenceReportGenerator(overlap_threshold=config.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
-    overlaps_dir_path = os.path.join(reporter.plots_dir, "suspicious_overlaps")
-    os.makedirs(overlaps_dir_path, exist_ok=True)
+    overlaps_dir_path = Path(reporter.plots_dir) / "suspicious_overlaps"
+    overlaps_dir_path.mkdir(parents=True, exist_ok=True)
     
-    image_files = [f for f in glob.glob(os.path.join(source_folder, "*")) if f.lower().endswith(config.VALID_IMAGE_EXTENSIONS)]
+    source_dir = Path(source_folder)
+    image_files = [f for f in source_dir.iterdir() if f.is_file() and f.name.lower().endswith(config.VALID_IMAGE_EXTENSIONS)]
     print(f"📸 Processing {len(image_files)} images...")
     
     for i, img_path in enumerate(image_files):
         if i >= config.LIMIT_IMAGES_PER_VIS: break
-        filename = os.path.basename(img_path)
+        filename = img_path.name
          
         try:
-            img_orig = cv2.imread(img_path)
+            img_orig = cv2.imread(str(img_path))
             if img_orig is None: continue
             h, w, _ = img_orig.shape
 
@@ -298,16 +302,16 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             
             if problematic_pairs:
                 img_overlap = vu.draw_overlapping_pairs(img_orig.copy(), pred_boxes, problematic_pairs, confidences)
-                cv2.imwrite(os.path.join(overlaps_dir_path, f"OVERLAP_{filename}"), img_overlap)
+                cv2.imwrite(str(overlaps_dir_path / f"OVERLAP_{filename}"), img_overlap)
             
             # Draw with our own colors and translated labels
             img_drawn = vu.draw_boxes(img_orig.copy(), pred_boxes, color=(255, 0, 0), confidences=confidences, classes=pred_classes, class_names=dataset_class_names)
-            cv2.imwrite(os.path.join(images_output_dir, f"PRED_{filename}"), img_drawn)
+            cv2.imwrite(str(images_output_dir / f"PRED_{filename}"), img_drawn)
             
         except Exception as e:
             print(f"Error processing {img_path}: {e}")
             
-    exp_name = os.path.basename(os.path.dirname(os.path.dirname(model_path)))
+    exp_name = Path(model_path).parent.parent.name
     reporter.generate_plots()
     reporter.generate_html_report(exp_name)
 
@@ -319,7 +323,7 @@ def run_video_mode(model_path, video_path):
     if not check_system_integrity(model_path, check_dataset=False):
         return
 
-    if not os.path.exists(video_path):
+    if not Path(video_path).exists():
         print(f"❌ ERROR: Not finding the video file: {video_path}")
         return
 

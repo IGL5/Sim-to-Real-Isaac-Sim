@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import numpy as np
 import json
 from datetime import datetime
@@ -35,8 +35,8 @@ class ReportGenerator:
         
         self.confusion_pairs = []
         
-        self.plots_dir = os.path.join(config.PLOTS_EVAL_DIR, self.prefix)
-        os.makedirs(self.plots_dir, exist_ok=True)
+        self.plots_dir = Path(config.PLOTS_EVAL_DIR) / self.prefix
+        self.plots_dir.mkdir(parents=True, exist_ok=True)
 
     def update(self, pred_boxes, pred_classes, gt_boxes, confidences, img_shape, speed_dict=None):
         h, w = img_shape
@@ -166,7 +166,7 @@ class ReportGenerator:
 
         plot_generator.plot_confusion_matrix(
             self.confusion_pairs, self.class_names,
-            os.path.join(self.plots_dir, config.CONFUSION_MATRIX_FILENAME)
+            str(self.plots_dir / config.CONFUSION_MATRIX_FILENAME)
         )
 
         all_tp_conf, all_fp_conf, all_tp_disc, all_fp_disc = [], [], [], []
@@ -176,16 +176,15 @@ class ReportGenerator:
             all_tp_disc.extend(s["discarded_TP"])
             all_fp_disc.extend(s["discarded_FP"])
             
-        # Globales
         plot_generator.plot_confidence_histogram(
             all_tp_conf, all_fp_conf, all_tp_disc, all_fp_disc,
             self.user_conf_threshold,
-            os.path.join(self.plots_dir, config.CONFIDENCE_DIST_FILENAME)
+            str(self.plots_dir / config.CONFIDENCE_DIST_FILENAME)
         )
 
         plot_generator.plot_normalized_heatmap(
             self.global_stats["bbox_centers"],
-            os.path.join(self.plots_dir, config.HEATMAP_FILENAME),
+            str(self.plots_dir / config.HEATMAP_FILENAME),
             title="Normalized Detection Heatmap (Global)", cmap='inferno'
         )
 
@@ -201,12 +200,12 @@ class ReportGenerator:
                 stats["confidences_TP"], stats["confidences_FP"], 
                 stats["discarded_TP"], stats["discarded_FP"],
                 self.user_conf_threshold,
-                os.path.join(self.plots_dir, f"confidence_dist_{safe_name}.png"),
+                str(self.plots_dir / f"confidence_dist_{safe_name}.png"),
                 title=f"Confidence Distribution ({c_name})"
             )
             plot_generator.plot_normalized_heatmap(
                 stats["bbox_centers"],
-                os.path.join(self.plots_dir, f"heatmap_{safe_name}.png"),
+                str(self.plots_dir / f"heatmap_{safe_name}.png"),
                 title=f"Normalized Detection Heatmap ({c_name})", cmap='inferno'
             )
 
@@ -225,8 +224,8 @@ class ReportGenerator:
                 'best_f1': best_f1, 'best_conf': best_conf, 'name': c_name
             }
             
-        plot_generator.plot_pr_curve(pr_data, os.path.join(self.plots_dir, config.PR_CURVE_FILENAME))
-        plot_generator.plot_f1_curve(f1_data, os.path.join(self.plots_dir, config.F1_CURVE_FILENAME))
+        plot_generator.plot_pr_curve(pr_data, str(self.plots_dir / config.PR_CURVE_FILENAME))
+        plot_generator.plot_f1_curve(f1_data, str(self.plots_dir / config.F1_CURVE_FILENAME))
 
     def generate_html_report(self, experiment_name="yolov8_s_default"):
         print("📝 Compiling Multiclass numerical metrics for the report...")
@@ -319,7 +318,7 @@ class ReportGenerator:
             "evaluation_params": {"iou_threshold": self.iou_threshold}
         }
         
-        audit_json_path = os.path.join(self.output_dir, f"{self.prefix}_metadata.json")
+        audit_json_path = Path(self.output_dir) / f"{self.prefix}_metadata.json"
         try:
             with open(audit_json_path, "w", encoding='utf-8') as f:
                 json.dump(audit_metadata, f, indent=4)
@@ -327,4 +326,4 @@ class ReportGenerator:
             print(f"⚠️ Could not save audit JSON: {e}")
 
         generator = HTMLReportGenerator()
-        generator.generate_audit_html(os.path.join(self.output_dir, f"{self.prefix}_report.html"), experiment_name, metrics_dict)
+        generator.generate_audit_html(str(Path(self.output_dir) / f"{self.prefix}_report.html"), experiment_name, metrics_dict)
