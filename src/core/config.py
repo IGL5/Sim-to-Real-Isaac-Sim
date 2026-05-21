@@ -34,6 +34,10 @@ RAW_LABELS_SUBPATH = os.path.join(CAMERA_NAME, "object_detection")
 # Model paths
 BEST_MODEL_SUBPATH = "weights/best.pt"
 
+# Metadata timestamp keys
+GENERATION_TIMESTAMP_KEY = "generation_date"
+UPDATE_TIMESTAMP_KEY = "update_date"
+
 # Metadata names
 METADATA_FOLDER_NAME = "metadata"
 SAVED_EVAL_FOLDER_NAME = "evaluations"

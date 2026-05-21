@@ -5,12 +5,11 @@ import time
 import carb
 import traceback
 import shutil
-import json
-from datetime import datetime
 
 # --- MODULES ---
 import src.core.config as config
 from src.simulation.utils import sim_config
+from src.core.metadata.sim_builder import SimulationMetadata
 
 # --- ISAAC SIMULATION APP ---
 from isaacsim.simulation_app import SimulationApp
@@ -301,71 +300,46 @@ def main():
     simulation_app.update()
 
     # --- 8. METADATA EXPORTATION ---
-    elapsed_total_seconds = time.time() - total_start_time
+    meta_manager = SimulationMetadata(config.GENERATION_METADATA_PATH)
     
-    safe_frames = frames_generated if frames_generated > 0 else 1
+    meta_manager.set_timestamp(key_name=config.GENERATION_TIMESTAMP_KEY)
 
-    obj_mat_randomized = []
-    for k, v in sim_config.OBJECTS_CONFIG.items():
-        if v.get('active', True) and v.get('randomize_materials'):
-            obj_mat_randomized.extend(v['randomize_materials'])
+    meta_manager.record_performance(
+        requested_frames=sim_config.CONFIG["num_frames"],
+        generated_frames=frames_generated,
+        attempts=attempts,
+        start_time_secs=total_start_time
+    )
 
-    dist_mat_randomized = []
-    for k, v in sim_config.DISTRACTOR_CONFIG.items():
-        if v.get('active', True) and v.get('randomize_materials'):
-            dist_mat_randomized.extend(v['randomize_materials'])
+    meta_manager.record_content_density(
+        total_detectables=track_total_detectables,
+        total_distractors=track_total_distractors,
+        empty_frames=track_empty_target_frames,
+        generated_frames=frames_generated
+    )
+
+    meta_manager.record_domain_randomization(
+        sky_active=sim_config.RANDOMIZE_SKY,
+        terrain_active=sim_config.RANDOMIZE_TERRAIN,
+        hdr_range=sim_config.HDR_INTENSITY_RANGE,
+        hdrs_avail=len(sim_config.AVAILABLE_HDRS),
+        mats_loaded=len(loaded_materials),
+        obj_configs=sim_config.OBJECTS_CONFIG,
+        dist_configs=sim_config.DISTRACTOR_CONFIG,
+        distinct_objs=n_distinct_assets_obj,
+        distinct_dists=n_distinct_assets_distractor
+    )
+
+    meta_manager.record_spatial_coverage(
+        cam_dist=sim_config.CAMERA_DISTANCE_RANGE,
+        cam_height=sim_config.CAMERA_HEIGHT_RANGE,
+        obj_max_rad=sim_config.OBJECTS_MAX_RADIUS,
+        dist_max_rad=sim_config.DISTRACTOR_MAX_RADIUS
+    )
     
-    metadata = {
-        "generation_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "config": {
-            "width": sim_config.CONFIG["width"],
-            "height": sim_config.CONFIG["height"],
-            "renderer": sim_config.CONFIG["renderer"],
-            "world_limits": sim_config.WORLD_LIMITS,
-            "rt_subframes": sim_config.RT_SUBFRAMES
-        },
-        "performance": {
-            "total_frames_requested": sim_config.CONFIG["num_frames"],
-            "total_frames_generated": frames_generated,
-            "total_attempts": attempts,
-            "generation_efficiency_percent": round((frames_generated / attempts) * 100, 2) if attempts > 0 else 0,
-            "total_time_seconds": round(elapsed_total_seconds, 2),
-            "average_time_per_frame_seconds": round(elapsed_total_seconds / safe_frames, 2)
-        },
-        "content_density": {
-            "average_detectables_per_frame": round(track_total_detectables / safe_frames, 2),
-            "average_distractors_per_frame": round(track_total_distractors / safe_frames, 2),
-            "empty_target_frames": track_empty_target_frames,
-            "total_detectables_spawned": track_total_detectables
-        },
-        "domain_randomization": {
-            "sky_active": sim_config.RANDOMIZE_SKY,
-            "terrain_active": sim_config.RANDOMIZE_TERRAIN,
-            "hdr_intensity_range": sim_config.HDR_INTENSITY_RANGE,
-            "hdr_maps_available": len(sim_config.AVAILABLE_HDRS),
-            "pbr_materials_loaded": len(loaded_materials),
-            "object_materials_randomized": list(set(obj_mat_randomized)),
-            "distractor_materials_randomized": list(set(dist_mat_randomized)),
-            "distinct_assets_used": {
-                "objects": n_distinct_assets_obj,
-                "distractors": n_distinct_assets_distractor
-            }
-        },
-        "spatial_coverage": {
-            "camera_distance_range": sim_config.CAMERA_DISTANCE_RANGE,
-            "camera_height_range": sim_config.CAMERA_HEIGHT_RANGE,
-            "objects_max_radius": sim_config.OBJECTS_MAX_RADIUS,
-            "distractor_max_radius": sim_config.DISTRACTOR_MAX_RADIUS
-        },
-        "theoretical_distribution": asset_manager.calc_theoretical_distribution()
-    }
-
-    # Create the metadata file and save it
-    os.makedirs(sim_config.args.data_dir, exist_ok=True)
+    meta_manager.build_theoretical_distribution(sim_config)
     
-    with open(config.GENERATION_METADATA_PATH, 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, indent=4)
-        
+    meta_manager.commit()
     print(f"📊 Metadata exported successfully to: {config.GENERATION_METADATA_PATH}")
 
 
