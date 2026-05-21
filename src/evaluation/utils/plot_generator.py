@@ -1,41 +1,40 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from collections import Counter
 
 def plot_confusion_matrix(confusion_pairs, class_names, output_path):
     """ Draws a dynamic Multi-Class confusion matrix including Background """
     if not confusion_pairs:
         return
 
-    # Obtener todas las clases únicas involucradas, incluyendo -1 (Fondo)
+    # Get all unique classes involved, including -1 (Background)
     unique_classes = set([c for pair in confusion_pairs for c in pair])
     
-    # Ordenar clases (0, 1, 2...) y dejar el -1 al final
+    # Sort classes (0, 1, 2...) and leave -1 at the end
     sorted_classes = sorted([c for c in unique_classes if c != -1])
     if -1 in unique_classes:
         sorted_classes.append(-1)
-        
-    labels = [class_names.get(c, f"Clase {c}") if c != -1 else "Fondo (BG)" for c in sorted_classes]
     
-    # Crear matriz vacía de NxN
+    labels = [class_names.get(c, f"Class {c}") if c != -1 else "Background (BG)" for c in sorted_classes]
+    
+    # Create empty NxN matrix
     size = len(sorted_classes)
     matrix = np.zeros((size, size), dtype=int)
     
-    # Mapear el ID de clase a la fila/columna de la matriz
+    # Map class ID to matrix row/column
     idx_map = {c: i for i, c in enumerate(sorted_classes)}
     
-    # Rellenar la matriz contando los pares (Real, Predicho)
+    # Fill the matrix counting the pairs (Real, Predicted)
     for real_c, pred_c in confusion_pairs:
         matrix[idx_map[real_c], idx_map[pred_c]] += 1
         
-    # Dibujar
+    # Draw
     plt.figure(figsize=(max(6, size*1.2), max(5, size*1.2)))
     ax = sns.heatmap(matrix, annot=True, fmt='d', cmap='Blues', cbar=False,
                      xticklabels=labels, yticklabels=labels)
-    plt.title('Matriz de Confusión Multi-Clase')
-    plt.ylabel('Etiqueta Real')
-    plt.xlabel('Predicción de YOLO')
+    plt.title('Multi-Class Confusion Matrix')
+    plt.ylabel('Real Label')
+    plt.xlabel('YOLO Prediction')
     ax.set_yticklabels(ax.get_yticklabels(), rotation=90, va="center")
     plt.tight_layout()
     plt.savefig(output_path)
@@ -81,7 +80,7 @@ def plot_pr_curve(curves_data, output_path):
     """ Draws a PR curve per class """
     plt.figure(figsize=(8, 5))
     
-    # Dibujar una línea por cada clase
+    # Draw one line per class
     for c_id, data in curves_data.items():
         plt.plot(data['recalls'], data['precisions'], lw=2, label=f"{data['name']} (AP50={data['ap50']:.3f})")
         
@@ -99,7 +98,7 @@ def plot_f1_curve(curves_data, output_path):
     """ Draws an F1 curve per class """
     plt.figure(figsize=(8, 5))
     
-    # Dibujar una línea por cada clase
+    # Draw one line per class
     for c_id, data in curves_data.items():
         line, = plt.plot(data['confs'], data['f1s'], lw=2, label=f"{data['name']} (Peak F1={data['best_f1']:.2f} @ {data['best_conf']:.2f})")
         plt.scatter([data['best_conf']], [data['best_f1']], color=line.get_color(), zorder=5)

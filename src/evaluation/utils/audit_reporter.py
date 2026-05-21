@@ -9,8 +9,8 @@ from src.core.utils import math_utils as mu
 from src.core import config
 
 class ReportGenerator:
-    def __init__(self, output_dir, iou_threshold=0.5, user_conf_threshold=0.5, prefix="audit", class_names=None):
-        self.output_dir = output_dir
+    def __init__(self, iou_threshold=0.5, user_conf_threshold=0.5, prefix="audit", class_names=None):
+        self.output_dir = config.EVALUATION_OUTPUT_DIR
         self.iou_threshold = iou_threshold
         self.user_conf_threshold = user_conf_threshold
         self.prefix = prefix
@@ -35,7 +35,7 @@ class ReportGenerator:
         
         self.confusion_pairs = []
         
-        self.plots_dir = os.path.join(output_dir, "plots", self.prefix)
+        self.plots_dir = os.path.join(config.PLOTS_EVAL_DIR, self.prefix)
         os.makedirs(self.plots_dir, exist_ok=True)
 
     def update(self, pred_boxes, pred_classes, gt_boxes, confidences, img_shape, speed_dict=None):
@@ -166,7 +166,7 @@ class ReportGenerator:
 
         plot_generator.plot_confusion_matrix(
             self.confusion_pairs, self.class_names,
-            os.path.join(self.plots_dir, "confusion_matrix.png")
+            os.path.join(self.plots_dir, config.CONFUSION_MATRIX_FILENAME)
         )
 
         all_tp_conf, all_fp_conf, all_tp_disc, all_fp_disc = [], [], [], []
@@ -180,12 +180,12 @@ class ReportGenerator:
         plot_generator.plot_confidence_histogram(
             all_tp_conf, all_fp_conf, all_tp_disc, all_fp_disc,
             self.user_conf_threshold,
-            os.path.join(self.plots_dir, "confidence_dist.png")
+            os.path.join(self.plots_dir, config.CONFIDENCE_DIST_FILENAME)
         )
 
         plot_generator.plot_normalized_heatmap(
             self.global_stats["bbox_centers"],
-            os.path.join(self.plots_dir, "heatmap.png"),
+            os.path.join(self.plots_dir, config.HEATMAP_FILENAME),
             title="Normalized Detection Heatmap (Global)", cmap='inferno'
         )
 
@@ -225,8 +225,8 @@ class ReportGenerator:
                 'best_f1': best_f1, 'best_conf': best_conf, 'name': c_name
             }
             
-        plot_generator.plot_pr_curve(pr_data, os.path.join(self.plots_dir, "pr_curve.png"))
-        plot_generator.plot_f1_curve(f1_data, os.path.join(self.plots_dir, "f1_curve.png"))
+        plot_generator.plot_pr_curve(pr_data, os.path.join(self.plots_dir, config.PR_CURVE_FILENAME))
+        plot_generator.plot_f1_curve(f1_data, os.path.join(self.plots_dir, config.F1_CURVE_FILENAME))
 
     def generate_html_report(self, experiment_name="yolov8_s_default"):
         print("📝 Compiling Multiclass numerical metrics for the report...")

@@ -1,19 +1,7 @@
-import os
 import subprocess
 import argparse
-import re
-import modules.core_visual_utils as cvu
+from src.core.utils.project_utils import get_available_models
 
-def get_available_models():
-    """ Returns the models that are ready to be audited """
-    if not os.path.exists(cvu.PROJECT_DIR):
-        return []
-    models = []
-    for d in os.listdir(cvu.PROJECT_DIR):
-        model_dir = os.path.join(cvu.PROJECT_DIR, d)
-        if os.path.isdir(model_dir) and os.path.exists(os.path.join(model_dir, "weights", "best.pt")):
-            models.append(d)
-    return models
 
 def select_models(available_models):
     """ Uses the same range selection logic as in compare_models """
@@ -55,14 +43,6 @@ def main():
     if not models:
         print("❌ No models found.")
         return
-
-    def get_yolo_version(model_name):
-        match = re.match(r'^yolov?(\d+)', model_name, re.IGNORECASE)
-        if match:
-            return int(match.group(1))
-        return 0 
-        
-    models.sort(key=get_yolo_version)
         
     selected_models = select_models(models)
     if not selected_models:

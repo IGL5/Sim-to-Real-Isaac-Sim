@@ -1,7 +1,5 @@
 import os
 import sys
-import glob
-import re
 import cv2
 import torch
 import random
@@ -11,16 +9,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from ultralytics import YOLO
+from src.core.utils import project_utils as pu
+from src.core import config
 
-try:
-    import modules.core_visual_utils as cvu
-    PROJECT_NAME = cvu.PROJECT_NAME
-except ImportError:
-    PROJECT_NAME = "yolo_project"
-
-DATASET_ROOT = os.path.join(os.getcwd(), "dataset_yolo_output")
-VAL_IMGS = os.path.join(DATASET_ROOT, "images", "val")
-LOCAL_OUTPUT_DIR = os.path.join(os.getcwd(), "xai_output")
 
 # ==========================================
 # 1. INTERACTION TOOLS
@@ -28,23 +19,11 @@ LOCAL_OUTPUT_DIR = os.path.join(os.getcwd(), "xai_output")
 
 def select_trained_model(prompt_title="AVAILABLE MODELS"):
     """Allows selecting a model showing a personalized title."""
-    if not os.path.exists(PROJECT_NAME):
-        print(f"❌ ERROR: No trained models found in '{PROJECT_NAME}'.")
+    if not os.path.exists(config.PROJECT_DIR):
+        print(f"❌ ERROR: No trained models found in '{config.PROJECT_DIR}'.")
         sys.exit(1)
         
-    available_models = [d for d in os.listdir(PROJECT_NAME) 
-                        if os.path.isdir(os.path.join(PROJECT_NAME, d)) 
-                        and os.path.exists(os.path.join(PROJECT_NAME, d, "weights", "best.pt"))]
-                
-    if not available_models:
-        print(f"❌ ERROR: No trained models found in '{PROJECT_NAME}'.")
-        sys.exit(1)
-
-    def get_yolo_version(model_name):
-        match = re.match(r'^yolov?(\d+)', model_name, re.IGNORECASE)
-        return int(match.group(1)) if match else 0 
-        
-    available_models.sort(key=get_yolo_version)
+    available_models = pu.get_available_models()
         
     print(f"\n--- 🧠 {prompt_title} ---")
     for i, m in enumerate(available_models):
@@ -60,7 +39,7 @@ def select_trained_model(prompt_title="AVAILABLE MODELS"):
             break
         print("  ⚠️ Invalid input.")
             
-    weights_path = os.path.join(PROJECT_NAME, exp_name, "weights", "best.pt")
+    weights_path = os.path.join(config.PROJECT_DIR, exp_name, config.BEST_MODEL_SUBPATH)
     print(f"✅ Model loaded: {exp_name}")
     return weights_path, exp_name
 
@@ -77,13 +56,13 @@ def select_image():
             
     extensiones = ('.jpg', '.jpeg', '.png')
     images = [
-        os.path.join(VAL_IMGS, f) 
-        for f in os.listdir(VAL_IMGS) 
+        os.path.join(config.DATASET_VAL_IMAGES, f) 
+        for f in os.listdir(config.DATASET_VAL_IMAGES) 
         if f.lower().endswith(extensiones)
     ]
 
     if not images:
-        print(f"❌ ERROR: No images found in {VAL_IMGS}")
+        print(f"❌ ERROR: No images found in {config.DATASET_VAL_IMAGES}")
         sys.exit(1)
         
     selected = random.choice(images)
@@ -94,7 +73,7 @@ def select_image():
 # 2. SPATIAL XAI (WHERE THE NETWORK LOOKS)
 # ==========================================
 
-def analyze_spatial(model_path, img_path, save_dir):
+def analyze_spatial(model_path, img_path):
     print("\n" + "="*40)
     print("🔭 STARTING SPATIAL ANALYSIS (GRAD-CAM / HEATMAPS)")
     print("="*40)
@@ -102,7 +81,7 @@ def analyze_spatial(model_path, img_path, save_dir):
     model = YOLO(model_path)
     
     # Backup original
-    shutil.copy2(img_path, os.path.join(save_dir, "01_Original_Image.jpg"))
+    shutil.copy2(img_path, config.ORIGINAL_XAI_PATH)
     
     # 1. Predictions vs Ground Truth
     print("🎨 Generating comparison: Ground Truth vs Prediction...")
@@ -126,7 +105,7 @@ def analyze_spatial(model_path, img_path, save_dir):
                     cv2.rectangle(img_plotted, (x1, y1), (x2, y2), (0, 255, 0), 3)
                     cv2.putText(img_plotted, "GT Real", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     
-    cv2.imwrite(os.path.join(save_dir, "00_Predictions_vs_GroundTruth.jpg"), img_plotted)
+    cv2.imwrite(config.PREDICTIONS_XAI_PATH, img_plotted)
 
     # 2. Extract heatmaps from all layers
     print("📸 Extracting heatmaps by layer...")
@@ -137,8 +116,7 @@ def analyze_spatial(model_path, img_path, save_dir):
     device = next(model.model.parameters()).device
     img_tensor = img_tensor.to(device)
 
-    heat_dir = os.path.join(save_dir, "heatmaps")
-    os.makedirs(heat_dir, exist_ok=True)
+    os.makedirs(config.HEATMAPS_XAI_PATH, exist_ok=True)
 
     for layer_idx in range(len(model.model.model)):
         target_layer = model.model.model[layer_idx]
@@ -166,18 +144,18 @@ def analyze_spatial(model_path, img_path, save_dir):
                 superimposed_img = cv2.addWeighted(img_bgr, 0.5, heatmap_color, 0.5, 0)
 
                 cv2.putText(superimposed_img, f"L{layer_idx:02d} ({layer_type})", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.imwrite(os.path.join(heat_dir, f"layer_{layer_idx:02d}_heat.jpg"), superimposed_img)
+                cv2.imwrite(os.path.join(config.HEATMAPS_XAI_PATH, f"layer_{layer_idx:02d}_heat.jpg"), superimposed_img)
         except Exception:
             pass
         finally:
             handle.remove()
-    print(f"✅ Spatial heatmaps saved to: {heat_dir}")
+    print(f"✅ Spatial heatmaps saved to: {config.HEATMAPS_XAI_PATH}")
 
 # ==========================================
 # 3. STRUCTURAL XAI (WEIGHTS AND BIASES)
 # ==========================================
 
-def analyze_structural(base_path, fine_path, save_dir):
+def analyze_structural(base_path, fine_path):
     print("\n" + "="*40)
     print("🔬 STARTING STRUCTURAL ANALYSIS (WEIGHTS, BIASES AND SPARSITY)")
     print("="*40)
@@ -260,9 +238,8 @@ def analyze_structural(base_path, fine_path, save_dir):
     axes[2].legend()
 
     plt.tight_layout()
-    out_img = os.path.join(save_dir, "02_Structural_Analysis.png")
-    plt.savefig(out_img, dpi=300)
-    print(f"✅ Structural Analysis saved to: {out_img}")
+    plt.savefig(config.STRUCTURAL_XAI_PATH, dpi=300)
+    print(f"✅ Structural Analysis saved to: {config.STRUCTURAL_XAI_PATH}")
 
 # ==========================================
 # 4. MAIN ORCHESTRATOR
@@ -285,32 +262,32 @@ def main():
     if not modo: modo = "3"
     
     # Prepare local directory
-    if os.path.exists(LOCAL_OUTPUT_DIR):
-        shutil.rmtree(LOCAL_OUTPUT_DIR)
-    os.makedirs(LOCAL_OUTPUT_DIR)
+    if os.path.exists(config.XAI_OUTPUT_DIR):
+        shutil.rmtree(config.XAI_OUTPUT_DIR)
+    os.makedirs(config.XAI_OUTPUT_DIR)
 
     # Flow according to selection
     if modo == "1":
         path_mod, _ = select_trained_model("MODEL TO ANALYZE")
         path_img = select_image()
-        analyze_spatial(path_mod, path_img, LOCAL_OUTPUT_DIR)
+        analyze_spatial(path_mod, path_img)
 
     elif modo == "2":
         path_base, _ = select_trained_model("BASE MODEL (e.g. COCO)")
         path_fine, _ = select_trained_model("FINE-TUNED MODEL")
-        analyze_structural(path_base, path_fine, LOCAL_OUTPUT_DIR)
+        analyze_structural(path_base, path_fine)
 
     elif modo == "3":
         path_base, _ = select_trained_model("BASE MODEL (e.g. COCO)")
         path_fine, exp_fine = select_trained_model("FINE-TUNED MODEL (We will analyze its heatmaps)")
         path_img = select_image()
-        analyze_spatial(path_fine, path_img, LOCAL_OUTPUT_DIR)
-        analyze_structural(path_base, path_fine, LOCAL_OUTPUT_DIR)
+        analyze_spatial(path_fine, path_img)
+        analyze_structural(path_base, path_fine)
     else:
         print("❌ Invalid option.")
         sys.exit(1)
 
-    print(f"\n🎉 All results have been saved to the folder: {LOCAL_OUTPUT_DIR} !")
+    print(f"\n🎉 All results have been saved to the folder: {config.XAI_OUTPUT_DIR} !")
 
 if __name__ == '__main__':
     main()

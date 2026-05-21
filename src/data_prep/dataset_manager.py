@@ -4,21 +4,18 @@ import shutil
 import random
 import argparse
 import json
-import numpy as np
 from datetime import datetime
 import src.core.config as config
 from src.core.utils import math_utils as mu
+from src.core.utils import project_utils as pu
 
 # --- DATA IMPORT PATHS ---
 LABELS_KITTI = ""
 IMAGES_DIR = ""
 
 # Classes to detect
-try:
-    with open(config.CLASSES_PATH, "r", encoding="utf-8") as f:
-        CLASES = [line.strip() for line in f.readlines() if line.strip()]
-except FileNotFoundError:
-    print(f"❌ ERROR: No se encontró el archivo de clases en {config.CLASSES_PATH}")
+CLASES = pu.get_project_classes()
+if not CLASES:
     print("   Asegúrate de ejecutar el simulador al menos una vez para generarlo.")
     exit(1)
 

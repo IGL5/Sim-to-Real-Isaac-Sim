@@ -1,13 +1,13 @@
 import os
 import json
-from . import core_visual_utils as cvu
-from .html_generator import HTMLReportGenerator
+import src.core.config as config
+from src.evaluation.utils.html_generator import HTMLReportGenerator
 
 class ComparisonReporter:
     def __init__(self, models_dict):
         self.models_dict = models_dict
-        self.project_dir = cvu.PROJECT_DIR
-        self.output_dir = os.path.join(os.getcwd(), "comparison_report")
+        self.project_dir = config.PROJECT_DIR
+        self.output_dir = config.COMPARISON_OUTPUT_DIR
         os.makedirs(self.output_dir, exist_ok=True)
         self.data = {}
 
@@ -25,8 +25,8 @@ class ComparisonReporter:
             audit_meta = self._load_json(audit_path)
             
             model_root = os.path.join(self.project_dir, real_model_name)
-            train_meta_path = os.path.join(model_root, "metadata", "training_metadata.json")
-            dataset_meta_path = os.path.join(model_root, "metadata", "dataset_metadata.json")
+            train_meta_path = os.path.join(model_root, config.METADATA_FOLDER_NAME, config.FILE_TRAIN_META)
+            dataset_meta_path = os.path.join(model_root, config.METADATA_FOLDER_NAME, config.FILE_DATASET_META)
             
             train_meta = self._load_json(train_meta_path)
             dataset_meta = self._load_json(dataset_meta_path)
@@ -123,13 +123,7 @@ class ComparisonReporter:
         chart_data = self.prepare_chart_data()
         
         print("📝 Compiling interactive HTML dashboard...")
-        templates_dir = os.path.join(os.getcwd(), "modules", "templates")
-        dataset_out_dir = os.path.join(os.getcwd(), "dataset_yolo_output")
         
-        generator = HTMLReportGenerator(templates_dir, self.project_dir, dataset_out_dir)
-        
-        output_path = os.path.join(self.output_dir, "comparison_report.html")
-        
+        generator = HTMLReportGenerator()
         # Pass both the raw data (for the table) and the graph data to Jinja2
-        generator.generate_comparison_html(output_path, self.data, chart_data)
-        print(f"\n✅ Comparison completed! Report available at: {output_path}")
+        generator.generate_comparison_html(os.path.join(self.output_dir, "comparison_report.html"), self.data, chart_data)

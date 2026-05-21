@@ -1,35 +1,23 @@
-import os
 import glob
 import json
-import sys
+import os
+from src.core.utils.project_utils import get_available_models
+from src.evaluation.utils.comparison_reporter import ComparisonReporter
+from src.core import config
 
-try:
-    import modules.core_visual_utils as cvu
-    from modules.comparison_reporter import ComparisonReporter
-except ImportError:
-    print("\n[ERROR] The module 'comparison_reporter.py' or 'core_visual_utils.py' was not found.\n")
-    sys.exit(1)
-
-PROJECT_DIR = cvu.PROJECT_DIR
-
-def get_available_models():
-    """Returns a list of model names in the project directory."""
-    if not os.path.exists(PROJECT_DIR):
-        return []
-    return [d for d in os.listdir(PROJECT_DIR) if os.path.isdir(os.path.join(PROJECT_DIR, d))]
 
 def find_audits_for_model(model_name, target_json="audit_metadata.json"):
     """
     Searches for metadata files in the root of the model and in saved iterations.
     Returns ONLY valid audits for the selected environment.
     """
-    model_dir = os.path.join(PROJECT_DIR, model_name)
+    model_dir = os.path.join(config.PROJECT_DIR, model_name)
     
     # 1. Search in the root (temporary / last audit)
     base_audit = os.path.join(model_dir, target_json)
     
     # 2. Search in the persistent evaluations (iter_xxx)
-    eval_audits = glob.glob(os.path.join(model_dir, "evaluations", "*", target_json))
+    eval_audits = glob.glob(os.path.join(model_dir, config.SAVED_EVAL_FOLDER_NAME, "*", target_json))
     
     all_audits = []
     if os.path.exists(base_audit):
@@ -65,7 +53,7 @@ def run_benchmark_flow(available_models):
     print("  [2] Real World (Real Photos -> real_audit_metadata.json)")
     
     env_input = input("-> Selection [1/2] (default 1): ").strip() or "1"
-    target_json = "real_audit_metadata.json" if env_input == "2" else "audit_metadata.json"
+    target_json = config.FILE_REAL_AUDIT_META if env_input == "2" else config.FILE_AUDIT_META
     env_name = "Real World" if env_input == "2" else "Simulation"
     
     print(f"\n✅ Selected mode: Benchmark in {env_name}.")
@@ -189,13 +177,13 @@ def run_sim_to_real_flow(available_models):
     model_name = available_models[int(user_input) - 1]
     
     print(f"\n🔍 Searching for reports for '{model_name}'...")
-    sim_audits = find_audits_for_model(model_name, target_json="audit_metadata.json")
-    real_audits = find_audits_for_model(model_name, target_json="real_audit_metadata.json")
+    sim_audits = find_audits_for_model(model_name, target_json=config.FILE_AUDIT_META)
+    real_audits = find_audits_for_model(model_name, target_json=config.FILE_REAL_AUDIT_META)
     
     if not sim_audits:
-        print("  ❌ No simulation audit found (audit_metadata.json).")
+        print(f"  ❌ No simulation audit found ({config.FILE_AUDIT_META}).")
     if not real_audits:
-        print("  ❌ No reality audit found (real_audit_metadata.json).")
+        print(f"  ❌ No reality audit found ({config.FILE_REAL_AUDIT_META}).")
         
     if not sim_audits or not real_audits:
         print("\n🛑 ERROR: The model needs to be evaluated in BOTH environments to measure the Gap.")
@@ -228,7 +216,7 @@ def main():
     # Load available models at the beginning
     available_models = get_available_models()
     if not available_models:
-        print(f"❌ No models found in the '{PROJECT_DIR}' directory.")
+        print(f"❌ No models found in the '{config.PROJECT_DIR}' directory.")
         return
 
     # Show main menu

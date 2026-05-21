@@ -22,9 +22,9 @@ class HTMLReportGenerator:
 
     def _get_common_context(self, experiment_name, report_title):
         """Load JSONs for template base injection"""
-        dataset_meta_path = os.path.join(self.project_dir, experiment_name, "metadata", "dataset_metadata.json")
-        train_meta_path = os.path.join(self.project_dir, experiment_name, "metadata", "training_metadata.json")
-            
+        dataset_meta_path = os.path.join(self.project_dir, experiment_name, config.METADATA_FOLDER_NAME, config.FILE_DATASET_META)
+        train_meta_path = os.path.join(self.project_dir, experiment_name, config.METADATA_FOLDER_NAME, config.FILE_TRAIN_META)
+        
         dataset_meta = self._load_json_safe(dataset_meta_path)
         train_meta = self._load_json_safe(train_meta_path)
 
@@ -83,28 +83,28 @@ class HTMLReportGenerator:
             "visuals": visuals
         }
 
-    def generate_audit_html(self, output_path, experiment_name, metrics):
+    def generate_audit_html(self, file_output_path, experiment_name, metrics):
         template = self.env.get_template('audit_template.html')
         context = self._get_common_context(experiment_name, "YOLO Audit Report")
         context["metrics"] = metrics
         
         html_content = template.render(context)
-        with open(output_path, "w", encoding='utf-8') as f:
+        with open(file_output_path, "w", encoding='utf-8') as f:
             f.write(html_content)
-        print(f"✅ Audit HTML Report generated at: {output_path}")
+        print(f"✅ Audit HTML Report generated at: {file_output_path}")
 
-    def generate_inference_html(self, output_path, experiment_name, stats, overlap_thresh):
+    def generate_inference_html(self, file_output_path, experiment_name, stats, overlap_thresh):
         template = self.env.get_template('inference_template.html')
         context = self._get_common_context(experiment_name, "Real Inference Report")
         context["stats"] = stats
         context["overlap_thresh"] = overlap_thresh
         
         html_content = template.render(context)
-        with open(output_path, "w", encoding='utf-8') as f:
+        with open(file_output_path, "w", encoding='utf-8') as f:
             f.write(html_content)
-        print(f"✅ Inference HTML Report generated at: {output_path}")
+        print(f"✅ Inference HTML Report generated at: {file_output_path}")
 
-    def generate_comparison_html(self, output_path, comparison_data, chart_data):
+    def generate_comparison_html(self, file_output_path, comparison_data, chart_data):
         template = self.env.get_template('compare_template.html')
         context = {
             "report_title": "Benchmark: Model Comparison",
@@ -115,5 +115,6 @@ class HTMLReportGenerator:
         }
         
         html_content = template.render(context)
-        with open(output_path, "w", encoding='utf-8') as f:
+        with open(file_output_path, "w", encoding='utf-8') as f:
             f.write(html_content)
+        print(f"✅ Comparison HTML Report generated at: {file_output_path}")

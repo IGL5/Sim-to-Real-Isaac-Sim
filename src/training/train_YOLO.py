@@ -13,6 +13,7 @@ from datetime import datetime
 import pandas as pd
 import shutil
 import src.core.config as config
+from src.core.utils import project_utils as pu
 
 
 TRAIN_IMGS = "images/train"
@@ -62,8 +63,7 @@ def create_yaml_config():
         raise FileNotFoundError(f"Dataset not found in: {config.PROCESSED_DATA_DIR}. Has the script 1 been executed?")
 
     # Read classes from file
-    with open(config.CLASSES_PATH, "r", encoding="utf-8") as f:
-        class_names = [line.strip() for line in f.readlines() if line.strip()]
+    class_names = pu.get_project_classes()
 
     yaml_config = {
         'path': config.PROCESSED_DATA_DIR,
@@ -88,12 +88,12 @@ def recover_misplaced_runs(exp_name):
     and moves it to the correct folder of our project.
     """
     expected_dir = os.path.join(config.PROJECT_DIR, exp_name)
-    expected_weights = os.path.join(expected_dir, 'weights', 'best.pt')
+    expected_weights = os.path.join(expected_dir, config.BEST_MODEL_SUBPATH)
     
     if os.path.exists(expected_weights):
         return
     
-    search_path = os.path.join("runs", "**", "weights", "best.pt")
+    search_path = os.path.join("runs", "**", config.BEST_MODEL_SUBPATH)
     all_weights = glob.glob(search_path, recursive=True)
     
     if not all_weights:
@@ -237,25 +237,7 @@ def select_existing_model():
         print(f"❌ ERROR: Project directory '{config.PROJECT_DIR}' not found.")
         sys.exit(1)
         
-    available_models = []
-    for d in os.listdir(config.PROJECT_DIR):
-        model_dir = os.path.join(config.PROJECT_DIR, d)
-        if os.path.isdir(model_dir):
-            weights_path = os.path.join(model_dir, "weights", "best.pt")
-            if os.path.exists(weights_path):
-                available_models.append(d)
-                
-    if not available_models:
-        print(f"❌ ERROR: No trained models found in '{config.PROJECT_DIR}'.")
-        sys.exit(1)
-
-    def get_yolo_version(model_name):
-        match = re.match(r'^yolov?(\d+)', model_name, re.IGNORECASE)
-        if match:
-            return int(match.group(1))
-        return 0 
-        
-    available_models.sort(key=get_yolo_version)
+    available_models = pu.get_available_models()
         
     print("📂 Available trained models to fine-tune:")
     for i, m in enumerate(available_models):
@@ -281,7 +263,7 @@ def select_existing_model():
                 break
             print("  ⚠️  Invalid input. Please enter a valid number.")
             
-    path_to_weights = os.path.join(config.PROJECT_DIR, base_exp_name, "weights", "best.pt")
+    path_to_weights = os.path.join(config.PROJECT_DIR, base_exp_name, config.BEST_MODEL_SUBPATH)
     
     # Extract version, size and number of the base model (e.g: 'yolov8_s_12_custom')
     match = re.search(r"^(yolo\w+)_([nsmxl])_(\d+)_", base_exp_name)
@@ -372,7 +354,7 @@ def main():
     recover_misplaced_runs(experiment_name)
 
     print("\n--- Training completed ---")
-    best_weight = os.path.join(config.PROJECT_DIR, experiment_name, 'weights', 'best.pt')
+    best_weight = os.path.join(config.PROJECT_DIR, experiment_name, config.BEST_MODEL_SUBPATH)
     print(f"💾 Best model saved at: {best_weight}")
 
     # 4. Validation (TEST SET)

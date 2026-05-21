@@ -4,11 +4,11 @@ import shutil
 import glob
 import argparse
 import sys
-import re
 from ultralytics import YOLO
 from src.core import config
 from src.evaluation.utils import data_utils as du
 from src.evaluation.utils import visual_utils as vu
+from src.core.utils import project_utils as pu
 
 # Import the class from the other file
 try:
@@ -53,7 +53,7 @@ def select_model_path(preselected_model=None):
     """
 
     if preselected_model:
-        path = os.path.join(config.PROJECT_DIR, preselected_model, "weights", "best.pt")
+        path = os.path.join(config.PROJECT_DIR, preselected_model, config.BEST_MODEL_SUBPATH)
         if os.path.exists(path):
             print(f"🤖 Auto-selected model: {preselected_model}")
             return path
@@ -69,28 +69,8 @@ def select_model_path(preselected_model=None):
         print("   (You need to train a model first using train_YOLO.py)")
         sys.exit(1)
         
-    # Loop through the project directory to find models with weights
-    available_models = []
-    for d in os.listdir(config.PROJECT_DIR):
-        model_dir = os.path.join(config.PROJECT_DIR, d)
-        if os.path.isdir(model_dir):
-            weights_path = os.path.join(model_dir, "weights", "best.pt")
-            if os.path.exists(weights_path):
-                available_models.append(d)
-                
-    if not available_models:
-        print(f"❌ ERROR: No trained models found in '{config.PROJECT_DIR}'.")
-        print("   (Folders exist, but none contain 'weights/best.pt')")
-        sys.exit(1)
-
-    def get_yolo_version(model_name):
-        match = re.match(r'^yolov?(\d+)', model_name, re.IGNORECASE)
-        if match:
-            return int(match.group(1))
-        return 0 
-        
-    available_models.sort(key=get_yolo_version)
-        
+    available_models = pu.get_available_models()
+    
     print("📂 Available trained models:")
     for i, m in enumerate(available_models):
         print(f"  [{i+1}] {m}")
@@ -115,7 +95,7 @@ def select_model_path(preselected_model=None):
                 break
             print("  ⚠️  Invalid input. Please enter a valid number.")
             
-    path = os.path.join(config.PROJECT_DIR, exp_name, "weights", "best.pt")
+    path = os.path.join(config.PROJECT_DIR, exp_name, config.BEST_MODEL_SUBPATH)
     print(f"✅ Selected model: {exp_name}\n")
     return path
 
@@ -164,12 +144,8 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         os.makedirs(path_poor, exist_ok=True)
 
     # Logic for class translation and filtering
-    dataset_classes = []
-    if os.path.exists(config.CLASSES_PATH):
-        with open(config.CLASSES_PATH, "r", encoding='utf-8') as f:
-            dataset_classes = [line.strip().lower() for line in f if line.strip()]
-    if not dataset_classes:
-        dataset_classes = ['bicycle']
+    dataset_classes = pu.get_project_classes(lowercase=True)
+    if not dataset_classes: dataset_classes = ['bicycle']
         
     dataset_class_names = {i: name.capitalize() for i, name in enumerate(dataset_classes)}
     
@@ -182,7 +158,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     
     print(f"🧠 Active classes in dataset: {dataset_class_names}")
 
-    reporter = ReportGenerator(config.EVALUATION_OUTPUT_DIR, config.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=config.CONF_THRESHOLD, class_names=dataset_class_names)
+    reporter = ReportGenerator(config.IOU_THRESHOLD, prefix=prefix, user_conf_threshold=config.CONF_THRESHOLD, class_names=dataset_class_names)
 
     img_dir = custom_img_dir if is_real else config.DATASET_TEST_IMAGES
     lbl_dir = custom_lbl_dir if is_real else config.DATASET_TEST_LABELS
@@ -273,15 +249,11 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
     if not keep:
         if os.path.exists(config.EVALUATION_OUTPUT_DIR): shutil.rmtree(config.EVALUATION_OUTPUT_DIR)
     
-    save_dir = os.path.join(config.EVALUATION_OUTPUT_DIR, "inference_real")
-    os.makedirs(save_dir, exist_ok=True)
+    images_output_dir = os.path.join(config.EVALUATION_OUTPUT_DIR, "inference_real")
+    os.makedirs(images_output_dir, exist_ok=True)
 
     # Logic for class translation and filtering
-    classes_path = os.path.join(os.getcwd(), "classes.txt")
-    dataset_classes = []
-    if os.path.exists(classes_path):
-        with open(classes_path, "r", encoding='utf-8') as f:
-            dataset_classes = [line.strip().lower() for line in f if line.strip()]
+    dataset_classes = pu.get_project_classes(lowercase=True)
     if not dataset_classes: dataset_classes = ['bicycle']
         
     dataset_class_names = {i: name.capitalize() for i, name in enumerate(dataset_classes)}
@@ -292,8 +264,9 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
         if mod_name.lower() in dataset_classes:
             model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
     
-    reporter = InferenceReportGenerator(save_dir, overlap_threshold=config.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
-    overlaps_dir_path = reporter.overlaps_dir
+    reporter = InferenceReportGenerator(overlap_threshold=config.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
+    overlaps_dir_path = os.path.join(reporter.plots_dir, "suspicious_overlaps")
+    os.makedirs(overlaps_dir_path, exist_ok=True)
     
     image_files = [f for f in glob.glob(os.path.join(source_folder, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     print(f"📸 Processing {len(image_files)} images...")
@@ -301,7 +274,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
     for i, img_path in enumerate(image_files):
         if i >= config.LIMIT_IMAGES_PER_VIS: break
         filename = os.path.basename(img_path)
-        
+         
         try:
             img_orig = cv2.imread(img_path)
             if img_orig is None: continue
@@ -329,7 +302,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             
             # Draw with our own colors and translated labels
             img_drawn = vu.draw_boxes(img_orig.copy(), pred_boxes, color=(255, 0, 0), confidences=confidences, classes=pred_classes, class_names=dataset_class_names)
-            cv2.imwrite(os.path.join(save_dir, f"PRED_{filename}"), img_drawn)
+            cv2.imwrite(os.path.join(images_output_dir, f"PRED_{filename}"), img_drawn)
             
         except Exception as e:
             print(f"Error processing {img_path}: {e}")

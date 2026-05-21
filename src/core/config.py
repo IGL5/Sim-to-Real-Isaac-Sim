@@ -11,7 +11,10 @@ METRICS_DIR = "data/05_metrics"
 TEMPLATES_DIR = "templates"
 
 # Temporary directories
+XAI_OUTPUT_DIR = os.path.join(METRICS_DIR, "xai_report")
+COMPARISON_OUTPUT_DIR = os.path.join(METRICS_DIR, "comparison_report")
 EVALUATION_OUTPUT_DIR = os.path.join(METRICS_DIR, "temp_eval")
+PLOTS_EVAL_DIR = os.path.join(EVALUATION_OUTPUT_DIR, "plots")
 
 # Simulation Camera Name
 CAMERA_NAME = "DroneCamera"
@@ -24,8 +27,12 @@ TEST_RATIO  = 0.1
 # Dataset paths
 DATASET_TEST_IMAGES = os.path.join(PROCESSED_DATA_DIR, "images", "test")
 DATASET_TEST_LABELS = os.path.join(PROCESSED_DATA_DIR, "labels", "test")
+DATASET_VAL_IMAGES = os.path.join(PROCESSED_DATA_DIR, "images", "val")
 RAW_IMAGES_SUBPATH = os.path.join(CAMERA_NAME, "rgb")
 RAW_LABELS_SUBPATH = os.path.join(CAMERA_NAME, "object_detection")
+
+# Model paths
+BEST_MODEL_SUBPATH = "weights/best.pt"
 
 # Metadata names
 METADATA_FOLDER_NAME = "metadata"
@@ -47,6 +54,19 @@ CLASSES_PATH = os.path.join("src", "core", "classes.txt")
 
 # Evaluation defaults
 LIMIT_IMAGES_PER_VIS = 100
+
+# Plots filenames
+CONFUSION_MATRIX_FILENAME = "confusion_matrix.png"
+CONFIDENCE_DIST_FILENAME = "confidence_distribution.png"
+HEATMAP_FILENAME = "heatmap.png"
+PR_CURVE_FILENAME = "pr_curve.png"
+F1_CURVE_FILENAME = "f1_curve.png"
+
+# XAI file names
+ORIGINAL_XAI_PATH = os.path.join(XAI_OUTPUT_DIR, "01_Original_Image.jpg")
+PREDICTIONS_XAI_PATH = os.path.join(XAI_OUTPUT_DIR, "00_Predictions_vs_GroundTruth.jpg")
+STRUCTURAL_XAI_PATH = os.path.join(XAI_OUTPUT_DIR, "02_Structural_Analysis.png")
+HEATMAPS_XAI_PATH = os.path.join(XAI_OUTPUT_DIR, "heatmaps")
 
 # Thresholds
 CONF_THRESHOLD = 0.4

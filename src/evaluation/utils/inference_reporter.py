@@ -1,19 +1,17 @@
 import os
 import numpy as np
 import json
-from datetime import datetime
 from collections import defaultdict
-from . import core_visual_utils as cvu
-from .html_generator import HTMLReportGenerator
-from . import plot_generator
+from src.evaluation.utils.html_generator import HTMLReportGenerator
+from src.evaluation.utils import plot_generator
+from src.core.utils import math_utils as mu
+from src.core import config
 
 class InferenceReportGenerator:
-    def __init__(self, output_dir, overlap_threshold=0.5, class_names=None):
-        self.output_dir = output_dir
-        self.plots_dir = os.path.join(output_dir, "..", "plots", "inference")
-        self.overlaps_dir = os.path.join(self.plots_dir, "suspicious_overlaps_imgs")
+    def __init__(self, overlap_threshold=0.5, class_names=None):
+        self.output_dir = config.EVALUATION_OUTPUT_DIR
+        self.plots_dir = os.path.join(config.PLOTS_EVAL_DIR, "inference")
         os.makedirs(self.plots_dir, exist_ok=True)
-        os.makedirs(self.overlaps_dir, exist_ok=True)
         
         self.overlap_threshold = overlap_threshold
         self.class_names = class_names if class_names else {}
@@ -66,7 +64,7 @@ class InferenceReportGenerator:
             idx_list = [i for i, c in enumerate(pred_classes) if c == c_id]
             if len(idx_list) > 1:
                 class_boxes = [pred_boxes[i] for i in idx_list]
-                iou_matrix = cvu.calculate_iou_matrix(class_boxes, class_boxes)
+                iou_matrix = mu.calculate_iou_matrix(class_boxes, class_boxes)
                 pairs = np.argwhere(np.triu(iou_matrix, k=1) > self.overlap_threshold)
                 for p in pairs:
                     problematic_pairs_indices.append((idx_list[p[0]], idx_list[p[1]]))
@@ -90,14 +88,14 @@ class InferenceReportGenerator:
             plot_generator.plot_confidence_histogram(
                 self.stats["confidences"], [], [], [], 
                 threshold=0.0, 
-                output_path=os.path.join(self.plots_dir, "inference_conf_dist.png"),
+                output_path=os.path.join(self.plots_dir, f"inference_{config.CONFIDENCE_DIST_FILENAME}"),
                 title="Real World Confidence Distribution (Global)"
             )
 
         # Global Heatmap
         plot_generator.plot_normalized_heatmap(
             self.stats["bbox_centers_norm"],
-            os.path.join(self.plots_dir, "inference_heatmap.png"),
+            os.path.join(self.plots_dir, f"inference_{config.SPATIAL_HEATMAP_FILENAME}"),
             title="Normalized Detection Heatmap (Global)",
             cmap='magma'
         )
@@ -137,8 +135,8 @@ class InferenceReportGenerator:
                 "detections": s["detections"],
                 "avg_confidence": mean_conf,
                 "safe_name": safe_name,
-                "confidence_stats": cvu.calculate_1d_stats(s["confidences"]),
-                "spatial_stats": cvu.calculate_spatial_stats(s["bbox_centers"])
+                "confidence_stats": mu.calculate_1d_stats(s["confidences"]),
+                "spatial_stats": mu.calculate_spatial_stats(s["bbox_centers"])
             }
 
         stats_dict = {
@@ -148,8 +146,8 @@ class InferenceReportGenerator:
             "total_overlaps": sum(event["count"] for event in self.stats["overlap_events"]),
             "overlap_events": self.stats["overlap_events"],
             "per_class": class_summary,
-            "confidence_stats": cvu.calculate_1d_stats(self.stats["confidences"]),
-            "spatial_stats": cvu.calculate_spatial_stats(self.stats["bbox_centers_norm"])
+            "confidence_stats": mu.calculate_1d_stats(self.stats["confidences"]),
+            "spatial_stats": mu.calculate_spatial_stats(self.stats["bbox_centers_norm"])
         }
 
         avg_pre = np.mean(self.stats["speeds"]["preprocess"]) if self.stats["speeds"]["preprocess"] else 0
@@ -164,12 +162,11 @@ class InferenceReportGenerator:
         }
 
         # Save JSON and call Jinja
-        inference_json_path = os.path.join(self.output_dir, "..", "inference_metadata.json")
+        inference_json_path = os.path.join(self.output_dir, config.FILE_INFERENCE_META)
         try:
             with open(inference_json_path, "w", encoding='utf-8') as f:
                 json.dump({"stats": stats_dict}, f, indent=4)
         except: pass
-
-        templates_dir = os.path.join(os.getcwd(), "modules", "templates")
-        generator = HTMLReportGenerator(templates_dir, cvu.PROJECT_DIR, os.path.join(os.getcwd(), "dataset_yolo_output"))
-        generator.generate_inference_html(os.path.join(self.output_dir, "..", "inference_report.html"), experiment_name, stats_dict, self.overlap_threshold)
+        
+        generator = HTMLReportGenerator()
+        generator.generate_inference_html(os.path.join(self.output_dir, "inference_report.html"), experiment_name, stats_dict, self.overlap_threshold)
