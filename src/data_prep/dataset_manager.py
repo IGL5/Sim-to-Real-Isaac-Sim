@@ -19,16 +19,6 @@ if not CLASES:
     print("   Asegúrate de ejecutar el simulador al menos una vez para generarlo.")
     exit(1)
 
-def change_coordinates(size, box):
-    """ Converts from (Xmin, Xmax, Ymin, Ymax) to YOLO (CenterX, CenterY, W, H) normalized """
-    dw = 1. / size[0]
-    dh = 1. / size[1]
-    x = (box[0] + box[1]) / 2.0
-    y = (box[2] + box[3]) / 2.0
-    w = box[1] - box[0]
-    h = box[3] - box[2]
-    return (x * dw, y * dh, w * dw, h * dh)
-
 def get_dir_size(path):
     """ Calculates the total size of a directory in bytes """
     total = 0
@@ -71,7 +61,7 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
     # 1. Localize image
     img_path = None
     img_ext = None
-    for ext in [".png", ".jpg", ".jpeg"]:
+    for ext in config.VALID_IMAGE_EXTENSIONS:
         temp_path = os.path.join(IMAGES_DIR, filename_base + ext)
         if os.path.exists(temp_path):
             img_path = temp_path
@@ -162,7 +152,7 @@ def process_pair(filename_base, subset_name, unique_prefix, move_mode=False, is_
                 xmin, ymin = float(parts[4]), float(parts[5])
                 xmax, ymax = float(parts[6]), float(parts[7])
                 
-                bbox = change_coordinates((width, height), (xmin, xmax, ymin, ymax))
+                bbox = mu.corners_to_yolo(xmin, xmax, ymin, ymax, width, height)
                 yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
 
                 w_k, h_k = bbox[2], bbox[3]

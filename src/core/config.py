@@ -55,6 +55,9 @@ CLASSES_PATH = os.path.join("src", "core", "classes.txt")
 # Evaluation defaults
 LIMIT_IMAGES_PER_VIS = 100
 
+# Supported Extensions
+VALID_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg')
+
 # Plots filenames
 CONFUSION_MATRIX_FILENAME = "confusion_matrix.png"
 CONFIDENCE_DIST_FILENAME = "confidence_distribution.png"

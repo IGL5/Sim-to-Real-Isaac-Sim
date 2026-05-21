@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from ultralytics import YOLO
 from src.core.utils import project_utils as pu
+from src.core.utils import math_utils as mu
 from src.core import config
 
 
@@ -54,11 +55,10 @@ def select_image():
     elif ruta:
         print("❌ Path not found. Using random image...")
             
-    extensiones = ('.jpg', '.jpeg', '.png')
     images = [
         os.path.join(config.DATASET_VAL_IMAGES, f) 
         for f in os.listdir(config.DATASET_VAL_IMAGES) 
-        if f.lower().endswith(extensiones)
+        if f.lower().endswith(config.VALID_IMAGE_EXTENSIONS)
     ]
 
     if not images:
@@ -98,10 +98,7 @@ def analyze_spatial(model_path, img_path):
                 parts = line.strip().split()
                 if len(parts) >= 5:
                     xc, yc, bw, bh = map(float, parts[1:5])
-                    x1 = int((xc - bw / 2) * w)
-                    y1 = int((yc - bh / 2) * h)
-                    x2 = int((xc + bw / 2) * w)
-                    y2 = int((yc + bh / 2) * h)
+                    x1, y1, x2, y2 = mu.yolo_to_corners(xc, yc, bw, bh, w, h)
                     cv2.rectangle(img_plotted, (x1, y1), (x2, y2), (0, 255, 0), 3)
                     cv2.putText(img_plotted, "GT Real", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     

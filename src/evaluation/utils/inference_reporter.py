@@ -150,16 +150,7 @@ class InferenceReportGenerator:
             "spatial_stats": mu.calculate_spatial_stats(self.stats["bbox_centers_norm"])
         }
 
-        avg_pre = np.mean(self.stats["speeds"]["preprocess"]) if self.stats["speeds"]["preprocess"] else 0
-        avg_inf = np.mean(self.stats["speeds"]["inference"]) if self.stats["speeds"]["inference"] else 0
-        avg_post = np.mean(self.stats["speeds"]["postprocess"]) if self.stats["speeds"]["postprocess"] else 0
-        total_ms = avg_pre + avg_inf + avg_post
-
-        stats_dict["speed_stats"] = {
-            "preprocess_ms": round(avg_pre, 2), "inference_ms": round(avg_inf, 2),
-            "postprocess_ms": round(avg_post, 2), "total_ms": round(total_ms, 2),
-            "fps": round(1000 / total_ms, 2) if total_ms > 0 else 0
-        }
+        stats_dict["speed_stats"] = mu.calculate_speed_stats(self.stats["speeds"])
 
         # Save JSON and call Jinja
         inference_json_path = os.path.join(self.output_dir, config.FILE_INFERENCE_META)

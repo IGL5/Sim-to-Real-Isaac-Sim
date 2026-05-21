@@ -311,16 +311,7 @@ class ReportGenerator:
         }
         metrics_dict["spatial_stats"] = mu.calculate_spatial_stats(self.global_stats["bbox_centers"])
 
-        avg_pre = np.mean(self.global_stats["speeds"]["preprocess"]) if self.global_stats["speeds"]["preprocess"] else 0
-        avg_inf = np.mean(self.global_stats["speeds"]["inference"]) if self.global_stats["speeds"]["inference"] else 0
-        avg_post = np.mean(self.global_stats["speeds"]["postprocess"]) if self.global_stats["speeds"]["postprocess"] else 0
-        total_ms = avg_pre + avg_inf + avg_post
-
-        metrics_dict["speed_stats"] = {
-            "preprocess_ms": round(avg_pre, 2), "inference_ms": round(avg_inf, 2),
-            "postprocess_ms": round(avg_post, 2), "total_ms": round(total_ms, 2),
-            "fps": round(1000 / total_ms, 2) if total_ms > 0 else 0
-        }
+        metrics_dict["speed_stats"] = mu.calculate_speed_stats(self.global_stats["speeds"])
 
         audit_metadata = {
             "audit_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

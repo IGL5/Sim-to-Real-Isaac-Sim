@@ -163,7 +163,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     img_dir = custom_img_dir if is_real else config.DATASET_TEST_IMAGES
     lbl_dir = custom_lbl_dir if is_real else config.DATASET_TEST_LABELS
     
-    image_files = [f for f in glob.glob(os.path.join(img_dir, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    image_files = [f for f in glob.glob(os.path.join(img_dir, "*")) if f.lower().endswith(config.VALID_IMAGE_EXTENSIONS)]
     print(f"📸 Processing {len(image_files)} images...")
 
     for i, img_path in enumerate(image_files):
@@ -268,7 +268,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
     overlaps_dir_path = os.path.join(reporter.plots_dir, "suspicious_overlaps")
     os.makedirs(overlaps_dir_path, exist_ok=True)
     
-    image_files = [f for f in glob.glob(os.path.join(source_folder, "*")) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    image_files = [f for f in glob.glob(os.path.join(source_folder, "*")) if f.lower().endswith(config.VALID_IMAGE_EXTENSIONS)]
     print(f"📸 Processing {len(image_files)} images...")
     
     for i, img_path in enumerate(image_files):

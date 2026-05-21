@@ -56,3 +56,36 @@ def calculate_spatial_stats(centers):
         "dispersion_x": round(float(np.std(c_arr[:, 0])), 4),
         "dispersion_y": round(float(np.std(c_arr[:, 1])), 4)
     }
+
+def yolo_to_corners(xc, yc, w, h, img_w, img_h):
+    """ Converts from YOLO normalized to absolute pixel coordinates (x1, y1, x2, y2) """
+    x1 = int((xc - w / 2) * img_w)
+    y1 = int((yc - h / 2) * img_h)
+    x2 = int((xc + w / 2) * img_w)
+    y2 = int((yc + h / 2) * img_h)
+    return x1, y1, x2, y2
+
+def corners_to_yolo(xmin, xmax, ymin, ymax, img_w, img_h):
+    """ Converts from absolute corners to YOLO normalized format (xc, yc, w, h) """
+    dw, dh = 1.0 / img_w, 1.0 / img_h
+    xc = (xmin + xmax) / 2.0
+    yc = (ymin + ymax) / 2.0
+    w = xmax - xmin
+    h = ymax - ymin
+    return xc * dw, yc * dh, w * dw, h * dh
+
+def calculate_speed_stats(speeds_dict):
+    """ Calculates average and FPS stats from raw timings """
+    import numpy as np
+    avg_pre = np.mean(speeds_dict["preprocess"]) if speeds_dict.get("preprocess") else 0
+    avg_inf = np.mean(speeds_dict["inference"]) if speeds_dict.get("inference") else 0
+    avg_post = np.mean(speeds_dict["postprocess"]) if speeds_dict.get("postprocess") else 0
+    total_ms = avg_pre + avg_inf + avg_post
+
+    return {
+        "preprocess_ms": round(float(avg_pre), 2),
+        "inference_ms": round(float(avg_inf), 2),
+        "postprocess_ms": round(float(avg_post), 2),
+        "total_ms": round(float(total_ms), 2),
+        "fps": round(1000.0 / total_ms, 2) if total_ms > 0 else 0
+    }
