@@ -2,11 +2,11 @@ import os
 import glob
 import argparse
 import cv2
-import json
 import numpy as np
 import shutil
 from pathlib import Path
 import src.core.config as config
+from src.core.metadata.clean_builder import CleaningMetadata
 
 # ==========================================
 # 1. CORE LOGIC / ORCHESTRATOR
@@ -58,7 +58,16 @@ def clean_dataset(args):
 
     print_summary(stats, args)
     if not args.dry:
-        update_metadata(args.dir, stats, args)
+        meta_path = os.path.join(args.dir, config.FILE_GEN_META)
+        meta_manager = CleaningMetadata(meta_path)
+        
+        meta_manager.record_cleaning_stats(
+            stats=stats, 
+            move_empty_flag=args.move_empty, 
+            clean_labels_flag=args.clean_labels
+        )
+        meta_manager.set_timestamp(key_name=config.UPDATE_TIMESTAMP_KEY)
+        meta_manager.commit()
 
 # ==========================================
 # 2. FRAME PROCESSING FLOW
@@ -325,64 +334,6 @@ def print_summary(stats, args):
 
     if args.dry:
         print("⚠️  DRY-RUN: No files were actually modified.")
-
-def update_metadata(data_dir, stats, args):
-    metadata_path = os.path.join(data_dir, "generation_metadata.json")
-    if os.path.exists(metadata_path):
-        with open(metadata_path, 'r', encoding='utf-8') as f:
-            meta = json.load(f)
-        
-        # Reference to the cleaning block
-        cleaning_meta = meta.setdefault("cleaning", {})
-        
-        # 1. ACCUMULATE the deleted ones
-        cleaning_meta["corrupted_deleted"] = cleaning_meta.get("corrupted_deleted", 0) + stats["corrupted"]
-        cleaning_meta["empty_deleted"] = cleaning_meta.get("empty_deleted", 0) + stats["empty"]
-        
-        # 2. OVERWRITE valid_kept
-        cleaning_meta["valid_kept"] = stats["kept"]
-        
-        # Save if move_empty has ever been used
-        if args.move_empty:
-            cleaning_meta["empty_were_moved"] = True
-            
-        # 3. ONLY update the label metrics if we are in --clean_labels mode
-        if args.clean_labels:
-            prev_labels = cleaning_meta.get("labels_stats", {})
-            prev_reasons = prev_labels.get("removal_reasons", {})
-            
-            # A) Accumulate the deleted ones and the reasons (because they physically disappear from the .txt)
-            accumulated_removed = prev_labels.get("labels_removed", 0) + stats["labels_removed"]
-            
-            # B) Calculate the TOTAL original historical (The ones read today + the ones already deleted yesterday)
-            real_total_labels = stats["total_labels"] + prev_labels.get("labels_removed", 0)
-            
-            # C) Calculate the percentage on the real historical total
-            perc_removed = 0.0
-            if real_total_labels > 0:
-                perc_removed = round((accumulated_removed / real_total_labels) * 100, 2)
-            
-            cleaning_meta["labels_stats"] = {
-                "total_labels_found": real_total_labels,
-                "labels_removed": accumulated_removed,
-                # D) The saved ones are NOT accumulated
-                "labels_saved_by_whitelist": stats["labels_saved"],
-                "percentage_removed_percent": perc_removed,
-                "removal_reasons": {
-                    "occlusion": prev_reasons.get("occlusion", 0) + stats["reason_occ"],
-                    "truncation": prev_reasons.get("truncation", 0) + stats["reason_trunc"],
-                    "small_area": prev_reasons.get("small_area", 0) + stats["reason_area"],
-                    "edge_cut": prev_reasons.get("edge_cut", 0) + stats["reason_edge"],
-                    "giant_bbox": prev_reasons.get("giant_bbox", 0) + stats["reason_giant"]
-                }
-            }
-        
-        # Update the total number of valid frames generated in 'performance' if it exists
-        if "performance" in meta:
-            meta["performance"]["total_valid_frames_after_cleaning"] = stats["kept"]
-        
-        with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(meta, f, indent=4)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Dataset cleaner for Isaac Sim datasets")

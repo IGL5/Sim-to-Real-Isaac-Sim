@@ -8,6 +8,7 @@ from datetime import datetime
 import src.core.config as config
 from src.core.utils import math_utils as mu
 from src.core.utils import project_utils as pu
+from src.core.metadata.dataset_builder import DatasetMetadata
 
 # --- DATA IMPORT PATHS ---
 LABELS_KITTI = ""
@@ -18,18 +19,6 @@ CLASES = pu.get_project_classes()
 if not CLASES:
     print("   Asegúrate de ejecutar el simulador al menos una vez para generarlo.")
     exit(1)
-
-def get_dir_size(path):
-    """ Calculates the total size of a directory in bytes """
-    total = 0
-    if os.path.exists(path):
-        with os.scandir(path) as it:
-            for entry in it:
-                if entry.is_file():
-                    total += entry.stat().st_size
-                elif entry.is_dir():
-                    total += get_dir_size(entry.path)
-    return total
 
 def create_dir_structure(append_mode):
     """ 
@@ -318,68 +307,22 @@ def main():
     print(f"New files added: {total_added_imgs}")
     print(f"Dataset located in: {args.source}")
 
-    # 6. Get Generation Metadata
+    # 6. Update Dataset Metadata
+    meta_manager = DatasetMetadata(config.DATASET_METADATA_PATH)
+    
     source_meta_path = os.path.join(args.source, config.FILE_GEN_META)
-    batch_meta = {"batch_id": batch_prefix} # Fallback if it doesn't exist
+
+    meta_manager.record_session(
+        batch_id=batch_prefix,
+        source_meta_path=source_meta_path,
+        train_stats=train_stats,
+        val_stats=val_stats,
+        test_stats=test_stats,
+        total_added_imgs=total_added_imgs
+    )
     
-    if os.path.exists(source_meta_path):
-        with open(source_meta_path, 'r', encoding='utf-8') as f:
-            batch_meta.update(json.load(f))
-            
-    # Add the split data to the previous metadata
-    batch_meta["yolo_split"] = {
-        "train": train_stats,
-        "val": val_stats,
-        "test": test_stats,
-        "total_added": total_added_imgs
-    }
-
-    # Create new dataset metadata dictionary
-    master_meta = {
-        "global_totals": {
-            "train": {"images": 0, "objects": 0, "backgrounds": 0},
-            "val": {"images": 0, "objects": 0, "backgrounds": 0},
-            "test": {"images": 0, "objects": 0, "backgrounds": 0},
-            "total_images": 0,
-            "total_objects": 0,
-            "total_backgrounds": 0
-        },
-        "sessions": []
-    }
-
-    # If append mode, load the previous metadata
-    if args.append and os.path.exists(config.DATASET_METADATA_PATH):
-        with open(config.DATASET_METADATA_PATH, 'r', encoding='utf-8') as f:
-            loaded_meta = json.load(f)
-            if isinstance(loaded_meta.get("global_totals", {}).get("train"), dict):
-                master_meta = loaded_meta
-
-    master_meta["sessions"].append(batch_meta)
-    
-    for split, stats in [("train", train_stats), ("val", val_stats), ("test", test_stats)]:
-        master_meta["global_totals"][split]["images"] += stats["images"]
-        master_meta["global_totals"][split]["objects"] += stats["objects"]
-        master_meta["global_totals"][split]["backgrounds"] += stats["backgrounds"]
-        
-        master_meta["global_totals"]["total_images"] += stats["images"]
-        master_meta["global_totals"]["total_objects"] += stats["objects"]
-        master_meta["global_totals"]["total_backgrounds"] += stats["backgrounds"]
-
-    processed_images_dir = os.path.join(config.PROCESSED_DATA_DIR, 'images')
-    total_size_bytes = get_dir_size(processed_images_dir)
-    total_size_mb = round(total_size_bytes / (1024 * 1024), 2)
-    
-    total_imgs = master_meta["global_totals"]["total_images"]
-    avg_img_mb = round(total_size_mb / total_imgs, 2) if total_imgs > 0 else 0
-    
-    master_meta["global_totals"]["size_mb"] = total_size_mb
-    master_meta["global_totals"]["avg_image_mb"] = avg_img_mb
-
-    # Save Master Metadata
-    with open(config.DATASET_METADATA_PATH, 'w', encoding='utf-8') as f:
-        json.dump(master_meta, f, indent=4)
-        
-    print(f"🧠 Master Metadata saved/updated in: {config.DATASET_METADATA_PATH}")
+    meta_manager.set_timestamp(key_name=config.UPDATE_TIMESTAMP_KEY)
+    meta_manager.commit()
 
 
 if __name__ == "__main__":

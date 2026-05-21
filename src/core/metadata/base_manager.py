@@ -14,15 +14,18 @@ class BaseMetadataManager:
 
     def _load_existing(self):
         """ Loads the JSON if it already exists to avoid overwriting data from other passes. """
-        if os.path.exists(self.filepath):
+        self.data = self.read_json(self.filepath)
+
+    @staticmethod
+    def read_json(filepath):
+        """Reads an external JSON file and returns its dictionary. Returns {} if not found or error."""
+        if os.path.exists(filepath):
             try:
-                with open(self.filepath, 'r', encoding='utf-8') as f:
-                    self.data = json.load(f)
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    return json.load(f)
             except Exception as e:
-                print(f"⚠️ [BaseMetadataManager] Error reading existing JSON from {self.filepath}: {e}")
-                self.data = {}
-        else:
-            self.data = {}
+                print(f"⚠️ [BaseMetadataManager] Error reading JSON from {filepath}: {e}")
+        return {}
 
     def update_section(self, section_name, payload):
         """

@@ -25,9 +25,11 @@ VAL_RATIO   = 0.2
 TEST_RATIO  = 0.1
 
 # Dataset paths
-DATASET_TEST_IMAGES = os.path.join(PROCESSED_DATA_DIR, "images", "test")
-DATASET_TEST_LABELS = os.path.join(PROCESSED_DATA_DIR, "labels", "test")
-DATASET_VAL_IMAGES = os.path.join(PROCESSED_DATA_DIR, "images", "val")
+DATASET_IMAGES = os.path.join(PROCESSED_DATA_DIR, "images")
+DATASET_LABELS = os.path.join(PROCESSED_DATA_DIR, "labels")
+DATASET_TEST_IMAGES = os.path.join(DATASET_IMAGES, "test")
+DATASET_TEST_LABELS = os.path.join(DATASET_LABELS, "test")
+DATASET_VAL_IMAGES = os.path.join(DATASET_IMAGES, "val")
 RAW_IMAGES_SUBPATH = os.path.join(CAMERA_NAME, "rgb")
 RAW_LABELS_SUBPATH = os.path.join(CAMERA_NAME, "object_detection")
 
@@ -36,7 +38,7 @@ BEST_MODEL_SUBPATH = "weights/best.pt"
 
 # Metadata timestamp keys
 GENERATION_TIMESTAMP_KEY = "generation_date"
-UPDATE_TIMESTAMP_KEY = "update_date"
+UPDATE_TIMESTAMP_KEY = "last_updated"
 
 # Metadata names
 METADATA_FOLDER_NAME = "metadata"
