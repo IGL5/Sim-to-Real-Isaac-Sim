@@ -37,6 +37,7 @@ BEST_MODEL_SUBPATH = "weights/best.pt"
 
 # Metadata timestamp keys
 GENERATION_TIMESTAMP_KEY = "generation_date"
+TRAIN_TIMESTAMP_KEY = "train_date"
 UPDATE_TIMESTAMP_KEY = "last_updated"
 
 # Metadata names

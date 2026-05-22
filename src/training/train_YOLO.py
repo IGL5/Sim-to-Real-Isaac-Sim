@@ -4,15 +4,14 @@ from ultralytics import YOLO
 import torch
 import argparse
 import time
-import json
 import re
 import sys
 import platform
 from datetime import datetime
-import pandas as pd
 import shutil
 import src.core.config as config
 from src.core.utils import project_utils as pu
+from src.core.metadata.train_builder import TrainMetadata
 
 
 TRAIN_IMGS = "images/train"
@@ -373,108 +372,46 @@ def main():
         onnx_path = None
 
     # 6. Compile metadata
-    print("\n📝 Compiling training metadata...")
-    end_time = time.time()
-    duration_secs = end_time - start_time
-    duration_formatted = time.strftime("%H:%M:%S", time.gmtime(duration_secs))
-
-    epochs_run = args.epochs
-    best_epoch = -1
-
-    results_csv_path = Path(config.PROJECT_DIR) / experiment_name / 'results.csv'
-    if results_csv_path.exists():
-        try:
-            df = pd.read_csv(str(results_csv_path))
-            epochs_run = len(df)
-            
-            df.columns = df.columns.str.strip()
-            
-            if 'metrics/mAP50(B)' in df.columns and 'metrics/mAP50-95(B)' in df.columns:
-                fitness = (df['metrics/mAP50(B)'] * 0.1) + (df['metrics/mAP50-95(B)'] * 0.9)
-                best_idx = fitness.idxmax()
-                
-                if 'epoch' in df.columns:
-                    best_epoch = int(df.loc[best_idx, 'epoch'])
-                else:
-                    best_epoch = int(best_idx) + 1
-        except Exception as e:
-            print(f"⚠️ Could not read results.csv to find best epoch: {e}")
-
-    if epochs_run < args.epochs and best_epoch == -1:
-        best_epoch = epochs_run - args.patience
-
-    args_yaml_path = Path(config.PROJECT_DIR) / experiment_name / 'args.yaml'
-    aug_data = {}
-    if args_yaml_path.exists():
-        try:
-            with open(args_yaml_path, 'r', encoding='utf-8') as f:
-                yolo_args = yaml.safe_load(f)
-                aug_data = {
-                    "mosaic": yolo_args.get("mosaic", 1.0),
-                    "mixup": yolo_args.get("mixup", 0.0),
-                    "degrees": yolo_args.get("degrees", 0.0),
-                    "translate": yolo_args.get("translate", 0.1),
-                    "scale": yolo_args.get("scale", 0.5),
-                    "fliplr": yolo_args.get("fliplr", 0.5),
-                    "hsv_s": yolo_args.get("hsv_s", 0.7)
-                }
-        except Exception as e:
-            print(f"⚠️ Could not parse args.yaml: {e}")
-
-    
-    weight_size_mb = 0.0
-    if Path(best_weight).exists():
-        weight_size_mb = round(Path(best_weight).stat().st_size / (1024 * 1024), 2)
-
-    training_metadata = {
-        "experiment_info": {
-            "project_name": config.PROJECT_NAME,
-            "experiment_name": experiment_name,
-            "start_date": start_date_str,
-            "duration_seconds": round(duration_secs, 2),
-            "duration_formatted": duration_formatted
-        },
-        "hardware": {
-            "device": "GPU" if device == 0 else "CPU",
-            "device_name": device_name
-        },
-        "hyperparameters": {
-            "model_base": model_type,
-            "epochs_requested": args.epochs,
-            "epochs_run": epochs_run,
-            "best_epoch": best_epoch,
-            "patience": args.patience,
-            "freeze_layers": args.freeze,
-            "learning_rate": args.lr0,
-            "img_size": IMG_SIZE,
-            "batch_size": BATCH_SIZE,
-            "workers": WORKERS
-        },
-        "data_augmentation": aug_data,
-        "metrics_test_set": {
-            "mAP50_95": round(float(metrics.box.map), 4),
-            "mAP50": round(float(metrics.box.map50), 4)
-        },
-        "artifacts": {
-            "best_weights": best_weight,
-            "best_weights_mb": weight_size_mb,
-            "onnx_model": onnx_path
-        }
-    }
-
-    # Save metadata
-    metadata_dir = Path(config.PROJECT_DIR) / experiment_name / config.METADATA_FOLDER_NAME
+    experiment_dir = Path(config.PROJECT_DIR) / experiment_name
+    metadata_dir = experiment_dir / config.METADATA_FOLDER_NAME
     metadata_dir.mkdir(parents=True, exist_ok=True)
     metadata_path = metadata_dir / config.FILE_TRAIN_META
 
-    with open(metadata_path, 'w', encoding='utf-8') as f:
-        json.dump(training_metadata, f, indent=4)
+    meta_manager = TrainMetadata(metadata_path)
+    
+    meta_manager.record_experiment_info(
+        project_name=config.PROJECT_NAME,
+        experiment_name=experiment_name,
+        start_time_secs=start_time
+    )
 
-    dataset_metadata = Path(config.DATASET_METADATA_PATH)
-    if dataset_metadata.exists():
-        shutil.copy2(str(dataset_metadata), str(metadata_dir / config.FILE_DATASET_META))
+    meta_manager.record_hardware(
+        device_type="GPU" if device == 0 else "CPU",
+        device_name=device_name
+    )
 
-    print(f"💾 Training and Dataset metadata saved at: {metadata_dir}")
+    meta_manager.extract_yolo_training_data(
+        model_base=model_type,
+        epochs_requested=args.epochs,
+        experiment_dir=experiment_dir
+    )
+
+    meta_manager.record_metrics(
+        map50_95=metrics.box.map,
+        map50=metrics.box.map50
+    )
+
+    meta_manager.record_artifacts(
+        best_weights_path=best_weight,
+        onnx_model_path=onnx_path
+    )
+
+    dataset_meta_src = Path(config.DATASET_METADATA_PATH)
+    if dataset_meta_src.exists():
+        shutil.copy2(dataset_meta_src, metadata_dir / config.FILE_DATASET_META)
+
+    meta_manager.commit()
+    print(f"🎉 Training cycle fully documented at: {metadata_path}")
 
 
 if __name__ == '__main__':
