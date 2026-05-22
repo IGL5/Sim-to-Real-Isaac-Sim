@@ -1,5 +1,7 @@
 from pathlib import Path
 from src.core.metadata.base_manager import BaseMetadataManager
+from src.core.metadata.sim_builder import SimulationMetadata
+from src.core.metadata.clean_builder import CleaningMetadata
 from src.core import config
 
 
@@ -73,3 +75,60 @@ class DatasetMetadata(BaseMetadataManager):
         
         self.data["global_totals"]["size_mb"] = total_size_mb
         self.data["global_totals"]["avg_image_mb"] = avg_img_mb
+
+    # --- THE GETTER FOR THE VIEW (HTML) ---
+    def get_html_summary(self):
+        """
+        Actúa como un ViewModel. Extrae el EDA de la última sesión
+        y calcula las variables relativas de dibujo (visuals) para el HTML.
+        """
+        import math
+        
+        summary = {
+            "global_totals": self.data.get("global_totals", {}),
+            "latest_session": None,
+            "latest_eda": None,
+            "visuals": {}
+        }
+
+        sessions = self.data.get("sessions", [])
+        if not sessions: return summary
+
+        # Recuperar la última sesión y su EDA
+        latest_session = sessions[-1]
+        summary["latest_session"] = latest_session
+
+        summary["sim_visuals"] = SimulationMetadata.get_html_summary_from_session(latest_session)
+        summary["clean_stats"] = CleaningMetadata.get_html_summary_from_session(latest_session)
+        
+        latest_eda = latest_session.get("yolo_split", {}).get("train", {}).get("eda")
+        dataset_visuals = {}
+
+        # 2. Cálculos de Dibujo del EDA (Si existen)
+        if latest_eda:
+            # A) Área
+            area_mean = latest_eda.get("bbox_area", {}).get("mean", 0)
+            area_std = latest_eda.get("bbox_area", {}).get("std", 0)
+            val_max = min(1.0, area_mean + area_std)
+            val_min = max(0.0, area_mean - area_std)
+            dataset_visuals["area_max_side"] = math.sqrt(val_max) * 100 if val_max > 0 else 0
+            dataset_visuals["area_min_side"] = math.sqrt(val_min) * 100 if val_min > 0 else 0
+            
+            # B) Aspect Ratio
+            ar_mean = latest_eda.get("aspect_ratio", {}).get("mean", 1.0)
+            if ar_mean >= 1.0:
+                dataset_visuals["ar_w"] = 50
+                dataset_visuals["ar_h"] = 50 / ar_mean
+            else:
+                dataset_visuals["ar_h"] = 50
+                dataset_visuals["ar_w"] = 50 * ar_mean
+                
+            # C) Diana Espacial
+            dataset_visuals["gt_cx"] = latest_eda.get("center_x", {}).get("mean", 0.5) * 100
+            dataset_visuals["gt_cy"] = latest_eda.get("center_y", {}).get("mean", 0.5) * 100
+            dataset_visuals["gt_rx"] = latest_eda.get("center_x", {}).get("std", 0) * 100
+            dataset_visuals["gt_ry"] = latest_eda.get("center_y", {}).get("std", 0) * 100
+
+        summary["dataset_visuals"] = dataset_visuals
+        summary["latest_eda"] = latest_eda
+        return summary

@@ -12,7 +12,7 @@
 </head>
 
 <body>
-    <h1>{{ report_title }} - {{ experiment_name }}</h1>
+    <h1>{{ report_title }} - {{ train.experiment_name if train else 'Unknown Experiment' }}</h1>
     <p><strong>Evaluation Date:</strong> {{ date }}</p>
 
     <div class="tab">

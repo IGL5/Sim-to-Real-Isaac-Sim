@@ -1,8 +1,11 @@
 from pathlib import Path
 import numpy as np
-import json
+from datetime import datetime
 from collections import defaultdict
 from src.evaluation.utils.html_generator import HTMLReportGenerator
+from src.core.metadata.inference_builder import InferenceMetadata
+from src.core.metadata.dataset_builder import DatasetMetadata
+from src.core.metadata.train_builder import TrainMetadata
 from src.evaluation.utils import plot_generator
 from src.core.utils import math_utils as mu
 from src.core import config
@@ -124,41 +127,58 @@ class InferenceReportGenerator:
         
         avg_detections = self.stats["total_detections"] / max(1, self.stats["total_images"])
         
+        inference_json_path = Path(self.output_dir) / config.FILE_INFERENCE_META
+        meta_manager = InferenceMetadata(inference_json_path)
+        meta_manager.set_timestamp(key_name="inference_date")
+        
+        meta_manager.record_global_stats(
+            total_images=self.stats["total_images"],
+            total_detections=self.stats["total_detections"],
+            avg_detections=avg_detections,
+            total_overlaps=sum(event["count"] for event in self.stats["overlap_events"]),
+            overlap_events=self.stats["overlap_events"]
+        )
+        
         # Class Breakdown for HTML
-        class_summary = {}
         for c_id, s in self.class_stats.items():
             c_name = self.class_names.get(c_id, f"Class {c_id}")
             safe_name = c_name.replace(" ", "_")
-            mean_conf = np.mean(s["confidences"]) if s["confidences"] else 0
+            mean_conf = float(np.mean(s["confidences"])) if s["confidences"] else 0.0
             
-            class_summary[c_name] = {
-                "detections": s["detections"],
-                "avg_confidence": mean_conf,
-                "safe_name": safe_name,
-                "confidence_stats": mu.calculate_1d_stats(s["confidences"]),
-                "spatial_stats": mu.calculate_spatial_stats(s["bbox_centers"])
-            }
+            meta_manager.record_class_stats(
+                class_name=c_name,
+                safe_name=safe_name,
+                detections=s["detections"],
+                avg_confidence=mean_conf,
+                conf_stats=mu.calculate_1d_stats(s["confidences"]),
+                spatial_stats=mu.calculate_spatial_stats(s["bbox_centers"])
+            )
 
-        stats_dict = {
-            "total_images": self.stats["total_images"],
-            "total_detections": self.stats["total_detections"],
-            "avg_detections": avg_detections,
-            "total_overlaps": sum(event["count"] for event in self.stats["overlap_events"]),
-            "overlap_events": self.stats["overlap_events"],
-            "per_class": class_summary,
-            "confidence_stats": mu.calculate_1d_stats(self.stats["confidences"]),
-            "spatial_stats": mu.calculate_spatial_stats(self.stats["bbox_centers_norm"])
+        meta_manager.record_confidence_stats(mu.calculate_1d_stats(self.stats["confidences"]))
+        meta_manager.record_spatial_stats(mu.calculate_spatial_stats(self.stats["bbox_centers_norm"]))
+        meta_manager.record_speed_stats(mu.calculate_speed_stats(self.stats["speeds"]))
+
+        # Save JSON
+        meta_manager.commit()
+        
+        exp_dir = Path(config.PROJECT_DIR) / experiment_name
+        dataset_meta_path = exp_dir / config.METADATA_FOLDER_NAME / config.FILE_DATASET_META
+        train_meta_path = exp_dir / config.METADATA_FOLDER_NAME / config.FILE_TRAIN_META
+        
+        html_context = {
+            "report_title": "Real Inference Report",
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "overlap_thresh": self.overlap_threshold,
+            
+            # Usamos 'stats' porque inference_template.html itera sobre {{ stats.per_class... }}
+            "stats": meta_manager.get_html_summary(), 
+            
+            # Contextos comunes
+            "dataset": DatasetMetadata(dataset_meta_path).get_html_summary() if dataset_meta_path.exists() else None,
+            "train": TrainMetadata(train_meta_path).get_html_summary() if train_meta_path.exists() else None
         }
-
-        stats_dict["speed_stats"] = mu.calculate_speed_stats(self.stats["speeds"])
-
-        # Save JSON and call Jinja
-        inference_json_path = Path(self.output_dir) / config.FILE_INFERENCE_META
-        try:
-            with open(inference_json_path, "w", encoding='utf-8') as f:
-                json.dump({"stats": stats_dict}, f, indent=4)
-        except Exception as e:
-            print(f"⚠️ Could not save inference JSON: {e}")
         
         generator = HTMLReportGenerator()
-        generator.generate_inference_html(str(Path(self.output_dir) / "inference_report.html"), experiment_name, stats_dict, self.overlap_threshold)
+        report_html_path = Path(self.output_dir) / "inference_report.html"
+        # Llamada simplificada
+        generator.generate_inference_html(str(report_html_path), html_context)

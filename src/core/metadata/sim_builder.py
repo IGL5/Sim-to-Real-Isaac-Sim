@@ -132,3 +132,26 @@ class SimulationMetadata(BaseMetadataManager):
             dist_dict[k]["expected_max_count"] = round(dist_dict[k]["expected_max_count"], 1)
 
         self.update_section("theoretical_distribution", dist_dict)
+
+    # --- THE GETTER FOR THE VIEW (HTML) ---
+    @staticmethod
+    def get_html_summary_from_session(session_data):
+        """
+        Recibe el bloque en crudo de la sesión y devuelve los visuales 
+        y datos aplanados específicos de la simulación 3D.
+        """
+        sim_summary = {}
+        coverage = session_data.get("spatial_coverage", {})
+        
+        if coverage:
+            cam_max = coverage.get("camera_distance_range", [0, 0])[1]
+            dist_max = coverage.get("distractor_max_radius", 0)
+            obj_max = coverage.get("objects_max_radius", 0)
+            
+            abs_max = max(cam_max, dist_max, obj_max, 1.0)
+            
+            sim_summary["cov_cam"] = (cam_max / abs_max) * 50
+            sim_summary["cov_dist"] = (dist_max / abs_max) * 50
+            sim_summary["cov_obj"] = (obj_max / abs_max) * 50
+            
+        return sim_summary

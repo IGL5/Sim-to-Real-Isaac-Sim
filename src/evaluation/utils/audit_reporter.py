@@ -1,9 +1,11 @@
 from pathlib import Path
 import numpy as np
-import json
 from datetime import datetime
 from collections import defaultdict
 from src.evaluation.utils.html_generator import HTMLReportGenerator
+from src.core.metadata.audit_builder import AuditMetadata
+from src.core.metadata.dataset_builder import DatasetMetadata
+from src.core.metadata.train_builder import TrainMetadata
 from src.evaluation.utils import plot_generator
 from src.core.utils import math_utils as mu
 from src.core import config
@@ -229,11 +231,17 @@ class ReportGenerator:
 
     def generate_html_report(self, experiment_name="yolov8_s_default"):
         print("📝 Compiling Multiclass numerical metrics for the report...")
+
+        audit_json_path = Path(self.output_dir) / f"{self.prefix}_metadata.json"
+        meta_manager = AuditMetadata(audit_json_path)
+        
+        meta_manager.set_timestamp(key_name="audit_date")
+        meta_manager.record_evaluation_params(self.iou_threshold)
         
         global_tp = global_fp = global_fn = global_total_real = global_total_pred = 0
-        class_metrics = {}
         ap50_list, ap50_95_list = [], []
         all_conf_tp, all_conf_fp = [], []
+        opt_f1_list = []
         
         for c_id, stats in self.class_stats.items():
             c_name = self.class_names.get(c_id, f"Class {c_id}")
@@ -270,60 +278,59 @@ class ReportGenerator:
                 best_idx = np.argmax(f1s)
                 best_f1, best_conf = float(f1s[best_idx]), float(cfs[best_idx])
                 
+            opt_f1_list.append(best_f1)
             ap50_list.append(ap50)
             ap50_95_list.append(ap50_95)
             
-            class_metrics[c_name] = {
-                "precision": prec, "recall": rec, "f1": f1,
-                "ap_50": ap50, "ap_50_95": ap50_95,
-                "optimal_f1": best_f1, "optimal_conf": best_conf,
-                "tp": c_tp, "fp": c_fp, "fn": c_fn,
-                "safe_name": safe_name, 
-                "confidence_stats": {
-                    "True_Positives": mu.calculate_1d_stats(stats["confidences_TP"]),
-                    "False_Positives": mu.calculate_1d_stats(stats["confidences_FP"]),
-                },
-                "spatial_stats": mu.calculate_spatial_stats(stats.get("bbox_centers", []))
-            }
+            # Delegated the class metrics recording
+            meta_manager.record_class_metric(
+                class_name=c_name, safe_name=safe_name,
+                precision=prec, recall=rec, f1=f1, ap_50=ap50, ap_50_95=ap50_95,
+                opt_f1=best_f1, opt_conf=best_conf, tp=c_tp, fp=c_fp, fn=c_fn,
+                conf_tp_stats=mu.calculate_1d_stats(stats["confidences_TP"]),
+                conf_fp_stats=mu.calculate_1d_stats(stats["confidences_FP"]),
+                spatial_stats=mu.calculate_spatial_stats(stats.get("bbox_centers", []))
+            )
 
         g_prec = global_tp / global_total_pred if global_total_pred > 0 else 0
         g_rec = global_tp / global_total_real if global_total_real > 0 else 0
         g_f1 = 2 * (g_prec * g_rec) / (g_prec + g_rec) if (g_prec + g_rec) > 0 else 0
         mAP50 = np.mean(ap50_list) if ap50_list else 0
         mAP50_95 = np.mean(ap50_95_list) if ap50_95_list else 0
+        opt_f1_global = np.mean(opt_f1_list) if opt_f1_list else 0.0
         
-        target_class = list(self.class_stats.keys())[0] if self.class_stats else 0
+        meta_manager.record_metrics(
+            precision=g_prec, recall=g_rec, f1=g_f1, map50=mAP50, map50_95=mAP50_95,
+            optimal_f1=opt_f1_global, total_real=global_total_real, total_pred=global_total_pred,
+            tp=global_tp, fp=global_fp, fn=global_fn, prefix=self.prefix
+        )
+
+        meta_manager.record_confidence_stats(
+            conf_tp_stats=mu.calculate_1d_stats(all_conf_tp),
+            conf_fp_stats=mu.calculate_1d_stats(all_conf_fp)
+        )
         
-        metrics_dict = {
-            "precision": g_prec, "recall": g_rec, "f1": g_f1,
-            "map_50": mAP50, "map_50_95": mAP50_95,
-            "optimal_f1": class_metrics.get(self.class_names.get(target_class, ""), {}).get("optimal_f1", 0),
-            "total_real": global_total_real, "total_pred": global_total_pred,
-            "tp": global_tp, "fp": global_fp, "fn": global_fn,
-            "per_class": class_metrics,
-            "prefix": self.prefix
-        }
-
-        metrics_dict["confidence_stats"] = {
-            "True_Positives": mu.calculate_1d_stats(all_conf_tp),
-            "False_Positives": mu.calculate_1d_stats(all_conf_fp),
-        }
-        metrics_dict["spatial_stats"] = mu.calculate_spatial_stats(self.global_stats["bbox_centers"])
-
-        metrics_dict["speed_stats"] = mu.calculate_speed_stats(self.global_stats["speeds"])
-
-        audit_metadata = {
-            "audit_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "metrics": metrics_dict,
-            "evaluation_params": {"iou_threshold": self.iou_threshold}
-        }
+        meta_manager.record_spatial_stats(mu.calculate_spatial_stats(self.global_stats["bbox_centers"]))
+        meta_manager.record_speed_stats(mu.calculate_speed_stats(self.global_stats["speeds"]))
         
-        audit_json_path = Path(self.output_dir) / f"{self.prefix}_metadata.json"
-        try:
-            with open(audit_json_path, "w", encoding='utf-8') as f:
-                json.dump(audit_metadata, f, indent=4)
-        except Exception as e:
-            print(f"⚠️ Could not save audit JSON: {e}")
+        meta_manager.commit()
+        exp_dir = Path(config.PROJECT_DIR) / experiment_name
+        dataset_meta_path = exp_dir / config.METADATA_FOLDER_NAME / config.FILE_DATASET_META
+        train_meta_path = exp_dir / config.METADATA_FOLDER_NAME / config.FILE_TRAIN_META
+        
+        # Montamos el contexto plano definitivo para las plantillas
+        html_context = {
+            "report_title": "YOLO Audit Report",
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            
+            # Usamos la clave 'metrics' porque audit_template.html itera sobre {{ metrics.per_class... }}
+            "metrics": meta_manager.get_html_summary(), 
+            
+            # Contextos comunes
+            "dataset": DatasetMetadata(dataset_meta_path).get_html_summary() if dataset_meta_path.exists() else None,
+            "train": TrainMetadata(train_meta_path).get_html_summary() if train_meta_path.exists() else None
+        }
 
         generator = HTMLReportGenerator()
-        generator.generate_audit_html(str(Path(self.output_dir) / f"{self.prefix}_report.html"), experiment_name, metrics_dict)
+        report_html_path = Path(self.output_dir) / f"{self.prefix}_report.html"
+        generator.generate_audit_html(str(report_html_path), html_context)

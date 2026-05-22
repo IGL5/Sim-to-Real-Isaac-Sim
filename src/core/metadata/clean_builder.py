@@ -54,3 +54,17 @@ class CleaningMetadata(BaseMetadataManager):
         # Synchronize with the "performance" section of simulation
         if "performance" in self.data:
             self.data["performance"]["total_valid_frames_after_cleaning"] = stats["kept"]
+
+    # --- THE GETTER FOR THE VIEW (HTML) ---
+    @staticmethod
+    def get_html_summary_from_session(session_data):
+        """Devuelve los datos de limpieza aplanados para la vista."""
+        cleaning = session_data.get("cleaning", {})
+        if not cleaning:
+            return None
+            
+        return {
+            "corrupted": cleaning.get("corrupted_deleted", 0),
+            "empty": cleaning.get("empty_deleted", 0),
+            "kept": cleaning.get("valid_kept", 0),
+        }

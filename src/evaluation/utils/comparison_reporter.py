@@ -2,6 +2,9 @@ from pathlib import Path
 import json
 import src.core.config as config
 from src.evaluation.utils.html_generator import HTMLReportGenerator
+from src.core.metadata.audit_builder import AuditMetadata
+from src.core.metadata.train_builder import TrainMetadata
+from src.core.metadata.dataset_builder import DatasetMetadata
 
 class ComparisonReporter:
     def __init__(self, models_dict):
@@ -18,18 +21,19 @@ class ComparisonReporter:
         return None
 
     def load_all_data(self):
+        """Load the metrics from the audit, train and dataset JSONs for each model"""
         for display_label, info in self.models_dict.items():
             audit_path = info["path"]
             real_model_name = info["model_root_name"] 
             
-            audit_meta = self._load_json(audit_path)
+            audit_meta = AuditMetadata(audit_path).get_html_summary()
             
             model_root = Path(self.project_dir) / real_model_name
             train_meta_path = model_root / config.METADATA_FOLDER_NAME / config.FILE_TRAIN_META
             dataset_meta_path = model_root / config.METADATA_FOLDER_NAME / config.FILE_DATASET_META
             
-            train_meta = self._load_json(train_meta_path)
-            dataset_meta = self._load_json(dataset_meta_path)
+            train_meta = TrainMetadata(train_meta_path).get_html_summary()
+            dataset_meta = DatasetMetadata(dataset_meta_path).get_html_summary()
 
             self.data[display_label] = {
                 "audit": audit_meta,
