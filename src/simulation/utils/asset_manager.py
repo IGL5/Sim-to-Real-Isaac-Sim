@@ -322,9 +322,11 @@ def setup_dome_light(stage, dome_light_path, hdr_texture_path, intensity):
 
     # Use the UsdLux API to configure it
     dome_light = UsdLux.DomeLight(dome_prim)
+
+    usd_asset_path = Sdf.AssetPath(str(hdr_texture_path))
     
     # Assign HDR Texture
-    dome_light.CreateTextureFileAttr().Set(hdr_texture_path)
+    dome_light.CreateTextureFileAttr().Set(usd_asset_path)
     dome_light.CreateTextureFormatAttr().Set(UsdLux.Tokens.latlong)
     dome_light.CreateIntensityAttr().Set(intensity)
     
@@ -341,6 +343,7 @@ def discover_assets(root_dir, category_name, recursive=False):
     Looks for USD files. Unifies the logic of 'Objetivos' and 'Distractores'.
     """
     root_path = Path(root_dir)
+    found_paths = []
     
     # 1. Recursive Mode (Distractors): assets/objects/distractors/cat/**/*.usd
     if recursive:

@@ -23,7 +23,7 @@ CONFIG = {"renderer": "PathTracing", "headless": args.headless,
           "width": args.width, "height": args.height, "num_frames": args.num_frames}
 
 # GENERAL CONSTANTS
-MAP_NAME = "Environment_variable.usd"
+MAP_NAME = "Environment_plane.usd"
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
 MATERIAL_SCALE_FLAT = (0.6, 1.0)
 MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
@@ -35,8 +35,8 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_HEIGHT_RANGE = (0.0, 1.0)
-CAMERA_DISTANCE_RANGE = (2.0, 6.0)
+CAMERA_HEIGHT_RANGE = (7.0, 25.0) # (0.0, 1.0)
+CAMERA_DISTANCE_RANGE = (10.0, 30.0) # (2.0, 6.0)
 LOOKAT_JITTER_RADIUS = 0.5
 
 # RAYCAST SETTINGS
@@ -44,8 +44,8 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (2.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
-OBJECTS_MAX_RADIUS = 4.0
+OBJECTS_BUDGET_RANGE = (5.0, 15.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
+OBJECTS_MAX_RADIUS = 30.0 # 4.0
 # DISTRACTOR BUDGET
 DISTRACTOR_BUDGET_RANGE = (800.0, 1000.0) # (15.0, 30.0), (30.0, 75.0)
 DISTRACTOR_MAX_RADIUS = 30.0
@@ -99,7 +99,7 @@ OBJECTS_CONFIG = {
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
     "bicycle_street": {
-        "active": True,                     # Enable this object type
+        "active": False,                     # Enable this object type
         "pool_size": 6,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "spawn_radius": (0.0, 4.0),
@@ -111,7 +111,7 @@ OBJECTS_CONFIG = {
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
     "bicycle_racing": {
-        "active": True,                     # Enable this object type
+        "active": False,                     # Enable this object type
         "pool_size": 6,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "spawn_radius": (0.0, 4.0),
@@ -123,7 +123,7 @@ OBJECTS_CONFIG = {
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
     "bicycle_mountain": {
-        "active": True,                     # Enable this object type
+        "active": False,                     # Enable this object type
         "pool_size": 6,                    # Number of bicycles in the pool
         "radius": 0.8,                      # Radius of safety
         "spawn_radius": (0.0, 3.0),
@@ -133,6 +133,15 @@ OBJECTS_CONFIG = {
         "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
         "randomize_materials": ["frame"],   # List of prim names to randomize materials
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "electric_pole": {
+        "active": True,                     # Enable this object type
+        "pool_size": 20,                    # Number of bicycles in the pool
+        "radius": 2.0,                      # Radius of safety
+        "spawn_radius": (3.0, 25.0),
+        "cost_units": 4.0,                  # High cost (main character)
+        "selection_weight": 50,             # Always want to appear if there's space
+        "scale_range": (0.9, 1.2),          # Fixed scale for rigorous datasets
     },
 }
 

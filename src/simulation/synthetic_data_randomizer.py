@@ -45,7 +45,7 @@ def main():
         print("[CRITICAL] No HDR files found!")
 
     # Open scene
-    open_stage(sim_config.MAP_PATH)
+    open_stage(str(sim_config.MAP_PATH))
     stage = get_current_stage()
 
     # Physics Scene
@@ -341,7 +341,6 @@ def main():
     meta_manager.build_theoretical_distribution(sim_config)
     
     meta_manager.commit()
-    print(f"📊 Metadata exported successfully to: {config.GENERATION_METADATA_PATH}")
 
 
 if __name__ == "__main__":

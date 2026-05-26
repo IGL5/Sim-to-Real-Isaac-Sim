@@ -102,6 +102,7 @@ class AuditMetadata(BaseMetadataManager):
 
         # Retornamos la bandeja limpia con Namespaces claros
         return {
+            "prefix": metrics_sec.get("prefix", "audit"),
             "global": {
                 "precision": round(metrics_sec.get("macro_precision", 0.0) * 100, 2),
                 "recall": round(metrics_sec.get("macro_recall", 0.0) * 100, 2),
@@ -117,5 +118,6 @@ class AuditMetadata(BaseMetadataManager):
             },
             "classes": html_classes,
             "speeds": metrics_sec.get("speed_stats", {}),
-            "spatial_global": metrics_sec.get("spatial_stats", {})
+            "spatial_global": metrics_sec.get("spatial_stats", {}),
+            "confidence_global": metrics_sec.get("confidence_stats", {})
         }

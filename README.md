@@ -55,7 +55,7 @@ Run the script using the Isaac Sim Python interpreter (typically found in your I
 
 ```bash
 # Example from project folder
-C:\isaac-sim\python.bat .\synthetic_data_randomizer.py --headless --num_frames 100 --width 640 --height 480
+C:\isaac-sim\python.bat .\src\simulation\synthetic_data_randomizer.py --headless --num_frames 100 --width 640 --height 480
 ```
 
 ### Command Line Arguments

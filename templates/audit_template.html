@@ -10,27 +10,27 @@
     <div class="container">
         <div class="card">
             <div style="font-size: 0.8em; color: #7f8c8d;">Macro Precision</div>
-            <div class="metric">{{ "%.2f"|format(metrics.precision * 100) }}%</div>
+            <div class="metric">{{ "%.2f"|format(metrics.global.precision) }}%</div>
         </div>
         <div class="card">
             <div style="font-size: 0.8em; color: #7f8c8d;">Macro Recall</div>
-            <div class="metric">{{ "%.2f"|format(metrics.recall * 100) }}%</div>
+            <div class="metric">{{ "%.2f"|format(metrics.global.recall) }}%</div>
         </div>
         <div class="card">
             <div style="font-size: 0.8em; color: #7f8c8d;">Macro F1-Score</div>
-            <div class="metric">{{ "%.2f"|format(metrics.f1) }}</div>
+            <div class="metric">{{ "%.2f"|format(metrics.global.f1) }}</div>
         </div>
         <div class="card">
             <div style="font-size: 0.8em; color: #7f8c8d;">mAP@50 (Global)</div>
-            <div class="metric map-metric">{{ "%.3f"|format(metrics.map_50) }}</div>
+            <div class="metric map-metric">{{ "%.3f"|format(metrics.global.map50) }}</div>
         </div>
         <div class="card">
             <div style="font-size: 0.8em; color: #7f8c8d;">mAP@50-95</div>
-            <div class="metric map-metric">{{ "%.3f"|format(metrics.map_50_95) }}</div>
+            <div class="metric map-metric">{{ "%.3f"|format(metrics.global.map50_95) }}</div>
         </div>
         <div class="card" style="background-color: #f4fdf4; border-left-color: #27ae60;">
             <div style="font-size: 0.8em; color: #7f8c8d;">Inference Speed</div>
-            <div class="metric" style="color: #27ae60;">{{ "%.1f"|format(metrics.speed_stats.fps) }} <span
+            <div class="metric" style="color: #27ae60;">{{ "%.1f"|format(metrics.speeds.fps) }} <span
                     style="font-size: 0.5em;">FPS</span></div>
         </div>
     </div>
@@ -50,18 +50,18 @@
                 </tr>
             </thead>
             <tbody>
-                {% for class_name, c_metrics in metrics.per_class.items() %}
+                {% for class in metrics.classes %}
                 <tr>
-                    <td><strong>{{ class_name }}</strong></td>
-                    <td>{{ "%.1f"|format(c_metrics.precision * 100) }}%</td>
-                    <td>{{ "%.1f"|format(c_metrics.recall * 100) }}%</td>
-                    <td>{{ "%.2f"|format(c_metrics.f1) }}</td>
-                    <td style="font-weight: bold; color: #2980b9;">{{ "%.3f"|format(c_metrics.ap_50) }}</td>
-                    <td>{{ "%.2f"|format(c_metrics.optimal_conf) }}</td>
+                    <td><strong>{{ class.name }}</strong></td>
+                    <td>{{ "%.1f"|format(class.precision) }}%</td>
+                    <td>{{ "%.1f"|format(class.recall) }}%</td>
+                    <td>{{ "%.2f"|format(class.f1) }}</td>
+                    <td style="font-weight: bold; color: #2980b9;">{{ "%.3f"|format(class.ap50) }}</td>
+                    <td>{{ "%.2f"|format(class.optimal_conf) }}</td>
                     <td style="font-size: 0.85em;">
-                        <span style="color: #27ae60;">{{ c_metrics.tp }}</span> /
-                        <span style="color: #c0392b;">{{ c_metrics.fp }}</span> /
-                        <span style="color: #7f8c8d;">{{ c_metrics.fn }}</span>
+                        <span style="color: #27ae60;">{{ class.tp }}</span> /
+                        <span style="color: #c0392b;">{{ class.fp }}</span> /
+                        <span style="color: #7f8c8d;">{{ class.fn }}</span>
                     </td>
                 </tr>
                 {% endfor %}
@@ -90,23 +90,23 @@
             <table>
                 <tr>
                     <td>Total Real (GT Objects)</td>
-                    <td>{{ metrics.total_real }}</td>
+                    <td>{{ metrics.global.total_real }}</td>
                 </tr>
                 <tr>
                     <td>Total Predicted</td>
-                    <td>{{ metrics.total_pred }}</td>
+                    <td>{{ metrics.global.total_pred }}</td>
                 </tr>
                 <tr style="border-top: 1px solid #eee;">
                     <td>TP (Hits)</td>
-                    <td style="color: #27ae60;">{{ metrics.tp }}</td>
+                    <td style="color: #27ae60;">{{ metrics.global.tp }}</td>
                 </tr>
                 <tr>
                     <td>FN (Missed)</td>
-                    <td style="color: #7f8c8d;">{{ metrics.fn }}</td>
+                    <td style="color: #7f8c8d;">{{ metrics.global.fn }}</td>
                 </tr>
                 <tr>
                     <td>FP (Invented)</td>
-                    <td style="color: #c0392b;">{{ metrics.fp }}</td>
+                    <td style="color: #c0392b;">{{ metrics.global.fp }}</td>
                 </tr>
             </table>
         </div>
@@ -115,19 +115,19 @@
             <table>
                 <tr>
                     <td>Pre-process</td>
-                    <td>{{ metrics.speed_stats.preprocess_ms }} ms</td>
+                    <td>{{ metrics.speeds.preprocess_ms }} ms</td>
                 </tr>
                 <tr>
                     <td><strong>Inference (NN)</strong></td>
-                    <td style="color: #2980b9; font-weight: bold;">{{ metrics.speed_stats.inference_ms }} ms</td>
+                    <td style="color: #2980b9; font-weight: bold;">{{ metrics.speeds.inference_ms }} ms</td>
                 </tr>
                 <tr>
                     <td>NMS (Post-process)</td>
-                    <td>{{ metrics.speed_stats.postprocess_ms }} ms</td>
+                    <td>{{ metrics.speeds.postprocess_ms }} ms</td>
                 </tr>
                 <tr style="background-color: #f9f9f9; font-weight: bold;">
                     <td>Total Latency</td>
-                    <td>{{ metrics.speed_stats.total_ms }} ms</td>
+                    <td>{{ metrics.speeds.total_ms }} ms</td>
                 </tr>
             </table>
         </div>
@@ -142,8 +142,8 @@
         <select id="classSelector" onchange="changeAnalysisClass(this.value)"
             style="padding: 8px 15px; font-size: 1em; border-radius: 4px; border: 1px solid #bdc3c7; outline: none; cursor: pointer;">
             <option value="Global">🌍 All Classes (Global)</option>
-            {% for class_name, c_metrics in metrics.per_class.items() %}
-            <option value="{{ c_metrics.safe_name }}">🎯 {{ class_name }}</option>
+            {% for class in metrics.classes %}
+            <option value="{{ class.safe_name }}">🎯 {{ class.name }}</option>
             {% endfor %}
         </select>
     </div>
@@ -154,11 +154,9 @@
                 <h3>Confidence Distribution (Global)</h3>
                 <p style="font-size:0.9em; color:#666; margin-top: 0;">
                     <span style="color: #27ae60;"><strong>Hits (TP)</strong></span> -> Mean: {{
-                    "%.2f"|format(metrics.confidence_stats.True_Positives.mean) }} | Std: {{
-                    "%.2f"|format(metrics.confidence_stats.True_Positives.std) }}<br>
+                    "%.2f"|format(metrics.confidence_global.True_Positives.mean) }}<br>
                     <span style="color: #c0392b;"><strong>Misses (FP)</strong></span> -> Mean: {{
-                    "%.2f"|format(metrics.confidence_stats.False_Positives.mean) }} | Std: {{
-                    "%.2f"|format(metrics.confidence_stats.False_Positives.std) }}
+                    "%.2f"|format(metrics.confidence_global.False_Positives.mean) }}
                 </p>
                 <img src="plots/{{metrics.prefix}}/confidence_dist.png" style="margin-top: 10px;">
             </div>
@@ -168,58 +166,50 @@
             </div>
             <div class="card">
                 <h3>Positional Bias (Global)</h3>
-                <p style="font-size:0.9em; color:#666;">Based on Center of Mass and Dispersion (Predictions)</p>
                 <div style="text-align: center;">
                     <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
                         viewBox="0 0 100 100">
                         <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
                         <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
-                        <ellipse cx="{{ metrics.spatial_stats.center_of_mass_x * 100 }}"
-                            cy="{{ metrics.spatial_stats.center_of_mass_y * 100 }}"
-                            rx="{{ metrics.spatial_stats.dispersion_x * 100 }}"
-                            ry="{{ metrics.spatial_stats.dispersion_y * 100 }}" fill="#e74c3c" opacity="0.4" />
-                        <circle cx="{{ metrics.spatial_stats.center_of_mass_x * 100 }}"
-                            cy="{{ metrics.spatial_stats.center_of_mass_y * 100 }}" r="2" fill="#c0392b" />
+                        <ellipse cx="{{ metrics.spatial_global.center_of_mass_x * 100 }}"
+                            cy="{{ metrics.spatial_global.center_of_mass_y * 100 }}"
+                            rx="{{ metrics.spatial_global.dispersion_x * 100 }}"
+                            ry="{{ metrics.spatial_global.dispersion_y * 100 }}" fill="#e74c3c" opacity="0.4" />
+                        <circle cx="{{ metrics.spatial_global.center_of_mass_x * 100 }}"
+                            cy="{{ metrics.spatial_global.center_of_mass_y * 100 }}" r="2" fill="#c0392b" />
                     </svg>
                 </div>
             </div>
         </div>
     </div>
 
-    {% for class_name, c_metrics in metrics.per_class.items() %}
-    <div id="analysis-{{ c_metrics.safe_name }}" class="analysis-view" style="display: none;">
+    {% for class in metrics.classes %}
+    <div id="analysis-{{ class.safe_name }}" class="analysis-view" style="display: none;">
         <div class="plot-grid">
             <div class="card">
-                <h3>Confidence Distribution ({{ class_name }})</h3>
+                <h3>Confidence Distribution ({{ class.name }})</h3>
                 <p style="font-size:0.9em; color:#666; margin-top: 0;">
                     <span style="color: #27ae60;"><strong>Hits (TP)</strong></span> -> Mean: {{
-                    "%.2f"|format(c_metrics.confidence_stats.True_Positives.mean) }} | Std: {{
-                    "%.2f"|format(c_metrics.confidence_stats.True_Positives.std) }}<br>
+                    "%.2f"|format(class.conf_tp_mean) }}<br>
                     <span style="color: #c0392b;"><strong>Misses (FP)</strong></span> -> Mean: {{
-                    "%.2f"|format(c_metrics.confidence_stats.False_Positives.mean) }} | Std: {{
-                    "%.2f"|format(c_metrics.confidence_stats.False_Positives.std) }}
+                    "%.2f"|format(class.conf_fp_mean) }}
                 </p>
-                <img src="plots/{{metrics.prefix}}/confidence_dist_{{ c_metrics.safe_name }}.png"
-                    style="margin-top: 10px;">
+                <img src="plots/{{metrics.prefix}}/confidence_dist_{{ class.safe_name }}.png" style="margin-top: 10px;">
             </div>
             <div class="card">
-                <h3>Heatmap of Detections ({{ class_name }})</h3>
-                <img src="plots/{{metrics.prefix}}/heatmap_{{ c_metrics.safe_name }}.png">
+                <h3>Heatmap of Detections ({{ class.name }})</h3>
+                <img src="plots/{{metrics.prefix}}/heatmap_{{ class.safe_name }}.png">
             </div>
             <div class="card">
-                <h3>Positional Bias ({{ class_name }})</h3>
-                <p style="font-size:0.9em; color:#666;">Based on Center of Mass and Dispersion (Predictions)</p>
+                <h3>Positional Bias ({{ class.name }})</h3>
                 <div style="text-align: center;">
                     <svg style="width: 100%; max-width: 300px; aspect-ratio: 1; background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 4px;"
                         viewBox="0 0 100 100">
                         <line x1="50" y1="0" x2="50" y2="100" stroke="#bdc3c7" stroke-dasharray="2,2" />
                         <line x1="0" y1="50" x2="100" y2="50" stroke="#bdc3c7" stroke-dasharray="2,2" />
-                        <ellipse cx="{{ c_metrics.spatial_stats.center_of_mass_x * 100 }}"
-                            cy="{{ c_metrics.spatial_stats.center_of_mass_y * 100 }}"
-                            rx="{{ c_metrics.spatial_stats.dispersion_x * 100 }}"
-                            ry="{{ c_metrics.spatial_stats.dispersion_y * 100 }}" fill="#3498db" opacity="0.4" />
-                        <circle cx="{{ c_metrics.spatial_stats.center_of_mass_x * 100 }}"
-                            cy="{{ c_metrics.spatial_stats.center_of_mass_y * 100 }}" r="2" fill="#2980b9" />
+                        <ellipse cx="{{ class.com_x * 100 }}" cy="{{ class.com_y * 100 }}" rx="{{ class.disp_x * 100 }}"
+                            ry="{{ class.disp_y * 100 }}" fill="#3498db" opacity="0.4" />
+                        <circle cx="{{ class.com_x * 100 }}" cy="{{ class.com_y * 100 }}" r="2" fill="#2980b9" />
                     </svg>
                 </div>
             </div>
@@ -229,12 +219,10 @@
 
     <script>
         function changeAnalysisClass(selectedValue) {
-            // Ocultar todas las vistas
             var views = document.getElementsByClassName('analysis-view');
             for (var i = 0; i < views.length; i++) {
                 views[i].style.display = 'none';
             }
-            // Mostrar solo la seleccionada
             document.getElementById('analysis-' + selectedValue).style.display = 'block';
         }
     </script>
