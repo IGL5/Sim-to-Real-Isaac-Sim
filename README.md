@@ -12,6 +12,8 @@ The following diagram illustrates the workflow of the unified pipeline, from Isa
 
 ```mermaid
 flowchart TD
+    classDef default color:#2c3e50,fill:#ffffff,stroke:#bdc3c7;
+
     subgraph Simulation [1. Simulation & Generation]
         A["Isaac Sim Replicator"] --> B["synthetic_data_randomizer.py"]
         B --> C["data/01_raw/ (KITTI format)"]
@@ -37,10 +39,10 @@ flowchart TD
         K --> N["comparison_report.html (Chart.js Dashboard)"]
     end
 
-    style Simulation fill:#d5e8d4,stroke:#82b366,stroke-width:2px
-    style DataPrep fill:#ffe6cc,stroke:#d79b00,stroke-width:2px
-    style Training fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px
-    style Evaluation fill:#f8cecc,stroke:#b85450,stroke-width:2px
+    style Simulation fill:#d5e8d4,stroke:#82b366,stroke-width:2px,color:#2c3e50
+    style DataPrep fill:#ffe6cc,stroke:#d79b00,stroke-width:2px,color:#2c3e50
+    style Training fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px,color:#2c3e50
+    style Evaluation fill:#f8cecc,stroke:#b85450,stroke-width:2px,color:#2c3e50
 ```
 
 ---
