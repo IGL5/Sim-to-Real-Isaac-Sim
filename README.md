@@ -25,7 +25,7 @@ flowchart TD
 
     subgraph Training [3. YOLO Training]
         F --> G["train_YOLO.py"]
-        G --> H["runs/detect/experiment/ (Weights & MLOps Vault)"]
+        G --> H["data/03_project_name/experiment_name/ (Weights & MLOps Vault)"]
     end
 
     subgraph Evaluation [4. Auditing & Benchmarking]
@@ -78,6 +78,9 @@ flowchart TD
 ├── data/                            # Central data directory
 │   ├── 01_raw/                      # Raw simulation output (KITTI format)
 │   ├── 02_processed/                # Cleaned and split YOLO dataset
+|   ├── 03_project_name/             # Project saved experiments
+|   │   ├── experiment_name/         # Experiment-specific data and models
+|   │   └── ...
 │   └── 05_metrics/                  # Evaluation metrics, reports and XAI outputs
 └── templates/                       # HTML/CSS Jinja2 templates for reports
 ```
