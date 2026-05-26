@@ -253,7 +253,7 @@ def main():
     print(f"🆔 ID of Batch (Batch ID): {batch_prefix}")
 
     if args.move:
-        print("⚠️  WARNING: Flag '--move' active. Original files in _output_data will be DELETED to save space.")
+        print(f"⚠️  WARNING: Flag '--move' active. Original files in {args.source} will be DELETED to save space.")
 
     # 3. List files
     all_files = [f.stem for f in raw_labels_path.glob("*.txt")]
