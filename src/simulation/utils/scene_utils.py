@@ -222,13 +222,13 @@ def select_objects_by_budget(available_keys, config_map, total_budget):
     return selected_keys
 
 
-def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=10.0, existing_obstacles=[]):
+def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=10.0, existing_obstacles=[], cam_pos=None, fov_margin=60):
     """
     Generates non-overlapping positions and rotations for a set of objects around a target point.
     Adjusts height and pitch based on terrain geometry.
     """
     valid_results = []
-    tx, ty, _ = target_pos
+    tx, ty, tz = target_pos
     
     # Local copy of obstacles (x, y, radius)
     current_obstacles = [(p[0], p[1], p[2]) for p in existing_obstacles] 
@@ -253,6 +253,10 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
             
             cand_x = tx + r * math.cos(theta)
             cand_y = ty + r * math.sin(theta)
+
+            if cam_pos:
+                if not is_in_camera_fov(cam_pos, target_pos, (cand_x, cand_y, tz), fov_margin):
+                    continue
             
             # 2. Collision check (Variable Radius)
             collision = False
@@ -324,7 +328,7 @@ def randomize_precalculated_shaders(stage, shader_paths, soft_colors):
             shader.CreateInput("base_color_factor", Sdf.ValueTypeNames.Color3f).Set(color_val)
 
 
-def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[]):
+def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[], cam_pos=None, fov_margin=60):
     """
     Master Orchestrator.
     Handles: Selection (Budget) -> Unique Assignment (Stack) -> Placement -> Cleanup.
@@ -374,7 +378,7 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         
     # 4. Calculate Poses (Mathematics)
     # results devuelve: [ ((x,y,z), rot, original_index), ... ]
-    results = get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius, previous_obstacles)
+    results = get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius, previous_obstacles, cam_pos, fov_margin)
     
     # 5. Move successfully placed objects
     new_obstacles = [] 
@@ -448,13 +452,10 @@ def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visi
             xform.AddScaleOp().Set(Gf.Vec3f(float(scale), float(scale), float(scale)))
 
 
-def validate_placement_config(config_map, budget_max, container_radius, context_name="Config"):
+def validate_placement_config(config_map, budget_max, container_radius, fov_factor=0.30, context_name="Config"):
     """
-    Analizes if objects fit in the assigned space based on the maximum budget
-    and selection probabilities.
-    
-    Returns:
-        (level, message): Level string and string with the diagnosis.
+    Analyses if the objects fit in the assigned space based on the maximum budget,
+    taking into account that the camera only sees a percentage (fov_factor) of the total circle.
     """
     total_weight = 0
     weighted_area_sum = 0
@@ -489,7 +490,8 @@ def validate_placement_config(config_map, budget_max, container_radius, context_
     required_area = estimated_num_items * avg_area_per_item
     
     # 3. Available area
-    available_area = math.pi * (container_radius ** 2)
+    total_theoretical_area = math.pi * (container_radius ** 2)
+    available_area = total_theoretical_area * (fov_factor + 0.1)
     
     # 4. Packing Factor
     # Perfect circles fill ~90%. Random placement is ~40-50%.
@@ -500,7 +502,7 @@ def validate_placement_config(config_map, budget_max, container_radius, context_
     packing_limit_warn = 0.65  # Yellow: Possible failures, but acceptable
     
     msg = (f"[{context_name}] Ratio of Occupation: {fill_ratio*100:.1f}% "
-           f"(Req: {required_area:.0f}m² / Disp: {available_area:.0f}m²)")
+           f"(Req: {required_area:.0f}m² / Disp (Visible): {available_area:.0f}m²)")
     
     if fill_ratio > 1.0:
         return "red", f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
@@ -548,3 +550,34 @@ def update_camera_pose(stage, cam_path, eye, target):
         # If it's the first time, clear and create
         xform.ClearXformOpOrder()
         xform.AddTransformOp().Set(xform_mtx)
+
+
+def is_in_camera_fov(cam_pos, target_pos, obj_pos, fov_margin_degrees=60.0):
+    """
+    Checks if an object is within the camera's field of view.
+    """
+    cx, cy, cz = cam_pos
+    tx, ty, tz = target_pos
+    ox, oy, oz = obj_pos
+
+    # Camera -> Target Vector (Central axis of vision)
+    v_cam_target = (tx - cx, ty - cy, tz - cz)
+    norm_ct = math.sqrt(v_cam_target[0]**2 + v_cam_target[1]**2 + v_cam_target[2]**2)
+
+    # Camera -> Object Vector
+    v_cam_obj = (ox - cx, oy - cy, oz - cz)
+    norm_co = math.sqrt(v_cam_obj[0]**2 + v_cam_obj[1]**2 + v_cam_obj[2]**2)
+
+    if norm_ct == 0 or norm_co == 0:
+        return True
+
+    # Dot product to isolate the cosine of the angle
+    dot_product = (v_cam_target[0]*v_cam_obj[0] + v_cam_target[1]*v_cam_obj[1] + v_cam_target[2]*v_cam_obj[2])
+    cos_angle = dot_product / (norm_ct * norm_co)
+    
+    # Clamp to avoid floating point errors
+    cos_angle = max(min(cos_angle, 1.0), -1.0)
+    angle_rad = math.acos(cos_angle)
+    
+    # If angle is smaller than our margin, it is "in sight"
+    return math.degrees(angle_rad) <= fov_margin_degrees

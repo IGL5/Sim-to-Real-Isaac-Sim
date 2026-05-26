@@ -121,10 +121,13 @@ def main():
 
 
     # --- 5. REPLICATOR CAMERA SETUP ---
+    focal_length = 18.0
+    sensor_width = 36.0
     cam_rep = rep.create.camera(
         position=(0, 0, 0),
         rotation=(0, 0, 0),
-        focal_length=18.0,
+        focal_length=focal_length,
+        horizontal_aperture=sensor_width,
         name=config.CAMERA_NAME
     )
 
@@ -139,16 +142,23 @@ def main():
     cam_xform.ClearXformOpOrder()
     cam_xform.AddTransformOp().Set(Gf.Matrix4d(1.0))
     
+    # Calculate FOV from image size and focal length
+    fov_rad = 2 * math.atan(sensor_width / (2 * focal_length))
+    fov_deg = math.degrees(fov_rad)
+    fov_factor = fov_deg / 360.0
+    fov_margin = (fov_deg / 2.0) + 15.0
+    
     # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
-    writer.initialize(output_dir=sim_config.args.data_dir, omit_semantic_type=True)
+    absolute_output_dir = str(Path(sim_config.args.data_dir).resolve())
+    writer.initialize(output_dir=absolute_output_dir, omit_semantic_type=True)
     
     render_product = rep.create.render_product(cam_rep, (sim_config.CONFIG["width"], sim_config.CONFIG["height"]))
     writer.attach(render_product)
 
     # Run physics warmup
     rep.orchestrator.stop()
-    for i in range(60):
+    for i in range(sim_config.FRAMES_WARMUP):
         simulation_app.update()
 
     # --- 6. VALIDATION CHECK ---
@@ -159,6 +169,7 @@ def main():
         sim_config.OBJECTS_CONFIG, 
         sim_config.OBJECTS_BUDGET_RANGE[1], # Use max of range
         sim_config.OBJECTS_MAX_RADIUS, 
+        fov_factor,
         "Detectables"
     )
     print(msg_obj)
@@ -168,6 +179,7 @@ def main():
         sim_config.DISTRACTOR_CONFIG, 
         sim_config.DISTRACTOR_BUDGET_RANGE[1], 
         sim_config.DISTRACTOR_MAX_RADIUS, 
+        fov_factor,
         "Distractors"
     )
     print(msg_dist)
@@ -249,15 +261,27 @@ def main():
         
         scene_utils.update_camera_pose(stage, camera_path, (cam_x, cam_y, cam_z), camera_look_at_target)
 
+        # Dynamic spawn epicenter calculation
+        dx = tx - cam_x
+        dy = ty - cam_y
+        dist_2d = math.sqrt(dx**2 + dy**2)
+        
+        shift_factor = 0.3 
+        epi_x = cam_x + (dx * shift_factor)
+        epi_y = cam_y + (dy * shift_factor)
+        spawn_epicenter = (epi_x, epi_y, tz)
+
         # D. POSITION DETECTABLE OBJECTS (Cyclists, Vehicles...)
         detectables_obstacles = scene_utils.place_objects_from_config(
             stage=stage,
-            target_pos=current_target,
+            target_pos=spawn_epicenter,
             config_map=sim_config.OBJECTS_CONFIG,
             pools_paths_map=detectable_pools,
             budget_range=sim_config.OBJECTS_BUDGET_RANGE,
             max_radius=sim_config.OBJECTS_MAX_RADIUS,
-            previous_obstacles=[]
+            previous_obstacles=[],
+            cam_pos=(cam_x, cam_y, cam_z),
+            fov_margin=fov_margin
         )
         
         # E. POSITION DISTRACTORS (Rocks, Vegetation...)
@@ -265,12 +289,14 @@ def main():
 
         distractor_obstacles = scene_utils.place_objects_from_config(
             stage=stage,
-            target_pos=current_target,
+            target_pos=spawn_epicenter,
             config_map=sim_config.DISTRACTOR_CONFIG,
             pools_paths_map=distractor_pools,
             budget_range=sim_config.DISTRACTOR_BUDGET_RANGE,
             max_radius=sim_config.DISTRACTOR_MAX_RADIUS,
-            previous_obstacles=all_obstacles
+            previous_obstacles=all_obstacles,
+            cam_pos=(cam_x, cam_y, cam_z),
+            fov_margin=fov_margin
         )
 
         num_detectables = len(detectables_obstacles)

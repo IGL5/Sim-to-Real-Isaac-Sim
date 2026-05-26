@@ -25,9 +25,10 @@ CONFIG = {"renderer": "PathTracing", "headless": args.headless,
 # GENERAL CONSTANTS
 MAP_NAME = "Environment_plane.usd"
 WORLD_LIMITS = (-1300, 1300, -1300, 1300)
-MATERIAL_SCALE_FLAT = (0.6, 1.0)
+MATERIAL_SCALE_FLAT = (3.0, 7.0) # (0.6, 1.0)
 MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
 RT_SUBFRAMES = 32
+FRAMES_WARMUP = 60
 
 TEXTURES_ROOT_DIR = Path.cwd() / "assets" / "textures"
 MAP_PATH = Path.cwd() / "assets" / "map" / MAP_NAME
@@ -35,25 +36,29 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_HEIGHT_RANGE = (7.0, 25.0) # (0.0, 1.0)
-CAMERA_DISTANCE_RANGE = (10.0, 30.0) # (2.0, 6.0)
-LOOKAT_JITTER_RADIUS = 0.5
+CAMERA_HEIGHT_RANGE = (8.0, 18.0) # (0.0, 1.0)
+CAMERA_DISTANCE_RANGE = (8.0, 25.0) # (2.0, 6.0)
+LOOKAT_JITTER_RADIUS = 1.0
 
 # RAYCAST SETTINGS
 RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (5.0, 15.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
+OBJECTS_BUDGET_RANGE = (10.0, 20.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
 OBJECTS_MAX_RADIUS = 30.0 # 4.0
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (800.0, 1000.0) # (15.0, 30.0), (30.0, 75.0)
-DISTRACTOR_MAX_RADIUS = 30.0
+DISTRACTOR_BUDGET_RANGE = (3000.0, 4000.0) # (15.0, 30.0), (30.0, 75.0)
+DISTRACTOR_MAX_RADIUS = 50.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
+# ENVIRONMENT_LOOKUP_KEYS = [
+#     "Terrain",
+#     "Terrain_flat"
+# ]
+
 ENVIRONMENT_LOOKUP_KEYS = [
-    "Terrain",
-    "Terrain_flat"
+    "Terrain"
 ]
 
 # --- DEBUGGING ---
@@ -138,7 +143,7 @@ OBJECTS_CONFIG = {
         "active": True,                     # Enable this object type
         "pool_size": 20,                    # Number of bicycles in the pool
         "radius": 2.0,                      # Radius of safety
-        "spawn_radius": (3.0, 25.0),
+        "spawn_radius": (0.0, 40.0),
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 50,             # Always want to appear if there's space
         "scale_range": (0.9, 1.2),          # Fixed scale for rigorous datasets
@@ -150,9 +155,9 @@ OBJECTS_CONFIG = {
 DISTRACTOR_CONFIG = {
     "vegetation": {
         "active": True,
-        "pool_size": 30,
-        "spawn_radius": (0.0, 10.0),
-        "radius": 0.5,
+        "pool_size": 80,
+        "spawn_radius": (0.0, 40.0),
+        "radius": 0.4,
         "cost_units": 2.0,
         "selection_weight": 80,
         "scale_range": (0.7, 1.5),
@@ -162,8 +167,8 @@ DISTRACTOR_CONFIG = {
     "trees": {
         "active": True,
         "pool_size": 50,
-        "spawn_radius": (3.0, 30.0),
-        "radius": 2.0,
+        "spawn_radius": (3.0, 60.0),
+        "radius": 1.0,
         "cost_units": 5.0,
         "selection_weight": 150,
         "scale_range": (0.6, 1.2),
@@ -173,8 +178,8 @@ DISTRACTOR_CONFIG = {
     "debris": {
         "active": True,
         "pool_size": 100,
-        "spawn_radius": (0.0, 8.0),
-        "radius": 0.5,
+        "spawn_radius": (0.0, 30.0),
+        "radius": 0.3,
         "cost_units": 0.5,
         "selection_weight": 70,
         "scale_range": (0.3, 1.0),
@@ -183,9 +188,9 @@ DISTRACTOR_CONFIG = {
     },
     "manmade": {
         "active": True,
-        "pool_size": 60,
-        "spawn_radius": (4.0, 10.0),
-        "radius": 0.9,
+        "pool_size": 40,
+        "spawn_radius": (4.0, 30.0),
+        "radius": 0.4,
         "cost_units": 1.8,
         "selection_weight": 40,
         "scale_range": (0.8, 1.2),
