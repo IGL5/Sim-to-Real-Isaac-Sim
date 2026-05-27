@@ -64,7 +64,7 @@ def create_yaml_config():
     class_names = pu.get_project_classes()
 
     yaml_config = {
-        'path': config.PROCESSED_DATA_DIR,
+        'path': str(config.PROCESSED_DATA_DIR),
         'train': TRAIN_IMGS,
         'val': VAL_IMGS,
         'test': TEST_REL,
@@ -322,9 +322,17 @@ def main():
 
     # 2. Load the model
     try:
-        model = YOLO(model_type)
+        # Resolve model path: if it is a simple filename, use the base_models directory
+        if not Path(model_type).parent.name:
+            config.BASE_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            resolved_model_path = str(config.BASE_MODELS_DIR / model_type)
+        else:
+            resolved_model_path = model_type
+
+        model = YOLO(resolved_model_path)
     except Exception as e:
-        print(f"❌ Error loading model {model_type}. Make sure ultralytics is updated.")
+        msg_path = resolved_model_path if 'resolved_model_path' in locals() else model_type
+        print(f"❌ Error loading model {model_type} from {msg_path}. Make sure ultralytics is updated.")
         print(f"   Details: {e}")
         return
 
@@ -334,7 +342,7 @@ def main():
         'imgsz': args.img_size,
         'batch': BATCH_SIZE,
         'workers': WORKERS,
-        'project': config.PROJECT_DIR,
+        'project': str(config.PROJECT_DIR),
         'name': experiment_name,
         'device': device,
         'patience': args.patience,
@@ -358,7 +366,7 @@ def main():
 
     # 4. Validation (TEST SET)
     print("\n📊 Evaluating final precision in the TEST SET...")
-    metrics = model.val(split='test')
+    metrics = model.val(split='test', project=str(config.PROJECT_DIR), name=f"{experiment_name}/val")
     print(f"🎯 mAP50-95 (Test Set): {metrics.box.map:.4f}")
     print(f"🎯 mAP50 (Test Set):    {metrics.box.map50:.4f}")
 
@@ -411,7 +419,6 @@ def main():
         shutil.copy2(dataset_meta_src, metadata_dir / config.FILE_DATASET_META)
 
     meta_manager.commit()
-    print(f"🎉 Training cycle fully documented at: {metadata_path}")
 
 
 if __name__ == '__main__':

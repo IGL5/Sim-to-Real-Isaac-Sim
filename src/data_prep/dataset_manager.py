@@ -303,7 +303,7 @@ def main():
     print("✅ PROCESSING COMPLETED")
     total_added_imgs = train_stats["images"] + val_stats["images"] + test_stats["images"]
     print(f"New files added: {total_added_imgs}")
-    print(f"Dataset located in: {args.source}")
+    print(f"Dataset located in: {config.PROCESSED_DATA_DIR}")
 
     # 6. Update Dataset Metadata
     meta_manager = DatasetMetadata(config.DATASET_METADATA_PATH)

@@ -7,6 +7,7 @@ DEFAULT_EXP_NAME = "yolov8_s_default"
 RAW_DATA_DIR = Path("data/01_raw")
 PROCESSED_DATA_DIR = Path("data/02_processed")
 METRICS_DIR = Path("data/05_metrics")
+BASE_MODELS_DIR = Path("data/base_models")
 TEMPLATES_DIR = Path("templates")
 
 # Temporary directories
@@ -95,4 +96,4 @@ def get_dynamic_project_name():
     return "04_bicycle_detector"
 
 PROJECT_NAME = get_dynamic_project_name()
-PROJECT_DIR = Path("data") / PROJECT_NAME
+PROJECT_DIR = (Path("data") / PROJECT_NAME).resolve()
