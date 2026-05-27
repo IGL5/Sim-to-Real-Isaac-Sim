@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import shutil
 from pathlib import Path
-import src.core.config as config
+from src.core import config
 from src.core.metadata.clean_builder import CleaningMetadata
 
 # ==========================================
