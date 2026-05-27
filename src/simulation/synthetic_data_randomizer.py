@@ -330,6 +330,7 @@ def main():
     meta_manager = SimulationMetadata(config.GENERATION_METADATA_PATH)
     
     meta_manager.set_timestamp(key_name=config.GENERATION_TIMESTAMP_KEY)
+    
     meta_manager.record_config(
         width=sim_config.CONFIG["width"],
         height=sim_config.CONFIG["height"],

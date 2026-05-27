@@ -273,7 +273,7 @@ def apply_subpart_semantics(prim, semantic_parts):
         if matched_class:
             if child_prim.IsA(UsdGeom.Mesh):
                 with rep.get.prims(path_pattern=str(child_prim.GetPath())):
-                    rep.modify.semantics([('class', matched_class)])
+                    rep.modify.semantics([('class', matched_class)], mode="replace")
             else:
                 for sub_child in Usd.PrimRange(child_prim):
                     if sub_child.IsA(UsdGeom.Mesh):
