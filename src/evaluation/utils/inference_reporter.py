@@ -98,7 +98,7 @@ class InferenceReportGenerator:
         # Global Heatmap
         plot_generator.plot_normalized_heatmap(
             self.stats["bbox_centers_norm"],
-            str(self.plots_dir / f"inference_{config.SPATIAL_HEATMAP_FILENAME}"),
+            str(self.plots_dir / f"inference_{config.HEATMAP_FILENAME}"),
             title="Normalized Detection Heatmap (Global)",
             cmap='magma'
         )

@@ -330,6 +330,13 @@ def main():
     meta_manager = SimulationMetadata(config.GENERATION_METADATA_PATH)
     
     meta_manager.set_timestamp(key_name=config.GENERATION_TIMESTAMP_KEY)
+    meta_manager.record_config(
+        width=sim_config.CONFIG["width"],
+        height=sim_config.CONFIG["height"],
+        renderer=sim_config.CONFIG.get("renderer", "PathTracing"),
+        world_limits=sim_config.WORLD_LIMITS,
+        rt_subframes=sim_config.RT_SUBFRAMES
+    )
 
     meta_manager.record_performance(
         requested_frames=sim_config.CONFIG["num_frames"],
