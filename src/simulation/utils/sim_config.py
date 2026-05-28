@@ -147,9 +147,9 @@ OBJECTS_CONFIG = {
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 50,             # Always want to appear if there's space
         "scale_range": (0.9, 1.2),          # Fixed scale for rigorous datasets
-        "semantic_parts": {
-            "insulator": "insulator"
-        }
+        # "semantic_parts": {
+        #     "insulator": "insulator"
+        # }
     },
 }
 

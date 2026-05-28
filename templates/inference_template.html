@@ -74,7 +74,7 @@
                     "%.2f"|format(stats.confidence_global.mean) }} | Std: {{ "%.2f"|format(stats.confidence_global.std)
                     }}
                 </p>
-                <img src="plots/inference/inference_conf_dist.png" style="margin-top: 10px;">
+                <img src="plots/inference/inference_confidence_distribution.png" style="margin-top: 10px;">
             </div>
             <div class="card">
                 <h3>Spatial Distribution (Heatmap)</h3>
@@ -144,7 +144,7 @@
         <div class="card" style="border-left-color: #e74c3c; margin-bottom: 10px;">
             <p><strong>Source:</strong> {{ event.orig_filename }}</p>
             <p>Found <strong>{{ event.count }}</strong> risk pair(s)</p>
-            <img src="plots/inference/suspicious_overlaps_imgs/{{ event.evidence_filename }}" alt="Overlap Evidence"
+            <img src="plots/inference/suspicious_overlaps/{{ event.evidence_filename }}" alt="Overlap Evidence"
                 loading="lazy">
         </div>
         {% endfor %}

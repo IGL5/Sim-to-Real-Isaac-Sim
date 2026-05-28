@@ -40,15 +40,26 @@ def plot_confusion_matrix(confusion_pairs, class_names, output_path):
     plt.savefig(output_path)
     plt.close()
 
-def plot_confidence_histogram(tp_kept, fp_kept, tp_disc, fp_disc, threshold, output_path, title="Confidence Distribution"):
+def plot_confidence_histogram(tp_kept, fp_kept, tp_disc, fp_disc, threshold, output_path, title="Confidence Distribution", is_inference=False):
     """ Draws a confidence histogram (Kept Global for overall model health overview) """
     plt.figure(figsize=(8, 5))
     bins = np.linspace(0, 1, 21)
 
-    plt.hist(tp_disc, bins=bins, alpha=0.4, color='lightgreen', label='Missed TP (Below Thresh)')
-    plt.hist(fp_disc, bins=bins, alpha=0.4, color='lightcoral', label='Ignored FP (Below Thresh)')
-    plt.hist(tp_kept, bins=bins, alpha=0.8, color='green', label='Valid Hits (TP)')
-    plt.hist(fp_kept, bins=bins, alpha=0.8, color='red', label='Critical Errors (FP)')
+    if is_inference:
+        # tp_disc contains all below-threshold confidences, tp_kept contains all above-threshold confidences
+        if len(tp_disc) > 0:
+            plt.hist(tp_disc, bins=bins, alpha=0.4, color='lightskyblue', label='Below Threshold')
+        if len(tp_kept) > 0:
+            plt.hist(tp_kept, bins=bins, alpha=0.8, color='dodgerblue', label='Valid Detections')
+    else:
+        if len(tp_disc) > 0:
+            plt.hist(tp_disc, bins=bins, alpha=0.4, color='lightgreen', label='Missed TP (Below Thresh)')
+        if len(fp_disc) > 0:
+            plt.hist(fp_disc, bins=bins, alpha=0.4, color='lightcoral', label='Ignored FP (Below Thresh)')
+        if len(tp_kept) > 0:
+            plt.hist(tp_kept, bins=bins, alpha=0.8, color='green', label='Valid Hits (TP)')
+        if len(fp_kept) > 0:
+            plt.hist(fp_kept, bins=bins, alpha=0.8, color='red', label='Critical Errors (FP)')
 
     plt.axvline(x=threshold, color='black', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
 

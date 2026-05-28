@@ -11,11 +11,12 @@ from src.core.utils import math_utils as mu
 from src.core import config
 
 class InferenceReportGenerator:
-    def __init__(self, overlap_threshold=0.5, class_names=None):
+    def __init__(self, conf_threshold=0.4, overlap_threshold=0.5, class_names=None):
         self.output_dir = config.EVALUATION_OUTPUT_DIR
         self.plots_dir = Path(config.PLOTS_EVAL_DIR) / "inference"
         self.plots_dir.mkdir(parents=True, exist_ok=True)
         
+        self.conf_threshold = conf_threshold
         self.overlap_threshold = overlap_threshold
         self.class_names = class_names if class_names else {}
         self.MAX_OVERLAPS_HTML = 50
@@ -24,6 +25,7 @@ class InferenceReportGenerator:
             "total_images": 0,
             "total_detections": 0,
             "confidences": [],
+            "confidences_disc": [],
             "bbox_centers_norm": [],
             "overlap_events": [],
             "speeds": {"preprocess": [], "inference": [], "postprocess": []}
@@ -32,41 +34,57 @@ class InferenceReportGenerator:
         self.class_stats = defaultdict(lambda: {
             "detections": 0,
             "confidences": [],
+            "confidences_disc": [],
             "bbox_centers": []
         })
-
+ 
     def update(self, pred_boxes, pred_classes, confidences, img_shape, filename, speed_dict=None):
         h, w = img_shape
         self.stats["total_images"] += 1
-        self.stats["total_detections"] += len(pred_boxes)
-        self.stats["confidences"].extend(confidences)
         
         if speed_dict:
             self.stats["speeds"]["preprocess"].append(speed_dict.get('preprocess', 0))
             self.stats["speeds"]["inference"].append(speed_dict.get('inference', 0))
             self.stats["speeds"]["postprocess"].append(speed_dict.get('postprocess', 0))
         
+        valid_boxes = []
+        valid_classes = []
+        valid_confs = []
+        
         for i, box in enumerate(pred_boxes):
             c_id = pred_classes[i]
-            cx_abs = (box[0] + box[2]) / 2
-            cy_abs = (box[1] + box[3]) / 2
+            conf = confidences[i]
             
-            # Global
-            self.stats["bbox_centers_norm"].append((cx_abs/w, cy_abs/h))
-            
-            # Per-class
-            self.class_stats[c_id]["detections"] += 1
-            self.class_stats[c_id]["confidences"].append(confidences[i])
-            self.class_stats[c_id]["bbox_centers"].append((cx_abs/w, cy_abs/h))
-            
-        # Overlaps INTRA-CLASS
+            if conf >= self.conf_threshold:
+                valid_boxes.append(box)
+                valid_classes.append(c_id)
+                valid_confs.append(conf)
+                
+                cx_abs = (box[0] + box[2]) / 2
+                cy_abs = (box[1] + box[3]) / 2
+                
+                # Global
+                self.stats["bbox_centers_norm"].append((cx_abs/w, cy_abs/h))
+                self.stats["confidences"].append(conf)
+                
+                # Per-class
+                self.class_stats[c_id]["detections"] += 1
+                self.class_stats[c_id]["confidences"].append(conf)
+                self.class_stats[c_id]["bbox_centers"].append((cx_abs/w, cy_abs/h))
+            elif conf >= 0.2:
+                self.stats["confidences_disc"].append(conf)
+                self.class_stats[c_id]["confidences_disc"].append(conf)
+                
+        self.stats["total_detections"] += len(valid_boxes)
+        
+        # Overlaps INTRA-CLASS (We only care about overlaps among valid boxes above threshold!)
         problematic_pairs_indices = []
-        unique_classes = set(pred_classes)
+        unique_classes = set(valid_classes)
         
         for c_id in unique_classes:
-            idx_list = [i for i, c in enumerate(pred_classes) if c == c_id]
+            idx_list = [i for i, c in enumerate(valid_classes) if c == c_id]
             if len(idx_list) > 1:
-                class_boxes = [pred_boxes[i] for i in idx_list]
+                class_boxes = [valid_boxes[i] for i in idx_list]
                 iou_matrix = mu.calculate_iou_matrix(class_boxes, class_boxes)
                 pairs = np.argwhere(np.triu(iou_matrix, k=1) > self.overlap_threshold)
                 for p in pairs:
@@ -82,19 +100,20 @@ class InferenceReportGenerator:
                 })
             
         return problematic_pairs_indices
-
+ 
     def generate_plots(self):
         print("📊 Generating inference plots (Multi-Class)...")
         
         # Global Histogram
-        if self.stats["confidences"]:
+        if self.stats["confidences"] or self.stats["confidences_disc"]:
             plot_generator.plot_confidence_histogram(
-                self.stats["confidences"], [], [], [], 
-                threshold=0.0, 
+                self.stats["confidences"], [], self.stats["confidences_disc"], [], 
+                threshold=self.conf_threshold, 
                 output_path=str(self.plots_dir / f"inference_{config.CONFIDENCE_DIST_FILENAME}"),
-                title="Real World Confidence Distribution (Global)"
+                title="Real World Confidence Distribution (Global)",
+                is_inference=True
             )
-
+ 
         # Global Heatmap
         plot_generator.plot_normalized_heatmap(
             self.stats["bbox_centers_norm"],
@@ -108,12 +127,13 @@ class InferenceReportGenerator:
             c_name = self.class_names.get(c_id, f"Class_{c_id}")
             safe_name = c_name.replace(" ", "_")
             
-            if s["confidences"]:
+            if s["confidences"] or s["confidences_disc"]:
                 plot_generator.plot_confidence_histogram(
-                    s["confidences"], [], [], [], 
-                    threshold=0.0, 
+                    s["confidences"], [], s["confidences_disc"], [], 
+                    threshold=self.conf_threshold, 
                     output_path=str(self.plots_dir / f"inference_conf_dist_{safe_name}.png"),
-                    title=f"Confidence ({c_name})"
+                    title=f"Confidence ({c_name})",
+                    is_inference=True
                 )
             if s["bbox_centers"]:
                 plot_generator.plot_normalized_heatmap(

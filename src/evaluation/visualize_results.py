@@ -1,8 +1,12 @@
 from pathlib import Path
+import sys
+import pathlib
+# Patch for compatibility with PyTorch checkpoints containing pathlib._local objects from Python 3.12+
+sys.modules['pathlib._local'] = pathlib
+
 import cv2
 import shutil
 import argparse
-import sys
 from ultralytics import YOLO
 from src.core import config
 from src.evaluation.utils import data_utils as du
@@ -267,7 +271,7 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
         if mod_name.lower() in dataset_classes:
             model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
     
-    reporter = InferenceReportGenerator(overlap_threshold=config.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
+    reporter = InferenceReportGenerator(conf_threshold=config.CONF_THRESHOLD, overlap_threshold=config.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
     overlaps_dir_path = Path(reporter.plots_dir) / "suspicious_overlaps"
     overlaps_dir_path.mkdir(parents=True, exist_ok=True)
     
@@ -283,9 +287,9 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             img_orig = cv2.imread(str(img_path))
             if img_orig is None: continue
             h, w, _ = img_orig.shape
-
-            # Inference
-            res = model.predict(img_path, conf=config.CONF_THRESHOLD, verbose=False)[0]
+ 
+            # Inference (low threshold to capture below-threshold detections for the plot)
+            res = model.predict(img_path, conf=min(0.01, config.CONF_THRESHOLD), verbose=False)[0]
             speed_dict = res.speed
             
             pred_boxes, confidences, pred_classes = [], [], []
@@ -300,12 +304,22 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             # Pass the classes to the reporter so it analyzes INTRA-CLASS overlaps
             problematic_pairs = reporter.update(pred_boxes, pred_classes, confidences, (h, w), filename, speed_dict)
             
+            # Filter valid predictions above threshold for drawing
+            valid_pred_boxes = []
+            valid_confidences = []
+            valid_pred_classes = []
+            for idx, conf in enumerate(confidences):
+                if conf >= config.CONF_THRESHOLD:
+                    valid_pred_boxes.append(pred_boxes[idx])
+                    valid_confidences.append(conf)
+                    valid_pred_classes.append(pred_classes[idx])
+            
             if problematic_pairs:
-                img_overlap = vu.draw_overlapping_pairs(img_orig.copy(), pred_boxes, problematic_pairs, confidences)
+                img_overlap = vu.draw_overlapping_pairs(img_orig.copy(), valid_pred_boxes, problematic_pairs, valid_confidences)
                 cv2.imwrite(str(overlaps_dir_path / f"OVERLAP_{filename}"), img_overlap)
             
             # Draw with our own colors and translated labels
-            img_drawn = vu.draw_boxes(img_orig.copy(), pred_boxes, color=(255, 0, 0), confidences=confidences, classes=pred_classes, class_names=dataset_class_names)
+            img_drawn = vu.draw_boxes(img_orig.copy(), valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names)
             cv2.imwrite(str(images_output_dir / f"PRED_{filename}"), img_drawn)
             
         except Exception as e:

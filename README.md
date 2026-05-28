@@ -91,15 +91,36 @@ flowchart TD
 
 ## 🛠️ Prerequisites & Installation
 
-### Simulation Environment (Isaac Sim)
-The simulation scripts must run inside the python environment bundled with **Nvidia Isaac Sim**.
-* **Python**: Runs using Isaac Sim's bundled Python interpreter (usually `python.bat` or `./python.sh`).
+This project is structured with two separate execution environments to prevent dependency conflicts with Nvidia Isaac Sim's custom Python distribution.
 
-### Training & Evaluation Environment
-It is recommended to run training and evaluation in a separate standard Python environment (or Conda environment) to prevent dependency conflicts with Isaac Sim.
+### 1. Simulation Environment (Isaac Sim)
+All scripts inside `src/simulation/` run directly inside Nvidia Isaac Sim, utilizing its bundled Python interpreter.
+* **Prerequisites**: A working installation of **Nvidia Isaac Sim**.
+* **Execution**: Run simulation scripts using the `python.bat` (Windows) or `./python.sh` (Linux) scripts found in your Isaac Sim installation directory.
+* **Dependencies**: Isaac Sim comes preloaded with the required APIs (`isaacsim`, `omni`, `carb`, `pxr`, `numpy`, etc.), so no extra installation is necessary for this environment.
+
+---
+
+### 2. Training & Evaluation Environment (Conda / standard Python)
+All scripts for dataset preparation, YOLO model training, metrics evaluation, XAI, and interactive HTML report rendering (`src/data_prep/`, `src/training/`, and `src/evaluation/`) run in your local Python environment.
+
+#### Recommended Environment Setup (Conda)
+It is highly recommended to create a dedicated Conda environment to run these scripts:
 
 ```bash
-pip install ultralytics opencv-python matplotlib seaborn pandas pyyaml jinja2
+# 1. Create a new Conda environment
+conda create -n sim2real_env python=3.10 -y
+
+# 2. Activate the environment
+conda activate sim2real_env
+```
+
+#### Package Installation
+Install the project dependencies using the root `requirements.txt`:
+
+```bash
+# 3. Install requirements
+pip install -r requirements.txt
 ```
 
 ---
