@@ -81,10 +81,10 @@ def select_model_path(preselected_model=None):
         print(f"  [{i+1}] {m}")
         
     while True:
-        user_input = input(f"\nSelect a model [1-{len(available_models)}] (default: 1): ").strip()
+        user_input = input(f"\nSelect a model [1-{len(available_models)}] (default: {len(available_models)}): ").strip()
         
         if not user_input:
-            exp_name = available_models[0]
+            exp_name = available_models[-1]
             break
         
         if user_input.isdigit():

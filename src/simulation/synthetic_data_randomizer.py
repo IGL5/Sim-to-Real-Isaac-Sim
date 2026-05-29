@@ -366,8 +366,8 @@ def main():
     )
 
     meta_manager.record_spatial_coverage(
-        cam_dist=sim_config.CAMERA_DISTANCE_RANGE,
-        cam_height=sim_config.CAMERA_HEIGHT_RANGE,
+        cam_dist=sim_config.CAMERA_3D_DIST_RANGE,
+        cam_height=sim_config.CAMERA_ELEVATION_DEG_RANGE,
         obj_max_rad=sim_config.OBJECTS_MAX_RADIUS,
         dist_max_rad=sim_config.DISTRACTOR_MAX_RADIUS
     )

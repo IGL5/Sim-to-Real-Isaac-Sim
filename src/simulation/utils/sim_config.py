@@ -36,9 +36,9 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_HEIGHT_RANGE = (8.0, 18.0) # (0.0, 1.0)
-CAMERA_DISTANCE_RANGE = (8.0, 25.0) # (2.0, 6.0)
-LOOKAT_JITTER_RADIUS = 1.0
+CAMERA_ELEVATION_DEG_RANGE = (10.0, 25.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
+CAMERA_3D_DIST_RANGE = (10.0, 20.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
+LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
 
 # RAYCAST SETTINGS
 RAYCAST_START_HEIGHT = 2000.0

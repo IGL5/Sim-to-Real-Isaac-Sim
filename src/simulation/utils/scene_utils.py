@@ -60,10 +60,10 @@ def get_drone_camera_pose(focus_target):
     
     # --- FLIGHT PARAMETERS ---
     # Distance to target (hypotenuse)
-    distance = random.uniform(sim_config.CAMERA_DISTANCE_RANGE[0], sim_config.CAMERA_DISTANCE_RANGE[1]) 
+    distance = random.uniform(sim_config.CAMERA_3D_DIST_RANGE[0], sim_config.CAMERA_3D_DIST_RANGE[1]) 
     
     # Angular height (Pitch):
-    elevation_deg = random.uniform(sim_config.CAMERA_HEIGHT_RANGE[0], sim_config.CAMERA_HEIGHT_RANGE[1])
+    elevation_deg = random.uniform(sim_config.CAMERA_ELEVATION_DEG_RANGE[0], sim_config.CAMERA_ELEVATION_DEG_RANGE[1])
     elevation_rad = math.radians(elevation_deg)
     
     # Angle around the target (Azimuth)
