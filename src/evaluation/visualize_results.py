@@ -280,7 +280,6 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
     print(f"📸 Processing {len(image_files)} images...")
     
     for i, img_path in enumerate(image_files):
-        if i >= config.LIMIT_IMAGES_PER_VIS: break
         filename = img_path.name
          
         try:
@@ -304,23 +303,24 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             # Pass the classes to the reporter so it analyzes INTRA-CLASS overlaps
             problematic_pairs = reporter.update(pred_boxes, pred_classes, confidences, (h, w), filename, speed_dict)
             
-            # Filter valid predictions above threshold for drawing
-            valid_pred_boxes = []
-            valid_confidences = []
-            valid_pred_classes = []
-            for idx, conf in enumerate(confidences):
-                if conf >= config.CONF_THRESHOLD:
-                    valid_pred_boxes.append(pred_boxes[idx])
-                    valid_confidences.append(conf)
-                    valid_pred_classes.append(pred_classes[idx])
-            
-            if problematic_pairs:
-                img_overlap = vu.draw_overlapping_pairs(img_orig.copy(), valid_pred_boxes, problematic_pairs, valid_confidences)
-                cv2.imwrite(str(overlaps_dir_path / f"OVERLAP_{filename}"), img_overlap)
-            
-            # Draw with our own colors and translated labels
-            img_drawn = vu.draw_boxes(img_orig.copy(), valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names)
-            cv2.imwrite(str(images_output_dir / f"PRED_{filename}"), img_drawn)
+            if i < config.LIMIT_IMAGES_PER_VIS: 
+                # Filter valid predictions above threshold for drawing
+                valid_pred_boxes = []
+                valid_confidences = []
+                valid_pred_classes = []
+                for idx, conf in enumerate(confidences):
+                    if conf >= config.CONF_THRESHOLD:
+                        valid_pred_boxes.append(pred_boxes[idx])
+                        valid_confidences.append(conf)
+                        valid_pred_classes.append(pred_classes[idx])
+                
+                if problematic_pairs:
+                    img_overlap = vu.draw_overlapping_pairs(img_orig.copy(), valid_pred_boxes, problematic_pairs, valid_confidences)
+                    cv2.imwrite(str(overlaps_dir_path / f"OVERLAP_{filename}"), img_overlap)
+                
+                # Draw with our own colors and translated labels
+                img_drawn = vu.draw_boxes(img_orig.copy(), valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names)
+                cv2.imwrite(str(images_output_dir / f"PRED_{filename}"), img_drawn)
             
         except Exception as e:
             print(f"Error processing {img_path}: {e}")

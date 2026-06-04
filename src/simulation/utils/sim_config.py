@@ -36,8 +36,8 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_ELEVATION_DEG_RANGE = (10.0, 25.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
-CAMERA_3D_DIST_RANGE = (10.0, 20.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
+CAMERA_ELEVATION_DEG_RANGE = (30.0, 40.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
+CAMERA_3D_DIST_RANGE = (5.0, 10.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
 LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
 
 # RAYCAST SETTINGS
@@ -142,11 +142,13 @@ OBJECTS_CONFIG = {
     "electric_pole": {
         "active": True,                     # Enable this object type
         "pool_size": 20,                    # Number of bicycles in the pool
-        "radius": 2.0,                      # Radius of safety
-        "spawn_radius": (0.0, 40.0),
+        "radius": 1.5,                      # Radius of safety
+        "spawn_radius": (0.0, 30.0),
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 50,             # Always want to appear if there's space
-        "scale_range": (0.9, 1.2),          # Fixed scale for rigorous datasets
+        "scale_range": (0.5, 0.8),          # Fixed scale for rigorous datasets
+        # "wheelbase": 0.8,
+        # "track_width": 0.8,
         # "semantic_parts": {
         #     "insulator": "insulator"
         # }

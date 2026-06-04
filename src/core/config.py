@@ -60,7 +60,7 @@ DATASET_METADATA_PATH = PROCESSED_DATA_DIR / FILE_DATASET_META
 CLASSES_PATH = Path("src") / "core" / "classes.txt"
 
 # Evaluation defaults
-LIMIT_IMAGES_PER_VIS = 100
+LIMIT_IMAGES_PER_VIS = 250
 
 # Supported Extensions
 VALID_IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg')

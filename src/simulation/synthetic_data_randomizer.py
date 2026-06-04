@@ -154,12 +154,12 @@ def main():
     writer.initialize(output_dir=absolute_output_dir, omit_semantic_type=True)
     
     render_product = rep.create.render_product(cam_rep, (sim_config.CONFIG["width"], sim_config.CONFIG["height"]))
-    writer.attach(render_product)
 
     # Run physics warmup
-    rep.orchestrator.stop()
     for i in range(sim_config.FRAMES_WARMUP):
         simulation_app.update()
+
+    writer.attach(render_product)
 
     # --- 6. VALIDATION CHECK ---
     print("\n--- Configuration Safety Check ---")
