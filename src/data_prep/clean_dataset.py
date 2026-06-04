@@ -179,7 +179,12 @@ def analyze_kitti_labels(img, txt_path, area_thresh, max_area_ratio, whitelist_d
                     
                     cv2.rectangle(img_review, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0, 0, 255), 2)
                     reason_text = f"[#{idx}] " + " | ".join(reasons)
-                    cv2.putText(img_review, reason_text, (int(xmin), int(ymin) - 5), 
+                    
+                    text_y = int(ymin) - 5
+                    if text_y < 10:
+                        text_y = int(ymin) + 15
+                        
+                    cv2.putText(img_review, reason_text, (int(xmin), text_y), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1, cv2.LINE_AA)
             except ValueError as e:
                 print(f"⚠️ [KITTI Analysis] Error parsing line in {frame_id}.txt: {e}")

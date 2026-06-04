@@ -28,8 +28,13 @@ def draw_boxes(img, boxes, color=(0, 255, 0), label="", confidences=None, classe
         if text_to_draw: 
             # Put a colored background to make the text always legible
             (w, h), _ = cv2.getTextSize(text_to_draw, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-            cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), color, -1)
-            cv2.putText(img, text_to_draw, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            
+            if y1 < 20:
+                cv2.rectangle(img, (x1, y1), (x1 + w, y1 + 20), color, -1)
+                cv2.putText(img, text_to_draw, (x1, y1 + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            else:
+                cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), color, -1)
+                cv2.putText(img, text_to_draw, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
     return img
 
 
@@ -55,7 +60,12 @@ def draw_overlapping_pairs(img, pred_boxes, pairs_indices, confidences=None):
             conf = confidences[idx]
             label = f"{conf:.2f}"
             (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
-            cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), alert_color, -1)
-            cv2.putText(img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            
+            if y1 < 20:
+                cv2.rectangle(img, (x1, y1), (x1 + w, y1 + 20), alert_color, -1)
+                cv2.putText(img, label, (x1, y1 + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            else:
+                cv2.rectangle(img, (x1, y1 - 20), (x1 + w, y1), alert_color, -1)
+                cv2.putText(img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
             
     return img
