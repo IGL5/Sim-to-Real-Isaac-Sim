@@ -120,7 +120,7 @@ def save_evaluation_results(exp_name, mode):
     print(f"\n📦 Persistent Evaluation saved at: {eval_dir}")
 
 
-def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep=False):
+def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep=False, manual_class_map=None):
     """ Audit mode (Dataset Test with Labels) - Supports both Sim and Real """
     if not check_system_integrity(model_path, check_dataset=(custom_img_dir is None)):
         return
@@ -157,10 +157,13 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
     
     model = YOLO(model_path)
     
-    model_to_dataset_map = {}
-    for mod_idx, mod_name in model.names.items():
-        if mod_name.lower() in dataset_classes:
-            model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
+    if manual_class_map:
+        model_to_dataset_map = manual_class_map
+    else:
+        model_to_dataset_map = {}
+        for mod_idx, mod_name in model.names.items():
+            if mod_name.lower() in dataset_classes:
+                model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
     
     print(f"🧠 Active classes in dataset: {dataset_class_names}")
 
@@ -246,7 +249,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         save_evaluation_results(exp_name, prefix)
 
 
-def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False):
+def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False, manual_class_map=None):
     """ Inference Mode (New images without labels) """
     if not check_system_integrity(model_path, check_dataset=False): return
     if not Path(source_folder).exists(): return
@@ -266,10 +269,14 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
     dataset_class_names = {i: name.capitalize() for i, name in enumerate(dataset_classes)}
     
     model = YOLO(model_path)
-    model_to_dataset_map = {}
-    for mod_idx, mod_name in model.names.items():
-        if mod_name.lower() in dataset_classes:
-            model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
+
+    if manual_class_map:
+        model_to_dataset_map = manual_class_map
+    else:
+        model_to_dataset_map = {}
+        for mod_idx, mod_name in model.names.items():
+            if mod_name.lower() in dataset_classes:
+                model_to_dataset_map[mod_idx] = dataset_classes.index(mod_name.lower())
     
     reporter = InferenceReportGenerator(conf_threshold=config.CONF_THRESHOLD, overlap_threshold=config.OVERLAP_THRESHOLD_ANALYSIS, class_names=dataset_class_names)
     overlaps_dir_path = Path(reporter.plots_dir) / "suspicious_overlaps"
@@ -374,8 +381,21 @@ if __name__ == "__main__":
     parser.add_argument('--keep', action='store_true', help="Do not delete the output directory before running (useful to combine reports)")
     parser.add_argument('--conf', type=float, default=None, help="Confidence threshold for detection")
     parser.add_argument('--model', type=str, default=None, help="Bypass interactive menu and specify model name directly")
+    parser.add_argument('--class_map', type=str, default=None, help="Manual class mapping. Format: model_class_number:dataset_class_number")
     
     args = parser.parse_args()
+
+    custom_class_map = None
+    if args.class_map:
+        try:
+            custom_class_map = {}
+            pares = args.class_map.split(',')
+            for par in pares:
+                mod_c, dat_c = par.split(':')
+                custom_class_map[int(mod_c)] = int(dat_c)
+        except ValueError:
+            print("❌ ERROR: The --class_map format must be INT:INT separated by comma (e.g., 1:0,2:1)")
+            sys.exit(1)
 
     if args.conf is not None:
         config.CONF_THRESHOLD = args.conf
@@ -390,12 +410,12 @@ if __name__ == "__main__":
     elif args.source and args.labels:
         # REAL AUDIT MODE (Has images and has labels)
         run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, 
-                       custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep)
+                       custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep, manual_class_map=custom_class_map)
     elif args.source:
         # INFERENCE MODE (Has images)
-        run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep)
+        run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep, manual_class_map=custom_class_map)
     else:
         # SYNTHETIC AUDIT MODE (Default, uses Isaac Sim test set)
         if args.labels:
             print("⚠️ Warning: --labels ignored because --source was not provided.")
-        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep, manual_class_map=custom_class_map)
