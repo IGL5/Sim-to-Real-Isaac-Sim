@@ -35,6 +35,7 @@ IMG_SIZE = 640      # Trains on SD resolution
 BATCH_SIZE = 16
 WORKERS = 4
 FREEZE_LAYERS = 10
+FREEZE_LAYERS_LP = 22
 
 
 def check_gpu():
@@ -302,6 +303,8 @@ def main():
     parser.add_argument('--img_size', type=int, default=IMG_SIZE, help="Override image size [640 (SD default), 960 (1/2), 1280 (HD)]")
     parser.add_argument('--finetune', action='store_true', help="Fine-tune an existing trained model instead of using a base COCO model")
     parser.add_argument('--lr0', type=float, default=0.00, help="Initial learning rate (use 0.0001 for fine-tuning)")
+    parser.add_argument('--progressive', action='store_true', help="Activate the 2-phase training (LP-FT) ideal for Sim-to-Real")
+    parser.add_argument('--keep_mosaic', action='store_true', help="Keep mosaic augmentation active through the whole training")
     args = parser.parse_args()
 
     start_time = time.time()
@@ -352,13 +355,60 @@ def main():
         'freeze': args.freeze
     }
 
-    # 3. Train
-    if args.lr0 > 0.00:
-        train_kwargs['lr0'] = args.lr0
+    if args.keep_mosaic:
+        train_kwargs['close_mosaic'] = 0
 
-    model.train(**train_kwargs)
-    
-    recover_misplaced_runs(experiment_name)
+    # 3. Train
+    if args.progressive:
+        phase1_epochs = max(1, int(args.epochs * 0.3))
+        phase2_epochs = args.epochs - phase1_epochs
+
+        # --- PHASE 1: Train only the head (Linear Probing) ---
+        print(f"\n--- PHASE 1: Calibrating head ({phase1_epochs} epochs) ---")
+        train_kwargs_phase1 = train_kwargs.copy()
+        train_kwargs_phase1['epochs'] = phase1_epochs
+        train_kwargs_phase1['name'] = f"{experiment_name}_phase1"
+        train_kwargs_phase1['freeze'] = FREEZE_LAYERS_LP
+        model.train(**train_kwargs_phase1)
+        
+        recover_misplaced_runs(f"{experiment_name}_phase1")
+
+        # --- PHASE 2: Deep Fine-Tuning of the entire model ---
+        print(f"\n--- PHASE 2: Deep Fine-tuning ({phase2_epochs} epochs) ---")
+        
+        # Load the best weights from phase 1 as a starting point
+        phase1_dir = Path(config.PROJECT_DIR) / f"{experiment_name}_phase1"
+        best_phase1 = phase1_dir / config.BEST_MODEL_SUBPATH
+        
+        if best_phase1.exists():
+            model = YOLO(str(best_phase1))
+            try:
+                shutil.rmtree(phase1_dir)
+            except Exception as e:
+                print(f"⚠️ Could not delete Phase 1 folder automatically: {e}")
+        else:
+            print("⚠️ Could not find the Phase 1 model, continuing with the model in memory.")
+
+        train_kwargs_phase2 = train_kwargs.copy()
+        train_kwargs_phase2['epochs'] = phase2_epochs
+        train_kwargs_phase2['name'] = experiment_name
+        train_kwargs_phase2['freeze'] = args.freeze 
+        train_kwargs_phase2['lr0'] = 0.0001 
+        train_kwargs_phase2['optimizer'] = 'AdamW'
+        
+        model.train(**train_kwargs_phase2)
+
+        recover_misplaced_runs(experiment_name)
+
+    else:
+        # Normal 1-phase training (original behavior)
+        if args.lr0 > 0.00:
+            train_kwargs['lr0'] = args.lr0
+            train_kwargs['optimizer'] = 'AdamW'
+
+        model.train(**train_kwargs)
+
+        recover_misplaced_runs(experiment_name)
 
     print("\n--- Training completed ---")
     best_weight = Path(config.PROJECT_DIR) / experiment_name / config.BEST_MODEL_SUBPATH

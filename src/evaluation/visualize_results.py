@@ -1,9 +1,5 @@
 from pathlib import Path
 import sys
-import pathlib
-# Patch for compatibility with PyTorch checkpoints containing pathlib._local objects from Python 3.12+
-sys.modules['pathlib._local'] = pathlib
-
 import cv2
 import shutil
 import argparse
