@@ -211,3 +211,4 @@ assets/
 data/
 runs/
 *.pt
+src/core/classes.txt
