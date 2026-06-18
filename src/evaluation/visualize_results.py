@@ -185,7 +185,14 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
             gt_boxes = []
 
         # Inference (always get all detections for PR curve)
-        results = model.predict(source=img, conf=0.001, verbose=False)[0]
+        results = model.predict(
+            source=img, 
+            conf=0.001, 
+            verbose=False,
+            project=str(config.EVALUATION_OUTPUT_DIR),
+            name="yolo_temp",
+            exist_ok=True
+        )[0]
         speed_dict = results.speed
         
         pred_boxes = []
@@ -291,7 +298,14 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             h, w, _ = img_orig.shape
  
             # Inference (low threshold to capture below-threshold detections for the plot)
-            res = model.predict(img_path, conf=min(0.01, config.CONF_THRESHOLD), verbose=False)[0]
+            res = model.predict(
+                source=img_path, 
+                conf=min(0.01, config.CONF_THRESHOLD), 
+                verbose=False,
+                project=str(config.EVALUATION_OUTPUT_DIR),
+                name="yolo_temp",
+                exist_ok=True
+            )[0]
             speed_dict = res.speed
             
             pred_boxes, confidences, pred_classes = [], [], []
@@ -352,17 +366,25 @@ def run_video_mode(model_path, video_path):
     
     # save=True makes YOLO automatically save the video in runs/detect/predict...
     # stream=True saves memory on long videos
+    video_out_dir = Path(config.EVALUATION_OUTPUT_DIR) / "video_output"
+    
     if "coco" in model_path.lower():
-        results = model.predict(source=video_path, save=True, conf=config.CONF_THRESHOLD, stream=True, classes=[1])
+        results = model.predict(
+            source=video_path, save=True, conf=config.CONF_THRESHOLD, stream=True, classes=[1],
+            project=str(config.EVALUATION_OUTPUT_DIR), name="video_output", exist_ok=True
+        )
     else:
-        results = model.predict(source=video_path, save=True, conf=config.CONF_THRESHOLD, stream=True)
+        results = model.predict(
+            source=video_path, save=True, conf=config.CONF_THRESHOLD, stream=True,
+            project=str(config.EVALUATION_OUTPUT_DIR), name="video_output", exist_ok=True
+        )
     
     # We need to iterate over the generator to process the video
     for r in results:
         pass 
 
     print("\n✅ Video processed correctly.")
-    print("📂 Look for it in the folder: 'runs/detect' (the most recent)")
+    print(f"📂 Look for it in the folder: {video_out_dir}")
 
 
 if __name__ == "__main__":
@@ -381,17 +403,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    custom_class_map = None
-    if args.class_map:
-        try:
-            custom_class_map = {}
-            pares = args.class_map.split(',')
-            for par in pares:
-                mod_c, dat_c = par.split(':')
-                custom_class_map[int(mod_c)] = int(dat_c)
-        except ValueError:
-            print("❌ ERROR: The --class_map format must be INT:INT separated by comma (e.g., 1:0,2:1)")
-            sys.exit(1)
+    class_map = pu.parse_class_map(args.class_map)
 
     if args.conf is not None:
         config.CONF_THRESHOLD = args.conf
@@ -405,13 +417,12 @@ if __name__ == "__main__":
         run_video_mode(selected_model_path, args.video)
     elif args.source and args.labels:
         # REAL AUDIT MODE (Has images and has labels)
-        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, 
-                       custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep, manual_class_map=custom_class_map)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep, manual_class_map=class_map)
     elif args.source:
         # INFERENCE MODE (Has images)
-        run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep, manual_class_map=custom_class_map)
+        run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep, manual_class_map=class_map)
     else:
         # SYNTHETIC AUDIT MODE (Default, uses Isaac Sim test set)
         if args.labels:
             print("⚠️ Warning: --labels ignored because --source was not provided.")
-        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep, manual_class_map=custom_class_map)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep, manual_class_map=class_map)

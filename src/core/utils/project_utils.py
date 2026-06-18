@@ -46,3 +46,16 @@ def get_project_classes(lowercase=False):
     except Exception as e:
         print(f"⚠️ Error reading classes file: {e}")
         return []
+
+def parse_class_map(map_str):
+    """
+    Converts a CLI string like '1:0,2:1' into a dictionary {1: 0, 2: 1}.
+    Returns an empty dictionary if no input or error.
+    """
+    if not map_str:
+        return {}
+    try:
+        return {int(k): int(v) for k, v in (pair.split(':') for pair in map_str.split(','))}
+    except Exception as e:
+        print(f"⚠️ Error parsing class map '{map_str}': {e}. Using empty map.")
+        return {}

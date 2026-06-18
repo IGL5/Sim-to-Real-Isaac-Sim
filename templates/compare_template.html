@@ -125,20 +125,20 @@
                 <tr>
                     <td>mAP@50 / mAP@50-95 (Global)</td>
                     {% for m in models %}<td style="font-size: 1.1em; font-weight: bold; color: #2980b9;">{{
-                        "%.3f"|format(data[m].audit.metrics.map_50) }} / {{
-                        "%.3f"|format(data[m].audit.metrics.map_50_95) }}</td>{% endfor %}
+                        "%.3f"|format(data[m].audit.global.map50) }} / {{
+                        "%.3f"|format(data[m].audit.global.map50_95) }}</td>{% endfor %}
                 </tr>
                 <tr>
                     <td>F1-Score (Global)</td>
-                    {% for m in models %}<td>{{ "%.3f"|format(data[m].audit.metrics.f1) }}</td>{% endfor %}
+                    {% for m in models %}<td>{{ "%.3f"|format(data[m].audit.global.f1) }}</td>{% endfor %}
                 </tr>
                 <tr>
                     <td>Optimal F1 (Threshold)</td>
                     {% for m in models %}
                     <td>
-                        <strong style="color: #16a085;">{{ "%.3f"|format(data[m].audit.metrics.optimal_f1) }}</strong>
+                        <strong style="color: #16a085;">{{ "%.3f"|format(data[m].audit.global.optimal_f1) }}</strong>
                         <span style="font-size: 0.85em; color: #7f8c8d;">(@{{
-                            "%.3f"|format(data[m].audit.metrics.optimal_conf) }})</span>
+                            "%.3f"|format(data[m].audit.global.optimal_conf) if data[m].audit.global.optimal_conf is defined else '0.000' }})</span>
                     </td>
                     {% endfor %}
                 </tr>
@@ -155,7 +155,7 @@
                     {% for m in models %}
                     <td><span
                             style="background-color: #ecf0f1; padding: 4px 8px; border-radius: 4px; font-weight: bold; border: 1px solid #bdc3c7;">{{
-                            data[m].train.hyperparameters.model_base if data[m].train else 'N/A' }}</span></td>
+                            data[m].train.model_base if data[m].train else 'N/A' }}</span></td>
                     {% endfor %}
                 </tr>
                 <tr>
@@ -167,9 +167,9 @@
                     <td>Transfer Learning (Frozen Layers)</td>
                     {% for m in models %}
                     <td>
-                        {% if data[m].train and data[m].train.hyperparameters.freeze_layers > 0 %}
+                        {% if data[m].train and data[m].train.freeze_layers > 0 %}
                         <span style="color: #27ae60; font-weight:bold;">Yes ({{
-                            data[m].train.hyperparameters.freeze_layers }})</span>
+                            data[m].train.freeze_layers }})</span>
                         {% else %}
                         <span style="color: #c0392b;">No (Full fine-tuning)</span>
                         {% endif %}
@@ -179,7 +179,7 @@
                 <tr>
                     <td>Training Hardware</td>
                     {% for m in models %}<td style="font-size: 0.85em; color: #7f8c8d;">{{
-                        data[m].train.hardware.device_name if data[m].train else 'N/A' }}</td>{% endfor %}
+                        data[m].train.device_name if data[m].train else 'N/A' }}</td>{% endfor %}
                 </tr>
                 <tr style="background-color: #bdc3c7;">
                     <td colspan="{{ models|length + 1 }}"
@@ -190,8 +190,8 @@
                 <tr>
                     <td>Model Weight (.pt)</td>
                     {% for m in models %}
-                    <td><strong style="color: #e67e22;">{{ data[m].train.artifacts.best_weights_mb if data[m].train and
-                            data[m].train.artifacts.best_weights_mb else 'N/A' }}</strong> MB</td>
+                    <td><strong style="color: #e67e22;">{{ data[m].train.best_weights_mb if data[m].train and
+                            data[m].train.best_weights_mb else 'N/A' }}</strong> MB</td>
                     {% endfor %}
                 </tr>
             </tbody>

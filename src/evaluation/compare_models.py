@@ -1,8 +1,8 @@
 from pathlib import Path
-import json
 from src.core.utils.project_utils import get_available_models
 from src.evaluation.utils.comparison_reporter import ComparisonReporter
 from src.core import config
+from src.core.metadata.audit_builder import AuditMetadata
 
 
 def find_audits_for_model(model_name, target_json="audit_metadata.json"):
@@ -27,16 +27,15 @@ def find_audits_for_model(model_name, target_json="audit_metadata.json"):
     audit_info = []
     for path in set(all_audits): # set to avoid accidental duplicates
         try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                date = data.get("audit_date", "Fecha desconocida")
-                parent_folder = Path(path).parent.name
-                
-                audit_info.append({
-                    "path": path,
-                    "date": date,
-                    "folder": parent_folder
-                })
+            audit_dto = AuditMetadata(path).get_html_summary()
+            date = audit_dto.get("date", "Fecha desconocida")
+            parent_folder = Path(path).parent.name
+            
+            audit_info.append({
+                "path": path,
+                "date": date,
+                "folder": parent_folder
+            })
         except Exception as e:
             print(f"⚠️ Could not read JSON at {path}: {e}")
             

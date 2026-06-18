@@ -290,6 +290,12 @@
                     <th>Epochs (Requested / Run)</th>
                     <td>{{ train.epochs_requested }} / {{ train.epochs_run }}</td>
                 </tr>
+                {% if train.train_images is defined %}
+                <tr>
+                    <th>Dataset Size (Train / Val)</th>
+                    <td>{{ train.train_images }} / {{ train.val_images }} images</td>
+                </tr>
+                {% endif %}
                 <tr>
                     <th>Best Epoch</th>
                     <td>{{ train.best_epoch }}</td>

@@ -100,8 +100,13 @@ class AuditMetadata(BaseMetadataManager):
                 "conf_fp_mean": conf_stats.get("False_Positives", {}).get("mean", 0.0)
             })
 
+        # Calcular el confidence threshold óptimo global como el promedio de las clases
+        opt_confs = [c_data.get("optimal_conf", 0.0) for c_data in per_class_raw.values()]
+        avg_optimal_conf = round(sum(opt_confs) / len(opt_confs), 3) if opt_confs else 0.0
+
         # Retornamos la bandeja limpia con Namespaces claros
         return {
+            "date": self.data.get("audit_date", "Unknown Date"),
             "prefix": metrics_sec.get("prefix", "audit"),
             "global": {
                 "precision": round(metrics_sec.get("macro_precision", 0.0) * 100, 2),
@@ -110,6 +115,7 @@ class AuditMetadata(BaseMetadataManager):
                 "map50": round(metrics_sec.get("map_50", 0.0), 3),
                 "map50_95": round(metrics_sec.get("map_50_95", 0.0), 3),
                 "optimal_f1": round(metrics_sec.get("optimal_f1", 0.0), 2),
+                "optimal_conf": avg_optimal_conf,
                 "total_real": metrics_sec.get("total_real", 0),
                 "total_pred": metrics_sec.get("total_pred", 0),
                 "tp": metrics_sec.get("tp", 0),

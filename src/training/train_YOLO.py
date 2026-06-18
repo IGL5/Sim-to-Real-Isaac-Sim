@@ -464,6 +464,18 @@ def main():
         onnx_model_path=onnx_path
     )
 
+    # Count dataset images used for training and validation
+    train_images_dir = config.DATASET_IMAGES / "train"
+    val_images_dir = config.DATASET_IMAGES / "val"
+
+    train_images_count = sum(1 for p in train_images_dir.iterdir() if p.is_file() and p.suffix.lower() in config.VALID_IMAGE_EXTENSIONS) if train_images_dir.exists() else 0
+    val_images_count = sum(1 for p in val_images_dir.iterdir() if p.is_file() and p.suffix.lower() in config.VALID_IMAGE_EXTENSIONS) if val_images_dir.exists() else 0
+
+    meta_manager.record_dataset_info(
+        train_images=train_images_count,
+        val_images=val_images_count
+    )
+
     dataset_meta_src = Path(config.DATASET_METADATA_PATH)
     if dataset_meta_src.exists():
         shutil.copy2(dataset_meta_src, metadata_dir / config.FILE_DATASET_META)

@@ -35,6 +35,12 @@ class TrainMetadata(BaseMetadataManager):
             "device_name": device_name
         })
 
+    def record_dataset_info(self, train_images, val_images):
+        self.update_section("dataset_info", {
+            "train_images": int(train_images),
+            "val_images": int(val_images)
+        })
+
     def extract_yolo_training_data(self, model_base, epochs_requested, experiment_dir):
         """
         The Builder acts as a Parser. It reads the internal files that YOLO 
@@ -118,6 +124,8 @@ class TrainMetadata(BaseMetadataManager):
         hyper = self.data.get("hyperparameters", {})
         metrics = self.data.get("metrics_test_set", {})
         aug = self.data.get("data_augmentation", {})
+        dataset_info = self.data.get("dataset_info", {})
+        artifacts = self.data.get("artifacts", {})
         
         return {
             "project_name": info.get("project_name", "Unknown"),
@@ -126,6 +134,7 @@ class TrainMetadata(BaseMetadataManager):
             "duration_formatted": info.get("duration_formatted", "00:00:00"),
             "device": hw.get("device", "CPU"),
             "device_name": hw.get("device_name", "Unknown"),
+            "model_base": hyper.get("model_base", "Unknown"),
             "epochs_requested": hyper.get("epochs_requested", 0),
             "epochs_run": hyper.get("epochs_run", 0),
             "best_epoch": hyper.get("best_epoch", 0),
@@ -138,7 +147,19 @@ class TrainMetadata(BaseMetadataManager):
             "mAP50": metrics.get("mAP50", 0.0),
             "mAP50_95": metrics.get("mAP50_95", 0.0),
             
+            "train_images": dataset_info.get("train_images", 0),
+            "val_images": dataset_info.get("val_images", 0),
+            "best_weights_mb": artifacts.get("best_weights_mb", 0.0),
+            
             # Mantenemos data_augmentation como un sub-dict plano porque 
             # el HTML itera sobre sus claves dinámicamente o busca insignias (badges)
-            "data_augmentation": aug if aug else {}
+            "data_augmentation": aug if aug else {},
+            
+            # Secciones originales anidadas para compatibilidad hacia atrás
+            "experiment_info": info,
+            "hardware": hw,
+            "hyperparameters": hyper,
+            "metrics_test_set": metrics,
+            "artifacts": artifacts,
+            "dataset_info": dataset_info
         }
