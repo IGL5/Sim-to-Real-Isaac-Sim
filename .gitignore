@@ -206,18 +206,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-map/
-_output_data/
+.vscode/
 assets/
-
-# YOLO trainig ingnore files
-YOLO/*.pt
-YOLO/runs/
-YOLO/dataset_yolo_output/
-YOLO/*_detector/
-YOLO/audit_report/
-YOLO/real_images/
-YOLO/comparison_report/
-_output_data_empty/
-dataset_real/
-YOLO/xai_output/
+data/
+runs/
+*.pt

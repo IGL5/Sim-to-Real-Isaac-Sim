@@ -1,0 +1,205 @@
+from pathlib import Path
+import argparse
+import src.core.config as config
+
+parser = argparse.ArgumentParser("Dataset generator")
+parser.add_argument("--headless", action="store_true", help="Launch script headless")
+parser.add_argument("--width", type=int, default=640, help="Width of image")      # 1280x720 (HD Resolution)
+parser.add_argument("--height", type=int, default=480, help="Height of image")    # 640x480 (SD Resolution)
+parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
+parser.add_argument("--data_dir", type=str, default=config.RAW_DATA_DIR,
+                    help="Location where data will be output")
+
+args, unknown_args = parser.parse_known_args()
+
+
+# Sky config
+HDR_MAPS_DIR = Path.cwd() / "assets" / "hdr"
+AVAILABLE_HDRS = []
+HDR_INTENSITY_RANGE = (0.8, 1.5)
+
+# "renderer": "RayTracedLighting" is another option to consider
+CONFIG = {"renderer": "PathTracing", "headless": args.headless,
+          "width": args.width, "height": args.height, "num_frames": args.num_frames}
+
+# GENERAL CONSTANTS
+MAP_NAME = "Environment_plane.usd"
+WORLD_LIMITS = (-1300, 1300, -1300, 1300)
+MATERIAL_SCALE_FLAT = (3.0, 7.0) # (0.6, 1.0)
+MATERIAL_SCALE_MOUNTAIN = (0.05, 0.1)
+RT_SUBFRAMES = 32
+FRAMES_WARMUP = 60
+
+TEXTURES_ROOT_DIR = Path.cwd() / "assets" / "textures"
+MAP_PATH = Path.cwd() / "assets" / "map" / MAP_NAME
+SUN_PATH = "/World/Sun_Light"
+SKY_PATH = "/World/SkyLight"
+
+# CAMERA CONSTANTS
+CAMERA_ELEVATION_DEG_RANGE = (30.0, 40.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
+CAMERA_3D_DIST_RANGE = (5.0, 10.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
+LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
+
+# RAYCAST SETTINGS
+RAYCAST_START_HEIGHT = 2000.0
+RAYCAST_DISTANCE = 4000.0
+
+# OBJECT BUDGET
+OBJECTS_BUDGET_RANGE = (0.0, 0.0) # (10.0, 20.0) (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
+OBJECTS_MAX_RADIUS = 30.0 # 4.0
+# DISTRACTOR BUDGET
+DISTRACTOR_BUDGET_RANGE = (3000.0, 4000.0) # (15.0, 30.0), (30.0, 75.0)
+DISTRACTOR_MAX_RADIUS = 50.0
+
+# --- CONFIGURATION: ENVIRONMENT TARGETS ---
+# ENVIRONMENT_LOOKUP_KEYS = [
+#     "Terrain",
+#     "Terrain_flat"
+# ]
+
+ENVIRONMENT_LOOKUP_KEYS = [
+    "Terrain"
+]
+
+# --- DEBUGGING ---
+DEBUG_WHEEL_CONTACT = False
+
+# --- DOMAIN RANDOMIZATION LIMITS ---
+MAX_PBR_MATERIALS = 30
+MAX_HDR_MAPS = 15
+RANDOMIZE_SKY = True
+RANDOMIZE_TERRAIN = True
+
+# ASSET POOLS
+ASSETS_ROOT_DIR = Path.cwd() / "assets" / "objects"
+OBJECTS_CONFIG = {
+    "bicycle": {
+        "active": False,                     # Enable this object type
+        "pool_size": 13,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 4.0),
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        # "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+        "semantic_parts": {
+            "center": "pedal",
+            "left": "pedal",
+            "right": "pedal"
+        }
+    },
+    "car": {
+        "active": False,                     # Enable this object type
+        "pool_size": 14,                    # Number of bicycles in the pool
+        "radius": 2.0,                      # Radius of safety
+        "spawn_radius": (3.0, 10.0),
+        "cost_units": 4.0,                  # High cost (main character)
+        "selection_weight": 70,             # Always want to appear if there's space
+        "wheelbase": 2.0,                   # For incline calculation
+        "track_width": 1.1,                 # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        # "randomize_materials": ["chassis"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "bicycle_street": {
+        "active": False,                     # Enable this object type
+        "pool_size": 6,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 4.0),
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "bicycle_racing": {
+        "active": False,                     # Enable this object type
+        "pool_size": 6,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 4.0),
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "bicycle_mountain": {
+        "active": False,                     # Enable this object type
+        "pool_size": 6,                    # Number of bicycles in the pool
+        "radius": 0.8,                      # Radius of safety
+        "spawn_radius": (0.0, 3.0),
+        "cost_units": 2.0,                  # High cost (main character)
+        "selection_weight": 100,            # Always want to appear if there's space
+        "wheelbase": 0.6,                   # For incline calculation
+        "scale_range": (1.0, 1.0),          # Fixed scale for rigorous datasets
+        "randomize_materials": ["frame"],   # List of prim names to randomize materials
+        # "randomize_soft_colors": True       # Randomize colors but keep the same material
+    },
+    "electric_pole": {
+        "active": True,                     # Enable this object type
+        "pool_size": 20,                    # Number of bicycles in the pool
+        "radius": 1.5,                      # Radius of safety
+        "spawn_radius": (0.0, 30.0),
+        "cost_units": 4.0,                  # High cost (main character)
+        "selection_weight": 50,             # Always want to appear if there's space
+        "scale_range": (0.5, 0.8),          # Fixed scale for rigorous datasets
+        # "wheelbase": 0.8,
+        # "track_width": 0.8,
+        # "semantic_parts": {
+        #     "insulator": "insulator"
+        # }
+    },
+}
+
+# DISTRACTOR CONFIGURATION (Scatter)
+# Keys must match folder names in assets/objects/distractors/
+DISTRACTOR_CONFIG = {
+    "vegetation": {
+        "active": True,
+        "pool_size": 80,
+        "spawn_radius": (0.0, 40.0),
+        "radius": 0.4,
+        "cost_units": 2.0,
+        "selection_weight": 80,
+        "scale_range": (0.7, 1.5),
+        "randomize_materials": ["main"],
+        "randomize_soft_colors": True
+    },
+    "trees": {
+        "active": True,
+        "pool_size": 50,
+        "spawn_radius": (3.0, 60.0),
+        "radius": 1.0,
+        "cost_units": 5.0,
+        "selection_weight": 150,
+        "scale_range": (0.6, 1.2),
+        "randomize_materials": ["main"],
+        "randomize_soft_colors": True
+    },
+    "debris": {
+        "active": True,
+        "pool_size": 100,
+        "spawn_radius": (0.0, 30.0),
+        "radius": 0.3,
+        "cost_units": 0.5,
+        "selection_weight": 70,
+        "scale_range": (0.3, 1.0),
+        "randomize_materials": ["main"],
+        "randomize_soft_colors": True
+    },
+    "manmade": {
+        "active": True,
+        "pool_size": 40,
+        "spawn_radius": (4.0, 30.0),
+        "radius": 0.4,
+        "cost_units": 1.8,
+        "selection_weight": 40,
+        "scale_range": (0.8, 1.2),
+        "randomize_materials": ["main", "sec"],
+        "randomize_soft_colors": True
+    }
+}

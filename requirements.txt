@@ -1,0 +1,32 @@
+# ==============================================================================
+# PIP REQUIREMENTS FOR TRAIN & AUDIT PIPELINE
+# ==============================================================================
+# Note: To enable CUDA hardware acceleration for YOLO training, we target PyTorch 
+# with CUDA 11.8 support by default. If your GPU supports/requires a different version 
+# (e.g., CUDA 12.1 or 12.4), adjust the --extra-index-url and the +cuXXX suffixes.
+# ==============================================================================
+
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.7.1+cu118
+torchvision==0.22.1+cu118
+torchaudio==2.7.1+cu118
+
+# Core YOLO & Computer Vision
+ultralytics>=8.0.0
+ultralytics-thop>=2.0.0
+opencv-python>=4.8.0
+numpy>=1.23.0,<2.3.0
+
+# Data Analysis & Plotting
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+pyyaml>=6.0
+
+# Template Rendering (HTML Audits & Comparison Reports)
+jinja2>=3.0.0
+
+# ONNX Export & Optimization (Required by YOLO deployment export)
+onnx>=1.12.0,<2.0.0
+onnxslim>=0.1.71
+onnxruntime
