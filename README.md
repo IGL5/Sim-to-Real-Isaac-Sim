@@ -233,6 +233,6 @@ python -m src.evaluation.xai_YOLO.py
 
 ## 📈 Reports Overview
 
-* **`report.html` (Audit)**: Details PR Curves, F1-scores, confidence distributions, and Sim-to-Real metadata.
+* **`audit_report.html` (Audit)**: Details PR Curves, F1-scores, confidence distributions, and Sim-to-Real metadata.
 * **`inference_report.html`**: Analyzes real-world predictions, crowdness heatmaps, and overlaps (IoU overlap anomalies).
 * **`comparison_report.html`**: Grouped bar charts, trend lines, and training hyperparameter matrices comparing models.
