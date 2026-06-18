@@ -158,10 +158,10 @@ python -m src.data_prep.clean_dataset --dir data/01_raw
 #### 2. KITTI to YOLO Conversion & Splits
 ```bash
 # Rebuild the dataset from scratch
-python -m src.data_prep.dataset_manager.py
+python -m src.data_prep.dataset_manager
 
 # Append new Isaac Sim frames to the existing dataset
-python -m src.data_prep.dataset_manager.py --append
+python -m src.data_prep.dataset_manager --append
 ```
 
 ---
@@ -171,13 +171,13 @@ Train or fine-tune YOLO models (v8, v9, v10, 11, 26). The script reads `classes.
 
 ```bash
 # Interactive selection (YOLO version, size, experiment name)
-python -m src.training.train_YOLO.py
+python -m src.training.train_YOLO
 
 # Custom duration & early stopping patience
-python -m src.training.train_YOLO.py --epochs 100 --patience 15
+python -m src.training.train_YOLO --epochs 100 --patience 15
 
 # Fine-tune starting from an existing model
-python -m src.training.train_YOLO.py --finetune --lr0 0.0001
+python -m src.training.train_YOLO --finetune --lr0 0.0001
 ```
 
 > [!NOTE]
@@ -191,20 +191,20 @@ Generate comprehensive, tabbed interactive HTML reports to evaluate model perfor
 #### 🕵️ Audit Mode (Test Dataset with Labels)
 ```bash
 # Find and export only errors (False Negatives, False Positives, etc.)
-python -m src.evaluation.visualize_results.py
+python -m src.evaluation.visualize_results
 
 # Generate report.html with full visual diagnostics
-python -m src.evaluation.visualize_results.py --draw_all
+python -m src.evaluation.visualize_results --draw_all
 ```
 
 #### 🌍 Inference Mode (Real-world Unlabeled Images)
 ```bash
-python -m src.evaluation.visualize_results.py --source /path/to/real_photos
+python -m src.evaluation.visualize_results --source /path/to/real_photos
 ```
 
 #### 💾 Save Audits and Inferences permanently
 ```bash
-python -m src.evaluation.visualize_results.py --draw_all --save
+python -m src.evaluation.visualize_results --draw_all --save
 ```
 
 ---
@@ -213,7 +213,7 @@ python -m src.evaluation.visualize_results.py --draw_all --save
 Compare different training iterations side-by-side. This script launches an interactive CLI, scanning saved evaluations to build a Chart.js dashboard (`comparison_report.html`).
 
 ```bash
-python -m src.evaluation.compare_models.py
+python -m src.evaluation.compare_models
 ```
 
 ---
@@ -222,7 +222,7 @@ python -m src.evaluation.compare_models.py
 Explain YOLO decisions using activation maps and examine model drift/catastrophic forgetting.
 
 ```bash
-python -m src.evaluation.xai_YOLO.py
+python -m src.evaluation.xai_YOLO
 ```
 * **Options**:
   1. **Spatial XAI (Grad-CAM)**: Visualizes model focus layer-by-layer.
