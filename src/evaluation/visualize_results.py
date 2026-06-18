@@ -417,7 +417,8 @@ if __name__ == "__main__":
         run_video_mode(selected_model_path, args.video)
     elif args.source and args.labels:
         # REAL AUDIT MODE (Has images and has labels)
-        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep, manual_class_map=class_map)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, 
+                       custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep, manual_class_map=class_map)
     elif args.source:
         # INFERENCE MODE (Has images)
         run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep, manual_class_map=class_map)
