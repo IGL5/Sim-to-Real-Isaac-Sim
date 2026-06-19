@@ -53,6 +53,8 @@ class ReportGenerator:
         gt_coords = []
         for gt in gt_boxes:
             c_id = int(gt[0])
+            if self.class_names and c_id not in self.class_names:
+                continue
             gt_classes.append(c_id)
             gt_coords.append(gt[1:])
             self.class_stats[c_id]["total_gt"] += 1
@@ -68,6 +70,8 @@ class ReportGenerator:
             pred = pred_boxes[i]
             conf = confidences[i]
             p_cls = int(pred_classes[i])
+            if self.class_names and p_cls not in self.class_names:
+                continue
             
             if len(gt_coords) > 0:
                 best_iou = np.max(iou_matrix[i])

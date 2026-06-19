@@ -181,6 +181,8 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         h, w, _ = img.shape
         if txt_path.exists():
             gt_boxes = du.parse_kitti_label(str(txt_path), w, h)
+            # Only keep ground truth boxes whose class ID is in our active dataset classes
+            gt_boxes = [box for box in gt_boxes if box[0] in dataset_class_names]
         else:
             gt_boxes = []
 
