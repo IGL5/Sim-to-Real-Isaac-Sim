@@ -222,13 +222,17 @@ def select_objects_by_budget(available_keys, config_map, total_budget):
     return selected_keys
 
 
-def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=10.0, existing_obstacles=[], cam_pos=None, fov_margin=60):
+def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=10.0, existing_obstacles=[], cam_pos=None, fov_margin=60, look_at_target=None):
     """
     Generates non-overlapping positions and rotations for a set of objects around a target point.
     Adjusts height and pitch based on terrain geometry.
     """
     valid_results = []
     tx, ty, tz = target_pos
+    
+    # Calculate look direction vectors
+    lx, ly, lz = look_at_target if look_at_target is not None else target_pos
+    look_target = (lx, ly, lz)
     
     # Local copy of obstacles (x, y, radius)
     current_obstacles = [(p[0], p[1], p[2]) for p in existing_obstacles] 
@@ -244,19 +248,43 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
         attempts = 0
         max_attempts = 100 # Attempts per object
         
-        while not placed and attempts < max_attempts:
-            attempts += 1
+        reject_dist = 0
+        reject_fov = 0
+        reject_collision = 0
+        reject_ground = 0
+
+        total_tries = 0
+        max_tries = 500
+
+        # Calculate camera heading direction for FOV-directed theta sampling
+        angle_cam = 0.0
+        if cam_pos is not None:
+            angle_cam = math.atan2(look_target[1] - cam_pos[1], look_target[0] - cam_pos[0])
+
+        while not placed and attempts < max_attempts and total_tries < max_tries:
+            total_tries += 1
             
-            # 1. Generate candidate
-            r = random.uniform(s_min, s_max) # Can be 0 to be very close
-            theta = random.uniform(0, 2 * math.pi)
+            # Circle Method: sample distance r
+            r = random.uniform(s_min, s_max)
             
+            # Smart theta sampling: try uniform first. If it fails 5 times, target the camera FOV direction.
+            if total_tries <= 5 or cam_pos is None:
+                theta = random.uniform(0, 2 * math.pi)
+            else:
+                margin_rad = math.radians(fov_margin)
+                theta = random.uniform(angle_cam - margin_rad, angle_cam + margin_rad)
+                
             cand_x = tx + r * math.cos(theta)
             cand_y = ty + r * math.sin(theta)
-
+            
+            # Verify camera FOV
             if cam_pos:
-                if not is_in_camera_fov(cam_pos, target_pos, (cand_x, cand_y, tz), fov_margin):
+                if not is_in_camera_fov(cam_pos, look_target, (cand_x, cand_y, tz), fov_margin):
+                    reject_fov += 1
                     continue
+
+            # Candidate is within FOV and distance limits, so we increment attempts
+            attempts += 1
             
             # 2. Collision check (Variable Radius)
             collision = False
@@ -269,6 +297,10 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
                     collision = True
                     break
             
+            if collision:
+                reject_collision += 1
+                continue
+                
             if not collision:
                 # 3. Calculate Height / Pitch
                 angle_yaw = random.uniform(0, 360)
@@ -278,14 +310,18 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
                     pitch_deg, roll_deg, z_adjusted = calculate_vehicle_orientation_on_terrain(
                         stage, cand_x, cand_y, angle_yaw, obj_wheelbase, obj_track_width
                     )
-                    if pitch_deg is None: continue
+                    if pitch_deg is None:
+                        reject_ground += 1
+                        continue
                     
                     rotation = (90 - roll_deg, -pitch_deg, angle_yaw)
                     z_final = z_adjusted
                 else:
                     # Static mode
                     z_ground = get_ground_height(cand_x, cand_y)
-                    if z_ground == -9999.0: continue
+                    if z_ground == -9999.0:
+                        reject_ground += 1
+                        continue
                     rotation = (90, 0, angle_yaw)
                     z_final = z_ground
                 
@@ -295,7 +331,7 @@ def get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius=
                 placed = True
                 
         if not placed:
-            print(f"[WARN] Could not place object with radius {obj_radius}")
+            print(f"[WARN] Could not place object with radius {obj_radius} after {total_tries} tries")
 
     return valid_results
 
@@ -328,7 +364,7 @@ def randomize_precalculated_shaders(stage, shader_paths, soft_colors):
             shader.CreateInput("base_color_factor", Sdf.ValueTypeNames.Color3f).Set(color_val)
 
 
-def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[], cam_pos=None, fov_margin=60):
+def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, budget_range, max_radius, previous_obstacles=[], cam_pos=None, fov_margin=60, look_at_target=None):
     """
     Master Orchestrator.
     Handles: Selection (Budget) -> Unique Assignment (Stack) -> Placement -> Cleanup.
@@ -366,11 +402,16 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         obj_data = working_pools[key].pop()
         cfg = config_map[key]
         
+        spawn_r = cfg.get('spawn_radius', (0.0, max_radius))
+        s_min, s_max = spawn_r
+        s_max = min(s_max, max_radius)
+        s_min = min(s_min, s_max)
+
         candidates_specs.append({
             'radius': cfg['radius'],
             'wheelbase': cfg.get('wheelbase', None),
             'track_width': cfg.get('track_width', None),
-            'spawn_radius': cfg.get('spawn_radius', (0.0, max_radius))
+            'spawn_radius': (s_min, s_max)
         })
         paths_candidates.append(obj_data["path"])
         shaders_candidates.append(obj_data["shaders"])
@@ -378,7 +419,7 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
         
     # 4. Calculate Poses (Mathematics)
     # results devuelve: [ ((x,y,z), rot, original_index), ... ]
-    results = get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius, previous_obstacles, cam_pos, fov_margin)
+    results = get_smart_poses_near_target(stage, target_pos, candidates_specs, max_radius, previous_obstacles, cam_pos, fov_margin, look_at_target)
     
     # 5. Move successfully placed objects
     new_obstacles = [] 
@@ -399,6 +440,7 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
             randomize_precalculated_shaders(stage, shaders, cfg.get("randomize_soft_colors", False))
         
         # Register success
+        dist_to_target = math.sqrt((pos[0] - target_pos[0])**2 + (pos[1] - target_pos[1])**2)
         new_obstacles.append( (pos[0], pos[1], cfg['radius']) )
         successfully_placed_paths.add(path)
         

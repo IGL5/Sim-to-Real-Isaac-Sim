@@ -121,8 +121,8 @@ def main():
 
 
     # --- 5. REPLICATOR CAMERA SETUP ---
-    focal_length = 18.0
-    sensor_width = 36.0
+    focal_length = sim_config.FOCAL_LENGTH
+    sensor_width = sim_config.SENSOR_WIDTH
     cam_rep = rep.create.camera(
         position=(0, 0, 0),
         rotation=(0, 0, 0),
@@ -281,7 +281,8 @@ def main():
             max_radius=sim_config.OBJECTS_MAX_RADIUS,
             previous_obstacles=[],
             cam_pos=(cam_x, cam_y, cam_z),
-            fov_margin=fov_margin
+            fov_margin=fov_margin,
+            look_at_target=camera_look_at_target
         )
         
         # E. POSITION DISTRACTORS (Rocks, Vegetation...)
@@ -296,7 +297,8 @@ def main():
             max_radius=sim_config.DISTRACTOR_MAX_RADIUS,
             previous_obstacles=all_obstacles,
             cam_pos=(cam_x, cam_y, cam_z),
-            fov_margin=fov_margin
+            fov_margin=fov_margin,
+            look_at_target=camera_look_at_target
         )
 
         num_detectables = len(detectables_obstacles)
@@ -323,8 +325,9 @@ def main():
 
     # Wait until writes are done
     print("Finalizing writes...")
+    for _ in range(20):
+        simulation_app.update()
     rep.BackendDispatch.wait_until_done()
-    simulation_app.update()
 
     # --- 8. METADATA EXPORTATION ---
     meta_manager = SimulationMetadata(config.GENERATION_METADATA_PATH)
