@@ -36,29 +36,27 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_ELEVATION_DEG_RANGE = (30.0, 40.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
-CAMERA_3D_DIST_RANGE = (5.0, 10.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
+CAMERA_ELEVATION_DEG_RANGE = (25.0, 35.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
+CAMERA_3D_DIST_RANGE = (20.0, 25.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
 LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
+FOCAL_LENGTH = 40.0 # 18.0
+SENSOR_WIDTH = 36.0
 
 # RAYCAST SETTINGS
 RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (0.0, 0.0) # (10.0, 20.0) (0.5, 7.0), (2.0, 10.0), (1.85, 3.9)
-OBJECTS_MAX_RADIUS = 30.0 # 4.0
+OBJECTS_BUDGET_RANGE = (5.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9), (10.0, 20.0)
+OBJECTS_MAX_RADIUS = 20.0 # 4.0
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (3000.0, 4000.0) # (15.0, 30.0), (30.0, 75.0)
-DISTRACTOR_MAX_RADIUS = 50.0
+DISTRACTOR_BUDGET_RANGE = (4000.0, 8000.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
+DISTRACTOR_MAX_RADIUS = 80.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
-# ENVIRONMENT_LOOKUP_KEYS = [
-#     "Terrain",
-#     "Terrain_flat"
-# ]
-
 ENVIRONMENT_LOOKUP_KEYS = [
-    "Terrain"
+    "Terrain",
+    "Terrain_flat"
 ]
 
 # --- DEBUGGING ---
@@ -143,10 +141,10 @@ OBJECTS_CONFIG = {
         "active": True,                     # Enable this object type
         "pool_size": 20,                    # Number of bicycles in the pool
         "radius": 1.5,                      # Radius of safety
-        "spawn_radius": (0.0, 30.0),
+        "spawn_radius": (5.0, 60.0),
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 50,             # Always want to appear if there's space
-        "scale_range": (0.5, 0.8),          # Fixed scale for rigorous datasets
+        "scale_range": (1.0, 1.2),          # Fixed scale for rigorous datasets
         # "wheelbase": 0.8,
         # "track_width": 0.8,
         # "semantic_parts": {
@@ -161,29 +159,29 @@ DISTRACTOR_CONFIG = {
     "vegetation": {
         "active": True,
         "pool_size": 80,
-        "spawn_radius": (0.0, 40.0),
+        "spawn_radius": (0.0, 30.0),
         "radius": 0.4,
         "cost_units": 2.0,
-        "selection_weight": 80,
+        "selection_weight": 50,
         "scale_range": (0.7, 1.5),
         "randomize_materials": ["main"],
         "randomize_soft_colors": True
     },
     "trees": {
         "active": True,
-        "pool_size": 50,
-        "spawn_radius": (3.0, 60.0),
+        "pool_size": 200,
+        "spawn_radius": (0.0, 50.0),
         "radius": 1.0,
         "cost_units": 5.0,
-        "selection_weight": 150,
+        "selection_weight": 200,
         "scale_range": (0.6, 1.2),
         "randomize_materials": ["main"],
         "randomize_soft_colors": True
     },
     "debris": {
-        "active": True,
+        "active": False,
         "pool_size": 100,
-        "spawn_radius": (0.0, 30.0),
+        "spawn_radius": (0.0, 20.0),
         "radius": 0.3,
         "cost_units": 0.5,
         "selection_weight": 70,
