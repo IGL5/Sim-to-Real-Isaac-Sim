@@ -321,6 +321,10 @@ def main():
             avg_time = elapsed_total / (frames_generated + 1)
             print(f"⏱️  [Frame {frames_generated}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
 
+            # Periodic cleanup of unwanted output folders to save disk space
+            if getattr(sim_config.args, "only_rgb_bbox", False):
+                asset_manager.cleanup_unwanted_outputs(sim_config.args.data_dir, remove_files_only=True)
+            
         frames_generated += 1
 
     # Wait until writes are done
@@ -328,6 +332,10 @@ def main():
     for _ in range(20):
         simulation_app.update()
     rep.BackendDispatch.wait_until_done()
+
+    # Final cleanup of unwanted output folders
+    if getattr(sim_config.args, "only_rgb_bbox", False):
+        asset_manager.cleanup_unwanted_outputs(sim_config.args.data_dir, remove_files_only=False)
 
     # --- 8. METADATA EXPORTATION ---
     meta_manager = SimulationMetadata(config.GENERATION_METADATA_PATH)

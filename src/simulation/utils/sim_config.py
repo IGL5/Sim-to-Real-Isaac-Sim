@@ -9,6 +9,8 @@ parser.add_argument("--height", type=int, default=480, help="Height of image")  
 parser.add_argument("--num_frames", type=int, default=1, help="Number of frames to record")
 parser.add_argument("--data_dir", type=str, default=config.RAW_DATA_DIR,
                     help="Location where data will be output")
+parser.add_argument("--only_rgb_bbox", action="store_true",
+                    help="Only keep RGB and Object Detection directories to save disk space")
 
 args, unknown_args = parser.parse_known_args()
 

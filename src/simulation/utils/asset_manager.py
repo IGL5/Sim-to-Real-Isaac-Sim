@@ -1,9 +1,41 @@
 from pathlib import Path
 import random
+import shutil
 from pxr import UsdShade, Gf, Sdf, Usd, UsdGeom, UsdLux
 import omni.replicator.core as rep
 from src.simulation.utils import sim_config
 import src.core.config as config
+
+
+def cleanup_unwanted_outputs(data_dir, remove_files_only=False):
+    """
+    Removes unwanted Isaac Sim directories (depth, semantic, segmentation, etc.)
+    under camera directory, keeping only rgb and object_detection.
+    """
+    camera_dir = Path(data_dir) / config.CAMERA_NAME
+    if not camera_dir.exists():
+        return
+        
+    keep_dirs = {"rgb", "object_detection"}
+    for child in camera_dir.iterdir():
+        if child.is_dir() and child.name not in keep_dirs:
+            if remove_files_only:
+                # Remove files inside the folder but keep the folder itself
+                for file_path in child.iterdir():
+                    try:
+                        if file_path.is_file() or file_path.is_symlink():
+                            file_path.unlink()
+                        elif file_path.is_dir():
+                            shutil.rmtree(file_path)
+                    except Exception as e:
+                        print(f"[WARN] Failed to delete file/dir {file_path}: {e}")
+            else:
+                # Delete the folder completely
+                try:
+                    shutil.rmtree(child)
+                except Exception as e:
+                    print(f"[WARN] Failed to delete directory {child}: {e}")
+
 
 
 def update_yolo_classes_txt():
