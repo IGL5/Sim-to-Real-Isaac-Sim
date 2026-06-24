@@ -6,6 +6,7 @@ DEFAULT_EXP_NAME = "yolov8_s_default"
 # Output directories
 RAW_DATA_DIR = Path("data/01_raw")
 PROCESSED_DATA_DIR = Path("data/02_processed")
+REAL_DATA_DIR = Path("data/03_real")
 METRICS_DIR = Path("data/05_metrics")
 BASE_MODELS_DIR = Path("data/base_models")
 TEMPLATES_DIR = Path("templates")
@@ -32,6 +33,8 @@ DATASET_TEST_LABELS = DATASET_LABELS / "test"
 DATASET_VAL_IMAGES = DATASET_IMAGES / "val"
 RAW_IMAGES_SUBPATH = Path(CAMERA_NAME) / "rgb"
 RAW_LABELS_SUBPATH = Path(CAMERA_NAME) / "object_detection"
+DEFAULT_REAL_IMAGES_DIR = REAL_DATA_DIR / "images"
+DEFAULT_REAL_LABELS_DIR = REAL_DATA_DIR / "labels"
 
 # Model paths
 BEST_MODEL_SUBPATH = "weights/best.pt"

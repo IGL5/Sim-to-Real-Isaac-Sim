@@ -1,5 +1,7 @@
 import subprocess
 import argparse
+import sys
+from src.core import config
 from src.core.utils.project_utils import get_available_models
 
 
@@ -33,6 +35,12 @@ def select_models(available_models):
     return [available_models[idx] for idx in selected_indices]
 
 def main():
+    if sys.platform.startswith('win'):
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
+
     parser = argparse.ArgumentParser(description="Batch Orchestrator for YOLO Audits")
     parser.add_argument('--complete', action='store_true', help="Show advanced options (draw_all, conf, video)")
     args = parser.parse_args()
@@ -78,9 +86,11 @@ def main():
     video_path = None
     
     if 2 in flows or 3 in flows:
-        source_dir = input("\n📁 Path to real images (--source): ").strip()
+        default_source = str(config.DEFAULT_REAL_IMAGES_DIR)
+        source_dir = input(f"\n📁 Path to real images (--source) [default: {default_source}]: ").strip() or default_source
     if 3 in flows:
-        labels_dir = input("📁 Path to real labels (--labels): ").strip()
+        default_labels = str(config.DEFAULT_REAL_LABELS_DIR)
+        labels_dir = input(f"📁 Path to real labels (--labels) [default: {default_labels}]: ").strip() or default_labels
     if 4 in flows:
         video_path = input("\n📁 Path to video file (--video): ").strip()
 
@@ -110,7 +120,7 @@ def main():
         for flow in flows:
             # Special logic isolated for Video
             if flow == 4:
-                cmd = ["python", "visualize_results.py", "--model", model_name, "--video", video_path]
+                cmd = [sys.executable, "-m", "src.evaluation.visualize_results", "--model", model_name, "--video", video_path]
                 if conf_val:
                     cmd.extend(["--conf", conf_val])
                 print(f"\n▶️  Executing Flow 4 (Video) for {model_name}...")
@@ -118,7 +128,7 @@ def main():
                 continue # Skip the rest of the loop (does not use --keep or --save)
             
             # Logic for image audits (Flows 1, 2, 3)
-            cmd = ["python", "visualize_results.py", "--model", model_name]
+            cmd = [sys.executable, "-m", "src.evaluation.visualize_results", "--model", model_name]
             cmd.extend(adv_flags)
             
             if flow == 2:
