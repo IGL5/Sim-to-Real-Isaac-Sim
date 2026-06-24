@@ -80,7 +80,8 @@ flowchart TD
 ├── data/                            # Central data directory
 │   ├── 01_raw/                      # Raw simulation output (KITTI format)
 │   ├── 02_processed/                # Cleaned and split YOLO dataset
-|   ├── 03_project_name/             # Project saved experiments
+│   ├── 03_real/                     # Real world images and labels
+|   ├── 04_project_name/             # Project saved experiments
 |   │   ├── experiment_name/         # Experiment-specific data and models
 |   │   └── ...
 │   └── 05_metrics/                  # Evaluation metrics, reports and XAI outputs
@@ -205,6 +206,17 @@ python -m src.evaluation.visualize_results --source /path/to/real_photos
 #### 💾 Save Audits and Inferences permanently
 ```bash
 python -m src.evaluation.visualize_results --draw_all --save
+```
+
+#### 🚂 Batch Auditing Mode (Evaluate Multiple Models)
+To run the evaluation pipeline across multiple models sequentially, use the batch orchestrator. It allows you to select which models and which types of audits (Synthetic, Real Inference, or Real Audit) to execute in a single interactive workflow:
+
+```bash
+# Launch interactive batch auditor
+python -m src.evaluation.batch_auditor
+
+# Launch batch auditor with advanced options (draw_all, force confidence, video)
+python -m src.evaluation.batch_auditor --complete
 ```
 
 ---
