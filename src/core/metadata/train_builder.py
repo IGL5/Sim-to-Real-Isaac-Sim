@@ -9,6 +9,10 @@ class TrainMetadata(BaseMetadataManager):
     def __init__(self, filepath):
         super().__init__(filepath)
 
+    def get_img_size(self):
+        """Returns the training image size from hyperparameters, default is 640 if not found."""
+        return self.data.get("hyperparameters", {}).get("img_size", 640)
+
     def record_experiment_info(self, project_name, experiment_name, start_time_secs):
         """
         Calculates the exact duration of the training and formats the dates.
