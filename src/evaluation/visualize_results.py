@@ -20,6 +20,54 @@ except ImportError:
 
 
 
+def get_model_img_size(model_path):
+    """
+    Attempts to read the training image size (input size) from training_metadata.json or args.yaml.
+    Falls back to 640 if not found.
+    """
+    exp_dir = Path(model_path).parent.parent
+    
+    # Try 1: training_metadata.json
+    json_path = exp_dir / "metadata" / "training_metadata.json"
+    if json_path.exists():
+        try:
+            from src.core.metadata.train_builder import TrainMetadata
+            meta = TrainMetadata(json_path)
+            img_size = meta.get_img_size()
+            if img_size:
+                return int(img_size)
+        except Exception as e:
+            print(f"⚠️ Warning reading training_metadata.json: {e}")
+
+    # Try 2: args.yaml
+    yaml_path = exp_dir / "args.yaml"
+    if yaml_path.exists():
+        try:
+            import yaml
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                imgsz = data.get("imgsz")
+                if imgsz:
+                    print(f"🔍 Found imgsz {imgsz} in args.yaml")
+                    return int(imgsz)
+        except Exception as e:
+            print(f"⚠️ Warning reading args.yaml: {e}")
+
+    print("⚠️ Could not determine model input size. Using default: 640")
+    return 640
+
+
+def resize_image_to_imgsz(img, imgsz):
+    """
+    Resizes an image so that its maximum dimension matches imgsz, keeping aspect ratio.
+    """
+    h, w = img.shape[:2]
+    scale = imgsz / max(h, w)
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA), scale
+
+
 def check_system_integrity(model_path, check_dataset=False):
     """
     Checks that everything necessary exists before starting.
@@ -116,7 +164,7 @@ def save_evaluation_results(exp_name, mode):
     print(f"\n📦 Persistent Evaluation saved at: {eval_dir}")
 
 
-def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep=False, manual_class_map=None):
+def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_img_dir=None, custom_lbl_dir=None, keep=False, manual_class_map=None, save_resized=False, imgsz=640):
     """ Audit mode (Dataset Test with Labels) - Supports both Sim and Real """
     if not check_system_integrity(model_path, check_dataset=(custom_img_dir is None)):
         return
@@ -225,9 +273,19 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
             has_errors = img_stats["FN"] > 0 or img_stats["poor_bbox"] > 0 or img_stats["FP"] > 0
             
             if draw_all or has_errors:
+                if save_resized:
+                    img_resized, scale = resize_image_to_imgsz(img, imgsz)
+                    gt_boxes_drawn = [[box[0], box[1]*scale, box[2]*scale, box[3]*scale, box[4]*scale] for box in gt_boxes]
+                    valid_pred_boxes_drawn = [box * scale for box in valid_pred_boxes]
+                    img_to_draw = img_resized.copy()
+                else:
+                    gt_boxes_drawn = gt_boxes
+                    valid_pred_boxes_drawn = valid_pred_boxes
+                    img_to_draw = img.copy()
+
                 # Draw using translated class names from our dataset
-                img_drawn = vu.draw_boxes(img.copy(), gt_boxes, color=(0, 255, 0), class_names=dataset_class_names)
-                img_drawn = vu.draw_boxes(img_drawn, valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
+                img_drawn = vu.draw_boxes(img_to_draw, gt_boxes_drawn, color=(0, 255, 0), class_names=dataset_class_names)
+                img_drawn = vu.draw_boxes(img_drawn, valid_pred_boxes_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
                 
                 if draw_all:
                     status = "OK"
@@ -254,7 +312,7 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         save_evaluation_results(exp_name, prefix)
 
 
-def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False, manual_class_map=None):
+def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False, manual_class_map=None, save_resized=False, imgsz=640):
     """ Inference Mode (New images without labels) """
     if not check_system_integrity(model_path, check_dataset=False): return
     if not Path(source_folder).exists(): return
@@ -333,12 +391,20 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
                         valid_confidences.append(conf)
                         valid_pred_classes.append(pred_classes[idx])
                 
+                if save_resized:
+                    img_resized, scale = resize_image_to_imgsz(img_orig, imgsz)
+                    valid_pred_boxes_drawn = [box * scale for box in valid_pred_boxes]
+                    img_to_draw = img_resized.copy()
+                else:
+                    valid_pred_boxes_drawn = valid_pred_boxes
+                    img_to_draw = img_orig.copy()
+
                 if problematic_pairs:
-                    img_overlap = vu.draw_overlapping_pairs(img_orig.copy(), valid_pred_boxes, problematic_pairs, valid_confidences)
+                    img_overlap = vu.draw_overlapping_pairs(img_to_draw.copy(), valid_pred_boxes_drawn, problematic_pairs, valid_confidences)
                     cv2.imwrite(str(overlaps_dir_path / f"OVERLAP_{filename}"), img_overlap)
                 
                 # Draw with our own colors and translated labels
-                img_drawn = vu.draw_boxes(img_orig.copy(), valid_pred_boxes, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names)
+                img_drawn = vu.draw_boxes(img_to_draw.copy(), valid_pred_boxes_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names)
                 cv2.imwrite(str(images_output_dir / f"PRED_{filename}"), img_drawn)
             
         except Exception as e:
@@ -402,6 +468,7 @@ if __name__ == "__main__":
     parser.add_argument('--conf', type=float, default=None, help="Confidence threshold for detection")
     parser.add_argument('--model', type=str, default=None, help="Bypass interactive menu and specify model name directly")
     parser.add_argument('--class_map', type=str, default=None, help="Manual class mapping. Format: model_class_number:dataset_class_number")
+    parser.add_argument('--save_resized', action='store_true', help="Save visual output images resized to model training input size")
     
     args = parser.parse_args()
 
@@ -414,18 +481,26 @@ if __name__ == "__main__":
     # Ask for Model Name (or use default)
     selected_model_path = select_model_path(args.model)
 
+    # Determine the model input size if we want to save resized images
+    model_imgsz = 640
+    if args.save_resized:
+        model_imgsz = get_model_img_size(selected_model_path)
+
     # Mode Selector
     if args.video:
         run_video_mode(selected_model_path, args.video)
     elif args.source and args.labels:
         # REAL AUDIT MODE (Has images and has labels)
         run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, 
-                       custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep, manual_class_map=class_map)
+                       custom_img_dir=args.source, custom_lbl_dir=args.labels, keep=args.keep, manual_class_map=class_map,
+                       save_resized=args.save_resized, imgsz=model_imgsz)
     elif args.source:
         # INFERENCE MODE (Has images)
-        run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep, manual_class_map=class_map)
+        run_inference_mode(selected_model_path, args.source, save_persistently=args.save, keep=args.keep, manual_class_map=class_map,
+                           save_resized=args.save_resized, imgsz=model_imgsz)
     else:
         # SYNTHETIC AUDIT MODE (Default, uses Isaac Sim test set)
         if args.labels:
             print("⚠️ Warning: --labels ignored because --source was not provided.")
-        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep, manual_class_map=class_map)
+        run_audit_mode(selected_model_path, draw_all=args.draw_all, save_persistently=args.save, keep=args.keep, manual_class_map=class_map,
+                       save_resized=args.save_resized, imgsz=model_imgsz)
