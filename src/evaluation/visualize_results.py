@@ -8,6 +8,7 @@ from src.core import config
 from src.evaluation.utils import data_utils as du
 from src.evaluation.utils import visual_utils as vu
 from src.core.utils import project_utils as pu
+from src.core.metadata.train_builder import TrainMetadata
 
 # Import the class from the other file
 try:
@@ -31,7 +32,6 @@ def get_model_img_size(model_path):
     json_path = exp_dir / "metadata" / "training_metadata.json"
     if json_path.exists():
         try:
-            from src.core.metadata.train_builder import TrainMetadata
             meta = TrainMetadata(json_path)
             img_size = meta.get_img_size()
             if img_size:
