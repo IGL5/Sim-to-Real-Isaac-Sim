@@ -39,20 +39,6 @@ def get_model_img_size(model_path):
         except Exception as e:
             print(f"⚠️ Warning reading training_metadata.json: {e}")
 
-    # Try 2: args.yaml
-    yaml_path = exp_dir / "args.yaml"
-    if yaml_path.exists():
-        try:
-            import yaml
-            with open(yaml_path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-                imgsz = data.get("imgsz")
-                if imgsz:
-                    print(f"🔍 Found imgsz {imgsz} in args.yaml")
-                    return int(imgsz)
-        except Exception as e:
-            print(f"⚠️ Warning reading args.yaml: {e}")
-
     print("⚠️ Could not determine model input size. Using default: 640")
     return 640
 
