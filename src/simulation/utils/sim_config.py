@@ -38,7 +38,7 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_ELEVATION_DEG_RANGE = (25.0, 35.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
+CAMERA_ELEVATION_DEG_RANGE = (35.0, 45.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
 CAMERA_3D_DIST_RANGE = (20.0, 25.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
 LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
 FOCAL_LENGTH = 40.0 # 18.0
@@ -49,11 +49,11 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (5.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9), (10.0, 20.0)
+OBJECTS_BUDGET_RANGE = (5.0, 14.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9), (10.0, 20.0)
 OBJECTS_MAX_RADIUS = 20.0 # 4.0
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (4000.0, 8000.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
-DISTRACTOR_MAX_RADIUS = 80.0
+DISTRACTOR_BUDGET_RANGE = (500.0, 600.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
+DISTRACTOR_MAX_RADIUS = 30.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
 ENVIRONMENT_LOOKUP_KEYS = [
@@ -159,7 +159,7 @@ OBJECTS_CONFIG = {
 # Keys must match folder names in assets/objects/distractors/
 DISTRACTOR_CONFIG = {
     "vegetation": {
-        "active": True,
+        "active": False,
         "pool_size": 80,
         "spawn_radius": (0.0, 30.0),
         "radius": 0.4,
@@ -171,7 +171,7 @@ DISTRACTOR_CONFIG = {
     },
     "trees": {
         "active": True,
-        "pool_size": 200,
+        "pool_size": 500,
         "spawn_radius": (0.0, 50.0),
         "radius": 1.0,
         "cost_units": 5.0,
@@ -192,7 +192,7 @@ DISTRACTOR_CONFIG = {
         "randomize_soft_colors": True
     },
     "manmade": {
-        "active": True,
+        "active": False,
         "pool_size": 40,
         "spawn_radius": (4.0, 30.0),
         "radius": 0.4,
@@ -201,5 +201,16 @@ DISTRACTOR_CONFIG = {
         "scale_range": (0.8, 1.2),
         "randomize_materials": ["main", "sec"],
         "randomize_soft_colors": True
-    }
+    },
+    "complex": {
+        "active": True,
+        "pool_size": 100,
+        "spawn_radius": (0.0, 50.0),
+        "radius": 1.0,
+        "cost_units": 5.0,
+        "selection_weight": 20,
+        "scale_range": (1.6, 2.0),
+        "randomize_materials": ["main", "sec"],
+        "randomize_soft_colors": True
+    },
 }
