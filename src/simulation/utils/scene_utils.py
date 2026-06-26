@@ -191,13 +191,60 @@ def draw_debug_cube(stage, position):
     cube_geom.GetDisplayColorAttr().Set([(1, 0, 0)])
 
 
+def estimate_items_by_budget(active_items, budget_max):
+    """
+    Estimates the number of items of each category that will be selected for budget_max,
+    taking into account selection weights, costs, and pool sizes.
+    """
+    counts = {k: 0.0 for k in active_items.keys()}
+    remaining_budget = budget_max
+    active_keys = list(active_items.keys())
+    
+    while remaining_budget > 0 and active_keys:
+        total_weight = sum(active_items[k]['selection_weight'] for k in active_keys)
+        if total_weight == 0:
+            break
+            
+        next_active_keys = []
+        budget_shares = {}
+        for k in active_keys:
+            share = remaining_budget * (active_items[k]['selection_weight'] / total_weight)
+            budget_shares[k] = share
+            
+        used_in_round = 0
+        for k in active_keys:
+            cost = active_items[k]['cost_units']
+            pool_size = active_items[k].get('pool_size', 999999)
+            
+            items_share = budget_shares[k] / cost
+            items_remaining = pool_size - counts[k]
+            
+            if items_share >= items_remaining:
+                counts[k] = pool_size
+                used_in_round += items_remaining * cost
+            else:
+                counts[k] += items_share
+                used_in_round += budget_shares[k]
+                next_active_keys.append(k)
+                
+        remaining_budget -= used_in_round
+        if abs(used_in_round) < 1e-5 or len(next_active_keys) == len(active_keys):
+            break
+            
+        active_keys = next_active_keys
+        
+    return counts
+
+
 def select_objects_by_budget(available_keys, config_map, total_budget):
     """
     Selects objects until the budget of 'units' is filled.
+    Ensures that we do not select more items of a category than its pool_size.
     Returns a list of keys (e.g: ['truck', 'rock', 'rock', 'sign'])
     """
     selected_keys = []
     current_usage = 0
+    counts = {k: 0 for k in available_keys}
     
     # Avoid infinite loops if nothing fits
     active_costs = [config_map[k]['cost_units'] for k in available_keys]
@@ -206,18 +253,23 @@ def select_objects_by_budget(available_keys, config_map, total_budget):
     
     attempts = 0
     while (total_budget - current_usage) >= min_cost and attempts < 100:
-        attempts += 1
-        
+        valid_keys = [k for k in available_keys if counts[k] < config_map[k].get('pool_size', 999999)]
+        if not valid_keys:
+            break
+            
         # Weighted selection
-        keys = list(available_keys)
-        weights = [config_map[k]['selection_weight'] for k in keys]
+        weights = [config_map[k]['selection_weight'] for k in valid_keys]
         
-        choice = random.choices(keys, weights=weights, k=1)[0]
+        choice = random.choices(valid_keys, weights=weights, k=1)[0]
         cost = config_map[choice]['cost_units']
         
         if current_usage + cost <= total_budget:
             selected_keys.append(choice)
             current_usage += cost
+            counts[choice] += 1
+            attempts = 0  # Reset attempts on successful selection
+        else:
+            attempts += 1
             
     return selected_keys
 
@@ -499,38 +551,22 @@ def validate_placement_config(config_map, budget_max, container_radius, fov_fact
     Analyses if the objects fit in the assigned space based on the maximum budget,
     taking into account that the camera only sees a percentage (fov_factor) of the total circle.
     """
-    total_weight = 0
-    weighted_area_sum = 0
-    weighted_cost_sum = 0
-    
     # Only consider active items
     active_items = {k: v for k, v in config_map.items() if v.get('active', True)}
     
     if not active_items:
-        return True, f"[{context_name}] No active items."
+        return "green", f"[{context_name}] No active items."
 
-    # 1. Calculate weighted averages
-    for k, v in active_items.items():
-        weight = v.get('selection_weight', 1)
-        radius = v.get('radius', 1.0)
-        cost = v.get('cost_units', 1.0)
-        
+    # 1. Estimate expected counts under budget and pool limits
+    expected_counts = estimate_items_by_budget(active_items, budget_max)
+    
+    # 2. Calculate required area based on estimated counts
+    required_area = 0.0
+    for k, count in expected_counts.items():
+        radius = active_items[k].get('radius', 1.0)
         area = math.pi * (radius ** 2)
-        
-        weighted_area_sum += weight * area
-        weighted_cost_sum += weight * cost
-        total_weight += weight
-        
-    if total_weight == 0:
-        return True, f"[{context_name}] Total weights are 0."
+        required_area += count * area
 
-    avg_area_per_item = weighted_area_sum / total_weight
-    avg_cost_per_item = weighted_cost_sum / total_weight
-    
-    # 2. Estimation of worst case (Maximum budget)
-    estimated_num_items = budget_max / avg_cost_per_item if avg_cost_per_item > 0 else 0
-    required_area = estimated_num_items * avg_area_per_item
-    
     # 3. Available area
     total_theoretical_area = math.pi * (container_radius ** 2)
     available_area = total_theoretical_area * (fov_factor + 0.1)
@@ -547,13 +583,13 @@ def validate_placement_config(config_map, budget_max, container_radius, fov_fact
            f"(Req: {required_area:.0f}m² / Disp (Visible): {available_area:.0f}m²)")
     
     if fill_ratio > 1.0:
-        return "red", f"🔴 {msg} -> IMPOSSIBLE (Overload > 100%)"
+        return "red", f"[IMPOSSIBLE] {msg} -> IMPOSSIBLE (Overload > 100%)"
     elif fill_ratio > packing_limit_warn:
-        return "orange", f"🟠 {msg} -> CRITICAL (High probability of failure)"
+        return "orange", f"[CRITICAL] {msg} -> CRITICAL (High probability of failure)"
     elif fill_ratio > packing_limit_safe:
-        return "yellow", f"🟡 {msg} -> DENSE (May have some warnings)"
+        return "yellow", f"[DENSE] {msg} -> DENSE (May have some warnings)"
     else:
-        return "green", f"🟢 {msg} -> OK"
+        return "green", f"[OK] {msg} -> OK"
 
 
 def update_camera_pose(stage, cam_path, eye, target):
