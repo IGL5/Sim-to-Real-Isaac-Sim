@@ -38,8 +38,8 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_ELEVATION_DEG_RANGE = (35.0, 45.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
-CAMERA_3D_DIST_RANGE = (20.0, 25.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
+CAMERA_ELEVATION_DEG_RANGE = (25.0, 35.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
+CAMERA_3D_DIST_RANGE = (15.0, 20.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
 LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
 FOCAL_LENGTH = 40.0 # 18.0
 SENSOR_WIDTH = 36.0
@@ -50,9 +50,9 @@ RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
 OBJECTS_BUDGET_RANGE = (5.0, 14.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9), (10.0, 20.0)
-OBJECTS_MAX_RADIUS = 20.0 # 4.0
+OBJECTS_MAX_RADIUS = 35.0 # 4.0
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (500.0, 600.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
+DISTRACTOR_BUDGET_RANGE = (300.0, 500.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
 DISTRACTOR_MAX_RADIUS = 30.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
@@ -143,7 +143,7 @@ OBJECTS_CONFIG = {
         "active": True,                     # Enable this object type
         "pool_size": 20,                    # Number of bicycles in the pool
         "radius": 1.5,                      # Radius of safety
-        "spawn_radius": (5.0, 60.0),
+        "spawn_radius": (25.0, 50.0),
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 50,             # Always want to appear if there's space
         "scale_range": (1.0, 1.2),          # Fixed scale for rigorous datasets

@@ -15,6 +15,47 @@ from src.core.metadata.sim_builder import SimulationMetadata
 from isaacsim.simulation_app import SimulationApp
 simulation_app = SimulationApp(launch_config=sim_config.CONFIG)
 
+import sys
+import signal
+
+# Global flags for graceful termination
+interrupted_flag = False
+in_loop = False
+
+# Restore default Python behavior where Ctrl+C / Ctrl+Break raise KeyboardInterrupt
+signal.signal(signal.SIGINT, signal.default_int_handler)
+try:
+    signal.signal(signal.SIGBREAK, signal.default_int_handler)
+except AttributeError:
+    pass
+
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+    
+    PHANDLER_ROUTINE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+    
+    def console_ctrl_handler(ctrl_type):
+        global interrupted_flag, in_loop
+        if ctrl_type in (0, 1): # 0 = CTRL_C_EVENT, 1 = CTRL_BREAK_EVENT
+            interrupted_flag = True
+            if in_loop:
+                print("\n[WARNING] Interrupt signal detected (Ctrl+C). Saving metadata gracefully...")
+                return True # Indicate handled, preventing immediate process termination
+        return False # Pass to next handler (e.g. Python default handler to raise KeyboardInterrupt)
+
+    # Keep a reference to the handler callback to prevent garbage collection
+    win_ctrl_handler = PHANDLER_ROUTINE(console_ctrl_handler)
+    if not ctypes.windll.kernel32.SetConsoleCtrlHandler(win_ctrl_handler, True):
+        print("[WARN] Failed to register Windows Console Ctrl Handler")
+
+# Ensure stdout/stderr support UTF-8 printing (e.g. for emojis)
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 # --- ISAAC / USD / REP IMPORTS ---
 from isaacsim.core.utils.stage import get_current_stage, open_stage
 from omni.timeline import get_timeline_interface
@@ -207,9 +248,14 @@ def main():
     track_total_distractors = 0
     track_empty_target_frames = 0
     
+    global in_loop
+    in_loop = True
     interrupted = False
     try:
         while frames_generated < sim_config.CONFIG["num_frames"] and attempts < max_attempts:
+            if interrupted_flag:
+                interrupted = True
+                break
 
             # Timer frame
             frame_start_time = time.time()
@@ -321,7 +367,7 @@ def main():
             if frames_generated == 1 or (frames_generated + 1) % 50 == 0:
                 elapsed_total = time.time() - total_start_time
                 avg_time = elapsed_total / (frames_generated + 1)
-                print(f"⏱️  [Frame {frames_generated}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
+                print(f"[Frame {frames_generated}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
 
                 # Periodic cleanup of unwanted output folders to save disk space
                 if getattr(sim_config.args, "only_rgb_bbox", False):
@@ -329,8 +375,10 @@ def main():
                 
             frames_generated += 1
     except KeyboardInterrupt:
-        print("\n⚠️ [INTERRUPTED] Generation interrupted by user (Ctrl+C). Saving progress...")
+        print("\n[INTERRUPTED] Generation interrupted by user (Ctrl+C). Saving progress...")
         interrupted = True
+    finally:
+        in_loop = False
 
     # Wait until writes are done
     print("Finalizing writes...")
