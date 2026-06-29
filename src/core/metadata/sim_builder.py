@@ -15,7 +15,7 @@ class SimulationMetadata(BaseMetadataManager):
             "rt_subframes": rt_subframes
         })
 
-    def record_performance(self, requested_frames, generated_frames, attempts, start_time_secs):
+    def record_performance(self, requested_frames, generated_frames, attempts, start_time_secs, was_interrupted=False):
         """ 
         The Builder calculates the elapsed time and efficiencies.
         The simulator only passes 'when it started' and 'how many frames it made'.
@@ -31,7 +31,8 @@ class SimulationMetadata(BaseMetadataManager):
             "total_attempts": attempts,
             "generation_efficiency_percent": efficiency,
             "total_time_seconds": round(total_time_secs, 2),
-            "average_time_per_frame_seconds": avg_time
+            "average_time_per_frame_seconds": avg_time,
+            "was_interrupted": was_interrupted
         })
 
     def record_content_density(self, total_detectables, total_distractors, empty_frames, generated_frames):

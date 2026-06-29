@@ -207,125 +207,130 @@ def main():
     track_total_distractors = 0
     track_empty_target_frames = 0
     
-    while frames_generated < sim_config.CONFIG["num_frames"] and attempts < max_attempts:
+    interrupted = False
+    try:
+        while frames_generated < sim_config.CONFIG["num_frames"] and attempts < max_attempts:
 
-        # Timer frame
-        frame_start_time = time.time()
+            # Timer frame
+            frame_start_time = time.time()
 
-        attempts += 1
-        print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
+            attempts += 1
+            print(f"\n--- ATTEMPTING FRAME {frames_generated} (Attempt {attempts}) ---")
 
-        # A. APPLY MATERIAL & SKY RANDOMIZATION
-        asset_manager.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
+            # A. APPLY MATERIAL & SKY RANDOMIZATION
+            asset_manager.randomize_and_assign_new_materials(stage, terrain_paths_map, loaded_materials)
 
-        # Randomize sky
-        if sim_config.AVAILABLE_HDRS and dome_prim.IsValid() and sim_config.RANDOMIZE_SKY:
-            hdr_name = random.choice(sim_config.AVAILABLE_HDRS)
-            light_path = Path(sim_config.HDR_MAPS_DIR) / hdr_name
+            # Randomize sky
+            if sim_config.AVAILABLE_HDRS and dome_prim.IsValid() and sim_config.RANDOMIZE_SKY:
+                hdr_name = random.choice(sim_config.AVAILABLE_HDRS)
+                light_path = Path(sim_config.HDR_MAPS_DIR) / hdr_name
+                
+                hdr_intensity = random.uniform(sim_config.HDR_INTENSITY_RANGE[0] * 1000, 
+                                            sim_config.HDR_INTENSITY_RANGE[1] * 1000)
             
-            hdr_intensity = random.uniform(sim_config.HDR_INTENSITY_RANGE[0] * 1000, 
-                                        sim_config.HDR_INTENSITY_RANGE[1] * 1000)
-        
-            asset_manager.setup_dome_light(stage, sim_config.SKY_PATH, light_path, hdr_intensity)
+                asset_manager.setup_dome_light(stage, sim_config.SKY_PATH, light_path, hdr_intensity)
 
-        # Randomize sun
-        if sim_config.RANDOMIZE_SKY and sun_prim.IsValid():
-            elevation = random.uniform(15, 80)
-            azimuth = random.uniform(0, 360)
+            # Randomize sun
+            if sim_config.RANDOMIZE_SKY and sun_prim.IsValid():
+                elevation = random.uniform(15, 80)
+                azimuth = random.uniform(0, 360)
+                
+                xform = UsdGeom.Xformable(sun_prim)
+                ops = xform.GetOrderedXformOps()
+                if ops:
+                    ops[0].Set(Gf.Vec3f(0, elevation, azimuth))
+
+            # B. CHOOSE TARGET
+            tx = random.uniform(sim_config.WORLD_LIMITS[0], sim_config.WORLD_LIMITS[1])
+            ty = random.uniform(sim_config.WORLD_LIMITS[2], sim_config.WORLD_LIMITS[3])
+            tz = scene_utils.get_ground_height(tx, ty)
             
-            xform = UsdGeom.Xformable(sun_prim)
-            ops = xform.GetOrderedXformOps()
-            if ops:
-                ops[0].Set(Gf.Vec3f(0, elevation, azimuth))
-
-        # B. CHOOSE TARGET
-        tx = random.uniform(sim_config.WORLD_LIMITS[0], sim_config.WORLD_LIMITS[1])
-        ty = random.uniform(sim_config.WORLD_LIMITS[2], sim_config.WORLD_LIMITS[3])
-        tz = scene_utils.get_ground_height(tx, ty)
-        
-        # If it returns the error value (-9999) or is out of logical limits
-        if tz == -9999.0 or tz < -200.0: 
-            print(f"[RETRY] Invalid Ground at ({tx:.1f}, {ty:.1f}). Raycast failed: {tz}.")
-            continue
+            # If it returns the error value (-9999) or is out of logical limits
+            if tz == -9999.0 or tz < -200.0: 
+                print(f"[RETRY] Invalid Ground at ({tx:.1f}, {ty:.1f}). Raycast failed: {tz}.")
+                continue
+                
+            current_target = (tx, ty, tz)
             
-        current_target = (tx, ty, tz)
-        
-        # C. POSITION CAMERA (Using Replicator LookAt)
-        jitter_angle = random.uniform(0, 2 * math.pi)
-        jitter_dist = random.uniform(0, sim_config.LOOKAT_JITTER_RADIUS)
-        jx = tx + jitter_dist * math.cos(jitter_angle)
-        jy = ty + jitter_dist * math.sin(jitter_angle)
-        camera_look_at_target = (jx, jy, tz)
+            # C. POSITION CAMERA (Using Replicator LookAt)
+            jitter_angle = random.uniform(0, 2 * math.pi)
+            jitter_dist = random.uniform(0, sim_config.LOOKAT_JITTER_RADIUS)
+            jx = tx + jitter_dist * math.cos(jitter_angle)
+            jy = ty + jitter_dist * math.sin(jitter_angle)
+            camera_look_at_target = (jx, jy, tz)
 
-        cam_x, cam_y, cam_z = scene_utils.get_drone_camera_pose(current_target)
-        
-        scene_utils.update_camera_pose(stage, camera_path, (cam_x, cam_y, cam_z), camera_look_at_target)
-
-        # Dynamic spawn epicenter calculation
-        dx = tx - cam_x
-        dy = ty - cam_y
-        dist_2d = math.sqrt(dx**2 + dy**2)
-        
-        shift_factor = 0.3 
-        epi_x = cam_x + (dx * shift_factor)
-        epi_y = cam_y + (dy * shift_factor)
-        spawn_epicenter = (epi_x, epi_y, tz)
-
-        # D. POSITION DETECTABLE OBJECTS (Cyclists, Vehicles...)
-        detectables_obstacles = scene_utils.place_objects_from_config(
-            stage=stage,
-            target_pos=spawn_epicenter,
-            config_map=sim_config.OBJECTS_CONFIG,
-            pools_paths_map=detectable_pools,
-            budget_range=sim_config.OBJECTS_BUDGET_RANGE,
-            max_radius=sim_config.OBJECTS_MAX_RADIUS,
-            previous_obstacles=[],
-            cam_pos=(cam_x, cam_y, cam_z),
-            fov_margin=fov_margin,
-            look_at_target=camera_look_at_target
-        )
-        
-        # E. POSITION DISTRACTORS (Rocks, Vegetation...)
-        all_obstacles = detectables_obstacles 
-
-        distractor_obstacles = scene_utils.place_objects_from_config(
-            stage=stage,
-            target_pos=spawn_epicenter,
-            config_map=sim_config.DISTRACTOR_CONFIG,
-            pools_paths_map=distractor_pools,
-            budget_range=sim_config.DISTRACTOR_BUDGET_RANGE,
-            max_radius=sim_config.DISTRACTOR_MAX_RADIUS,
-            previous_obstacles=all_obstacles,
-            cam_pos=(cam_x, cam_y, cam_z),
-            fov_margin=fov_margin,
-            look_at_target=camera_look_at_target
-        )
-
-        num_detectables = len(detectables_obstacles)
-        track_total_detectables += num_detectables
-        track_total_distractors += len(distractor_obstacles)
-        
-        if num_detectables == 0:
-            track_empty_target_frames += 1
-
-        # F. SHOOT
-        rep.orchestrator.step(delta_time=0.0, rt_subframes=sim_config.RT_SUBFRAMES)
-        rep.BackendDispatch.wait_until_done()
-
-        # Calculate frame duration
-        frame_duration = time.time() - frame_start_time
-        
-        # Intelligent logging (Frame 1 and every 50)
-        if frames_generated == 1 or (frames_generated + 1) % 50 == 0:
-            elapsed_total = time.time() - total_start_time
-            avg_time = elapsed_total / (frames_generated + 1)
-            print(f"⏱️  [Frame {frames_generated}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
-
-            # Periodic cleanup of unwanted output folders to save disk space
-            if getattr(sim_config.args, "only_rgb_bbox", False):
-                asset_manager.cleanup_unwanted_outputs(sim_config.args.data_dir, remove_files_only=True)
+            cam_x, cam_y, cam_z = scene_utils.get_drone_camera_pose(current_target)
             
-        frames_generated += 1
+            scene_utils.update_camera_pose(stage, camera_path, (cam_x, cam_y, cam_z), camera_look_at_target)
+
+            # Dynamic spawn epicenter calculation
+            dx = tx - cam_x
+            dy = ty - cam_y
+            dist_2d = math.sqrt(dx**2 + dy**2)
+            
+            shift_factor = 0.3 
+            epi_x = cam_x + (dx * shift_factor)
+            epi_y = cam_y + (dy * shift_factor)
+            spawn_epicenter = (epi_x, epi_y, tz)
+
+            # D. POSITION DETECTABLE OBJECTS (Cyclists, Vehicles...)
+            detectables_obstacles = scene_utils.place_objects_from_config(
+                stage=stage,
+                target_pos=spawn_epicenter,
+                config_map=sim_config.OBJECTS_CONFIG,
+                pools_paths_map=detectable_pools,
+                budget_range=sim_config.OBJECTS_BUDGET_RANGE,
+                max_radius=sim_config.OBJECTS_MAX_RADIUS,
+                previous_obstacles=[],
+                cam_pos=(cam_x, cam_y, cam_z),
+                fov_margin=fov_margin,
+                look_at_target=camera_look_at_target
+            )
+            
+            # E. POSITION DISTRACTORS (Rocks, Vegetation...)
+            all_obstacles = detectables_obstacles 
+
+            distractor_obstacles = scene_utils.place_objects_from_config(
+                stage=stage,
+                target_pos=spawn_epicenter,
+                config_map=sim_config.DISTRACTOR_CONFIG,
+                pools_paths_map=distractor_pools,
+                budget_range=sim_config.DISTRACTOR_BUDGET_RANGE,
+                max_radius=sim_config.DISTRACTOR_MAX_RADIUS,
+                previous_obstacles=all_obstacles,
+                cam_pos=(cam_x, cam_y, cam_z),
+                fov_margin=fov_margin,
+                look_at_target=camera_look_at_target
+            )
+
+            num_detectables = len(detectables_obstacles)
+            track_total_detectables += num_detectables
+            track_total_distractors += len(distractor_obstacles)
+            
+            if num_detectables == 0:
+                track_empty_target_frames += 1
+
+            # F. SHOOT
+            rep.orchestrator.step(delta_time=0.0, rt_subframes=sim_config.RT_SUBFRAMES)
+            rep.BackendDispatch.wait_until_done()
+
+            # Calculate frame duration
+            frame_duration = time.time() - frame_start_time
+            
+            # Intelligent logging (Frame 1 and every 50)
+            if frames_generated == 1 or (frames_generated + 1) % 50 == 0:
+                elapsed_total = time.time() - total_start_time
+                avg_time = elapsed_total / (frames_generated + 1)
+                print(f"⏱️  [Frame {frames_generated}] Duration: {frame_duration:.2f}s | Avg: {avg_time:.2f}s | Total: {elapsed_total/60:.1f}min")
+
+                # Periodic cleanup of unwanted output folders to save disk space
+                if getattr(sim_config.args, "only_rgb_bbox", False):
+                    asset_manager.cleanup_unwanted_outputs(sim_config.args.data_dir, remove_files_only=True)
+                
+            frames_generated += 1
+    except KeyboardInterrupt:
+        print("\n⚠️ [INTERRUPTED] Generation interrupted by user (Ctrl+C). Saving progress...")
+        interrupted = True
 
     # Wait until writes are done
     print("Finalizing writes...")
@@ -354,7 +359,8 @@ def main():
         requested_frames=sim_config.CONFIG["num_frames"],
         generated_frames=frames_generated,
         attempts=attempts,
-        start_time_secs=total_start_time
+        start_time_secs=total_start_time,
+        was_interrupted=interrupted
     )
 
     meta_manager.record_content_density(
