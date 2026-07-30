@@ -75,139 +75,153 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
     kitti_path = raw_labels_path / f"{filename_base}.txt"
     yolo_lines = []
     bboxes_stats = []
-    
-    if not kitti_path.exists():
-        return False, 0, []
-
-    with open(kitti_path, 'r') as f:
-        lines = f.readlines()
 
     # Load segmentation mask image if available for raw mode
     seg_mask = None
+    seg_img_file = None
     if is_segmentation and not is_yolo and raw_seg_path is not None:
-        seg_img_file = raw_seg_path / f"{filename_base}.png"
-        if seg_img_file.exists():
+        temp_seg_file = raw_seg_path / f"{filename_base}.png"
+        if temp_seg_file.exists():
+            seg_img_file = temp_seg_file
             seg_mask = cv2.imread(str(seg_img_file), cv2.IMREAD_UNCHANGED)
 
-    for line in lines:
-        parts = line.strip().split(' ')
-        if len(parts) < 5: 
-            continue
-            
-        if is_yolo:
-            try:
-                class_id = int(parts[0])
+    if kitti_path.exists():
+        with open(kitti_path, 'r') as f:
+            lines = f.readlines()
 
+        for line in lines:
+            parts = line.strip().split(' ')
+            if len(parts) < 5: 
+                continue
+                
+            if is_yolo:
+                try:
+                    class_id = int(parts[0])
+
+                    if override_all >= 0:
+                        class_id = override_all
+                    elif str(class_id) in override_map:
+                        class_id = override_map[str(class_id)]
+                    
+                    if class_id < 0 or class_id >= len(CLASES):
+                        continue
+
+                    coords = list(map(float, parts[1:]))
+
+                    if is_segmentation or len(coords) > 4:
+                        if len(coords) >= 6 and len(coords) % 2 == 0:
+                            poly_str = " ".join(f"{c:.6f}" for c in coords)
+                            yolo_lines.append(f"{class_id} {poly_str}")
+                            bboxes_stats.append(mu.polygon_to_bbox(coords))
+                    else:
+                        cx, cy, w_box, h_box = coords[:4]
+                        yolo_lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w_box:.6f} {h_box:.6f}")
+                        area = w_box * h_box
+                        aspect_ratio = w_box / h_box if h_box > 0 else 0
+                        bboxes_stats.append({
+                            "area": area, "ar": aspect_ratio, "cx": cx, "cy": cy
+                        })
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Error parsing YOLO line in {filename_base}: {e} -> {line.strip()}")
+                    continue
+            else:
+                # KITTI original format
+                class_name_raw = parts[0]
+                class_name = None
+                
+                if ',' in class_name_raw:
+                    for c in reversed(class_name_raw.split(',')):
+                        if c in CLASES or c in override_map or override_all >= 0:
+                            class_name = c
+                            break
+                else:
+                    class_name = class_name_raw
+                    
+                if class_name is None:
+                    continue
+                    
                 if override_all >= 0:
                     class_id = override_all
-                elif str(class_id) in override_map:
-                    class_id = override_map[str(class_id)]
-                
-                # Check if class_id is valid
+                elif class_name in override_map:
+                    class_id = override_map[class_name]
+                elif class_name in CLASES:
+                    class_id = CLASES.index(class_name)
+                else:
+                    continue  
+                    
                 if class_id < 0 or class_id >= len(CLASES):
                     continue
 
-                coords = list(map(float, parts[1:]))
+                try:
+                    xmin, ymin = float(parts[4]), float(parts[5])
+                    xmax, ymax = float(parts[6]), float(parts[7])
 
-                if is_segmentation or len(coords) > 4:
-                    # YOLO Segmentation format: class_id x1 y1 x2 y2 ...
-                    if len(coords) >= 6 and len(coords) % 2 == 0:
-                        poly_str = " ".join(f"{c:.6f}" for c in coords)
-                        yolo_lines.append(f"{class_id} {poly_str}")
-                        bboxes_stats.append(mu.polygon_to_bbox(coords))
-                else:
-                    # YOLO Detection format: class_id cx cy w h
-                    cx, cy, w_box, h_box = coords[:4]
-                    yolo_lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w_box:.6f} {h_box:.6f}")
-                    area = w_box * h_box
-                    aspect_ratio = w_box / h_box if h_box > 0 else 0
-                    bboxes_stats.append({
-                        "area": area, "ar": aspect_ratio, "cx": cx, "cy": cy
-                    })
-            except (ValueError, IndexError) as e:
-                print(f"⚠️ Error parsing YOLO line in {filename_base}: {e} -> {line.strip()}")
-                continue
-        else:
-            # KITTI original format
-            class_name_raw = parts[0]
-            class_name = None
-            
-            # Clean multiple labels (Ej: "bicycle,pedal" -> "pedal")
-            if ',' in class_name_raw:
-                for c in reversed(class_name_raw.split(',')):
-                    if c in CLASES or c in override_map or override_all >= 0:
-                        class_name = c
-                        break
-            else:
-                class_name = class_name_raw
-                
-            if class_name is None:
-                continue
-                
-            # Override class logic
-            if override_all >= 0:
-                class_id = override_all
-            elif class_name in override_map:
-                class_id = override_map[class_name]
-            elif class_name in CLASES:
-                class_id = CLASES.index(class_name)
-            else:
-                continue  
-                
-            if class_id < 0 or class_id >= len(CLASES):
-                continue
+                    if is_segmentation:
+                        polygons_found = []
+                        if seg_mask is not None:
+                            x1_i, y1_i = max(0, int(xmin)), max(0, int(ymin))
+                            x2_i, y2_i = min(width, int(xmax)), min(height, int(ymax))
 
-            try:
-                xmin, ymin = float(parts[4]), float(parts[5])
-                xmax, ymax = float(parts[6]), float(parts[7])
+                            if seg_mask.ndim == 3:
+                                crop = seg_mask[y1_i:y2_i, x1_i:x2_i, :3]
+                                non_zero_mask = np.any(crop > 0, axis=2)
+                            else:
+                                crop = seg_mask[y1_i:y2_i, x1_i:x2_i]
+                                non_zero_mask = crop > 0
 
-                if is_segmentation:
-                    polygons_found = []
-                    if seg_mask is not None:
-                        # Extract crop region for this object box
-                        x1_i, y1_i = max(0, int(xmin)), max(0, int(ymin))
-                        x2_i, y2_i = min(width, int(xmax)), min(height, int(ymax))
+                            if np.any(non_zero_mask):
+                                if seg_mask.ndim == 3:
+                                    binary_mask = np.any(seg_mask[:, :, :3] > 0, axis=2)
+                                else:
+                                    binary_mask = seg_mask > 0
+                                polygons_found = mu.mask_to_polygons(binary_mask, width, height)
 
-                        if seg_mask.ndim == 3:
-                            crop = seg_mask[y1_i:y2_i, x1_i:x2_i, 0]
+                        if polygons_found:
+                            for poly in polygons_found:
+                                poly_str = " ".join(f"{pt:.6f}" for pt in poly)
+                                yolo_lines.append(f"{class_id} {poly_str}")
+                                bboxes_stats.append(mu.polygon_to_bbox(poly))
                         else:
-                            crop = seg_mask[y1_i:y2_i, x1_i:x2_i]
-
-                        if crop.size > 0:
-                            non_zero = crop[crop > 0]
-                            if len(non_zero) > 0:
-                                target_id = np.bincount(non_zero.flatten()).argmax()
-                                instance_mask = (seg_mask == target_id) if seg_mask.ndim == 2 else (seg_mask[:, :, 0] == target_id)
-                                polygons_found = mu.mask_to_polygons(instance_mask, width, height)
-
-                    if polygons_found:
-                        for poly in polygons_found:
-                            poly_str = " ".join(f"{pt:.6f}" for pt in poly)
+                            rect_poly = [
+                                max(0.0, min(1.0, xmin / width)), max(0.0, min(1.0, ymin / height)),
+                                max(0.0, min(1.0, xmax / width)), max(0.0, min(1.0, ymin / height)),
+                                max(0.0, min(1.0, xmax / width)), max(0.0, min(1.0, ymax / height)),
+                                max(0.0, min(1.0, xmin / width)), max(0.0, min(1.0, ymax / height))
+                            ]
+                            poly_str = " ".join(f"{pt:.6f}" for pt in rect_poly)
                             yolo_lines.append(f"{class_id} {poly_str}")
-                            bboxes_stats.append(mu.polygon_to_bbox(poly))
+                            bboxes_stats.append(mu.polygon_to_bbox(rect_poly))
                     else:
-                        # Fallback: convert bounding box to 4-corner rectangle polygon
-                        rect_poly = [
-                            max(0.0, min(1.0, xmin / width)), max(0.0, min(1.0, ymin / height)),
-                            max(0.0, min(1.0, xmax / width)), max(0.0, min(1.0, ymin / height)),
-                            max(0.0, min(1.0, xmax / width)), max(0.0, min(1.0, ymax / height)),
-                            max(0.0, min(1.0, xmin / width)), max(0.0, min(1.0, ymax / height))
-                        ]
-                        poly_str = " ".join(f"{pt:.6f}" for pt in rect_poly)
-                        yolo_lines.append(f"{class_id} {poly_str}")
-                        bboxes_stats.append(mu.polygon_to_bbox(rect_poly))
-                else:
-                    # Detection mode
-                    bbox = mu.corners_to_yolo(xmin, xmax, ymin, ymax, width, height)
-                    yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
+                        bbox = mu.corners_to_yolo(xmin, xmax, ymin, ymax, width, height)
+                        yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
 
-                    w_k, h_k = bbox[2], bbox[3]
-                    area = w_k * h_k
-                    aspect_ratio = w_k / h_k if h_k > 0 else 0
-                    bboxes_stats.append({"area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]})
-            except (ValueError, IndexError) as e:
-                print(f"⚠️ Error parsing KITTI line in {filename_base}: {e} -> {line.strip()}")
-                continue
+                        w_k, h_k = bbox[2], bbox[3]
+                        area = w_k * h_k
+                        aspect_ratio = w_k / h_k if h_k > 0 else 0
+                        bboxes_stats.append({"area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]})
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Error parsing KITTI line in {filename_base}: {e} -> {line.strip()}")
+                    continue
+    elif is_segmentation and seg_mask is not None:
+        # Extract polygons directly from mask image when KITTI txt is not present
+        class_id = override_all if override_all >= 0 else 0
+        if seg_mask.ndim == 3:
+            binary_mask = (np.sum(seg_mask[:, :, :3], axis=2) > 0).astype(np.uint8)
+            polygons_found = mu.mask_to_polygons(binary_mask, width, height)
+            for poly in polygons_found:
+                poly_str = " ".join(f"{pt:.6f}" for pt in poly)
+                yolo_lines.append(f"{class_id} {poly_str}")
+                bboxes_stats.append(mu.polygon_to_bbox(poly))
+        else:
+            unique_ids = np.unique(seg_mask)
+            unique_ids = unique_ids[unique_ids > 0]
+            for inst_id in unique_ids:
+                instance_mask = (seg_mask == inst_id)
+                polygons_found = mu.mask_to_polygons(instance_mask, width, height)
+                for poly in polygons_found:
+                    poly_str = " ".join(f"{pt:.6f}" for pt in poly)
+                    yolo_lines.append(f"{class_id} {poly_str}")
+                    bboxes_stats.append(mu.polygon_to_bbox(poly))
 
     # 3. Save with NEW UNIQUE NAME
     new_filename = f"{unique_prefix}_{filename_base}"
@@ -219,6 +233,8 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
         shutil.move(str(img_path), str(dest_img))
         if kitti_path.exists():
             kitti_path.unlink()
+        if seg_img_file is not None and seg_img_file.exists():
+            seg_img_file.unlink()
     else:
         shutil.copy2(str(img_path), str(dest_img))
     
@@ -283,27 +299,41 @@ def main():
                         "(e.g., --override_class mountain_bike=0 road_bike=0)")
     args = parser.parse_args()
 
-    raw_labels_path = Path(args.source) / config.RAW_LABELS_SUBPATH
     raw_images_path = Path(args.source) / config.RAW_IMAGES_SUBPATH
+    raw_labels_path = Path(args.source) / config.RAW_LABELS_SUBPATH
 
-    if not raw_labels_path.exists() or not raw_images_path.exists():
-        print(f"❌ Error: Didn't find raw data.")
-        print(f"   Searching images in: {raw_images_path}")
-        print(f"   Searching labels in: {raw_labels_path}")
-        return
+    def _has_valid_masks(folder, sample_limit=5):
+        if not folder.exists():
+            return False
+        png_files = list(folder.glob("*.png"))
+        if not png_files:
+            return False
+        for f in png_files[:sample_limit]:
+            mask = cv2.imread(str(f), cv2.IMREAD_UNCHANGED)
+            if mask is not None and np.any(mask > 0):
+                return True
+        return False
 
     raw_seg_path = None
     if args.segmentation:
         inst_path = Path(args.source) / config.RAW_INSTANCE_SEG_SUBPATH
         sem_path = Path(args.source) / config.RAW_SEMANTIC_SEG_SUBPATH
-        if inst_path.exists():
+        if _has_valid_masks(inst_path):
             raw_seg_path = inst_path
             print(f" (Segmentation) Instance segmentation masks found in: {raw_seg_path}")
-        elif sem_path.exists():
+        elif _has_valid_masks(sem_path):
             raw_seg_path = sem_path
             print(f" (Segmentation) Semantic segmentation masks found in: {raw_seg_path}")
+        elif inst_path.exists():
+            raw_seg_path = inst_path
+        elif sem_path.exists():
+            raw_seg_path = sem_path
         else:
             print(f"[WARN] Flag '--segmentation' active, but no mask folder found. Fallback to bounding box polygons.")
+
+    if not raw_images_path.exists():
+        print(f"❌ Error: Didn't find raw image data in: {raw_images_path}")
+        return
 
     override_map = {}
     override_all = -1
@@ -325,7 +355,6 @@ def main():
     create_dir_structure(args.append)
 
     # 2. Generate unique prefix for this batch of data
-    # We use date and time until seconds to ensure uniqueness: "20231027_153022"
     batch_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
     print(f"🆔 ID of Batch (Batch ID): {batch_prefix}")
 
@@ -333,7 +362,13 @@ def main():
         print(f"⚠️  WARNING: Flag '--move' active. Original files in {args.source} will be DELETED to save space.")
 
     # 3. List files
-    all_files = [f.stem for f in raw_labels_path.glob("*.txt")]
+    if raw_labels_path.exists() and len(list(raw_labels_path.glob("*.txt"))) > 0:
+        all_files = [f.stem for f in raw_labels_path.glob("*.txt")]
+    elif raw_seg_path is not None and raw_seg_path.exists() and len(list(raw_seg_path.glob("*.png"))) > 0:
+        all_files = [f.stem for f in raw_seg_path.glob("*.png")]
+    else:
+        all_files = [f.stem for f in raw_images_path.glob("*.*") if f.suffix.lower() in config.VALID_IMAGE_EXTENSIONS]
+
     total_files = len(all_files)
     
     if total_files == 0:
