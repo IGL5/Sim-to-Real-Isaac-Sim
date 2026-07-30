@@ -1,4 +1,5 @@
 import numpy as np
+import cv2
 
 
 def calculate_iou_matrix(boxesA, boxesB):
@@ -89,3 +90,66 @@ def calculate_speed_stats(speeds_dict):
         "total_ms": round(float(total_ms), 2),
         "fps": round(1000.0 / total_ms, 2) if total_ms > 0 else 0
     }
+
+
+def mask_to_polygons(mask, img_w, img_h, min_points=3, epsilon_factor=0.003):
+    """
+    Converts a binary pixel mask (numpy 2D array, non-zero for target instance)
+    into a list of normalized polygons. Each polygon is a list of floats: [x1, y1, x2, y2, ...].
+    """
+    if mask is None or not np.any(mask):
+        return []
+    
+    binary_mask = (mask > 0).astype(np.uint8)
+    contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    polygons = []
+    for contour in contours:
+        if cv2.contourArea(contour) < 5:
+            continue
+        
+        epsilon = epsilon_factor * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+        pts = approx.reshape(-1, 2)
+        
+        if len(pts) < min_points:
+            continue
+            
+        norm_pts = []
+        for x, y in pts:
+            nx = float(np.clip(x / img_w, 0.0, 1.0))
+            ny = float(np.clip(y / img_h, 0.0, 1.0))
+            norm_pts.extend([nx, ny])
+            
+        polygons.append(norm_pts)
+        
+    return polygons
+
+
+def polygon_to_bbox(polygon_coords):
+    """
+    Calculates bounding box stats (cx, cy, w, h, area, aspect_ratio)
+    from a list of normalized polygon coordinates [x1, y1, x2, y2, ...].
+    """
+    if not polygon_coords or len(polygon_coords) < 6:
+        return {"area": 0.0, "ar": 0.0, "cx": 0.0, "cy": 0.0}
+    
+    xs = polygon_coords[0::2]
+    ys = polygon_coords[1::2]
+    
+    xmin, xmax = min(xs), max(xs)
+    ymin, ymax = min(ys), max(ys)
+    
+    w_box = max(0.0, xmax - xmin)
+    h_box = max(0.0, ymax - ymin)
+    cx = (xmin + xmax) / 2.0
+    cy = (ymin + ymax) / 2.0
+    area = w_box * h_box
+    aspect_ratio = w_box / h_box if h_box > 0 else 0.0
+    
+    return {
+        "area": area,
+        "ar": aspect_ratio,
+        "cx": cx,
+        "cy": cy
+    }

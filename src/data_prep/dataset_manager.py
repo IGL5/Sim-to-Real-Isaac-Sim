@@ -1,9 +1,17 @@
 from pathlib import Path
+import numpy as np
 import cv2
 import shutil
 import random
 import argparse
+import sys
 from datetime import datetime
+
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 import src.core.config as config
 from src.core.utils import math_utils as mu
 from src.core.utils import project_utils as pu
@@ -36,10 +44,10 @@ def create_dir_structure(append_mode):
     else:
         print(f"📂 Structure verified (Append mode).")
 
-def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw_images_path, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
+def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw_images_path, move_mode=False, is_yolo=False, is_segmentation=False, raw_seg_path=None, override_all=-1, override_map=None):
     """
     Processes a pair of image/label, changes their name with a unique prefix
-    and saves them in the corresponding subset.
+    and saves them in the corresponding subset. Supports detection and segmentation formats.
     """
     if override_map is None:
         override_map = {}
@@ -73,7 +81,14 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
 
     with open(kitti_path, 'r') as f:
         lines = f.readlines()
-        
+
+    # Load segmentation mask image if available for raw mode
+    seg_mask = None
+    if is_segmentation and not is_yolo and raw_seg_path is not None:
+        seg_img_file = raw_seg_path / f"{filename_base}.png"
+        if seg_img_file.exists():
+            seg_mask = cv2.imread(str(seg_img_file), cv2.IMREAD_UNCHANGED)
+
     for line in lines:
         parts = line.strip().split(' ')
         if len(parts) < 5: 
@@ -81,27 +96,34 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
             
         if is_yolo:
             try:
-                # YOLO format: class_id cx cy w h
                 class_id = int(parts[0])
-                cx, cy, w_box, h_box = map(float, parts[1:5])
 
                 if override_all >= 0:
                     class_id = override_all
                 elif str(class_id) in override_map:
                     class_id = override_map[str(class_id)]
                 
-                # Check if the class_id is valid according to our classes.txt
+                # Check if class_id is valid
                 if class_id < 0 or class_id >= len(CLASES):
                     continue
-                    
-                yolo_lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w_box:.6f} {h_box:.6f}")
-                
-                area = w_box * h_box
-                aspect_ratio = w_box / h_box if h_box > 0 else 0
-                
-                bboxes_stats.append({
-                    "area": area, "ar": aspect_ratio, "cx": cx, "cy": cy
-                })
+
+                coords = list(map(float, parts[1:]))
+
+                if is_segmentation or len(coords) > 4:
+                    # YOLO Segmentation format: class_id x1 y1 x2 y2 ...
+                    if len(coords) >= 6 and len(coords) % 2 == 0:
+                        poly_str = " ".join(f"{c:.6f}" for c in coords)
+                        yolo_lines.append(f"{class_id} {poly_str}")
+                        bboxes_stats.append(mu.polygon_to_bbox(coords))
+                else:
+                    # YOLO Detection format: class_id cx cy w h
+                    cx, cy, w_box, h_box = coords[:4]
+                    yolo_lines.append(f"{class_id} {cx:.6f} {cy:.6f} {w_box:.6f} {h_box:.6f}")
+                    area = w_box * h_box
+                    aspect_ratio = w_box / h_box if h_box > 0 else 0
+                    bboxes_stats.append({
+                        "area": area, "ar": aspect_ratio, "cx": cx, "cy": cy
+                    })
             except (ValueError, IndexError) as e:
                 print(f"⚠️ Error parsing YOLO line in {filename_base}: {e} -> {line.strip()}")
                 continue
@@ -138,14 +160,51 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
             try:
                 xmin, ymin = float(parts[4]), float(parts[5])
                 xmax, ymax = float(parts[6]), float(parts[7])
-                
-                bbox = mu.corners_to_yolo(xmin, xmax, ymin, ymax, width, height)
-                yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
 
-                w_k, h_k = bbox[2], bbox[3]
-                area = w_k * h_k
-                aspect_ratio = w_k / h_k if h_k > 0 else 0
-                bboxes_stats.append({"area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]})
+                if is_segmentation:
+                    polygons_found = []
+                    if seg_mask is not None:
+                        # Extract crop region for this object box
+                        x1_i, y1_i = max(0, int(xmin)), max(0, int(ymin))
+                        x2_i, y2_i = min(width, int(xmax)), min(height, int(ymax))
+
+                        if seg_mask.ndim == 3:
+                            crop = seg_mask[y1_i:y2_i, x1_i:x2_i, 0]
+                        else:
+                            crop = seg_mask[y1_i:y2_i, x1_i:x2_i]
+
+                        if crop.size > 0:
+                            non_zero = crop[crop > 0]
+                            if len(non_zero) > 0:
+                                target_id = np.bincount(non_zero.flatten()).argmax()
+                                instance_mask = (seg_mask == target_id) if seg_mask.ndim == 2 else (seg_mask[:, :, 0] == target_id)
+                                polygons_found = mu.mask_to_polygons(instance_mask, width, height)
+
+                    if polygons_found:
+                        for poly in polygons_found:
+                            poly_str = " ".join(f"{pt:.6f}" for pt in poly)
+                            yolo_lines.append(f"{class_id} {poly_str}")
+                            bboxes_stats.append(mu.polygon_to_bbox(poly))
+                    else:
+                        # Fallback: convert bounding box to 4-corner rectangle polygon
+                        rect_poly = [
+                            max(0.0, min(1.0, xmin / width)), max(0.0, min(1.0, ymin / height)),
+                            max(0.0, min(1.0, xmax / width)), max(0.0, min(1.0, ymin / height)),
+                            max(0.0, min(1.0, xmax / width)), max(0.0, min(1.0, ymax / height)),
+                            max(0.0, min(1.0, xmin / width)), max(0.0, min(1.0, ymax / height))
+                        ]
+                        poly_str = " ".join(f"{pt:.6f}" for pt in rect_poly)
+                        yolo_lines.append(f"{class_id} {poly_str}")
+                        bboxes_stats.append(mu.polygon_to_bbox(rect_poly))
+                else:
+                    # Detection mode
+                    bbox = mu.corners_to_yolo(xmin, xmax, ymin, ymax, width, height)
+                    yolo_lines.append(f"{class_id} {bbox[0]:.6f} {bbox[1]:.6f} {bbox[2]:.6f} {bbox[3]:.6f}")
+
+                    w_k, h_k = bbox[2], bbox[3]
+                    area = w_k * h_k
+                    aspect_ratio = w_k / h_k if h_k > 0 else 0
+                    bboxes_stats.append({"area": area, "ar": aspect_ratio, "cx": bbox[0], "cy": bbox[1]})
             except (ValueError, IndexError) as e:
                 print(f"⚠️ Error parsing KITTI line in {filename_base}: {e} -> {line.strip()}")
                 continue
@@ -170,7 +229,7 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
             
     return True, len(yolo_lines), bboxes_stats
 
-def process_subset(file_list, subset_name, batch_prefix, raw_labels_path, raw_images_path, move_mode=False, is_yolo=False, override_all=-1, override_map=None):
+def process_subset(file_list, subset_name, batch_prefix, raw_labels_path, raw_images_path, move_mode=False, is_yolo=False, is_segmentation=False, raw_seg_path=None, override_all=-1, override_map=None):
     count_imgs = 0
     count_objs = 0
     count_bgs = 0
@@ -179,7 +238,11 @@ def process_subset(file_list, subset_name, batch_prefix, raw_labels_path, raw_im
     all_areas, all_ars, all_cx, all_cy = [], [], [], []
     
     for fname in file_list:
-        success, num_objects, bbox_stats = process_pair(fname, subset_name, batch_prefix, raw_labels_path, raw_images_path, move_mode, is_yolo, override_all, override_map)
+        success, num_objects, bbox_stats = process_pair(
+            fname, subset_name, batch_prefix, raw_labels_path, raw_images_path,
+            move_mode=move_mode, is_yolo=is_yolo, is_segmentation=is_segmentation,
+            raw_seg_path=raw_seg_path, override_all=override_all, override_map=override_map
+        )
         if success:
             count_imgs += 1
             count_objs += num_objects
@@ -214,6 +277,7 @@ def main():
     parser.add_argument('--limit', type=int, default=0, help="Maximum number of images to process (0 = all)")
     parser.add_argument('--source', type=str, default=config.RAW_DATA_DIR, help="Path to the raw dataset folder")
     parser.add_argument('--is_yolo', action='store_true', help="Indicates that source labels are already in YOLO format")
+    parser.add_argument('--segmentation', action='store_true', help="Conversion of pixel masks to YOLO polygons")
     parser.add_argument('--override_class', nargs='+', default=[], help="Override classes. Use a single number to override ALL" \
                         " (e.g., --override_class 0) or pairs to map specific classes " \
                         "(e.g., --override_class mountain_bike=0 road_bike=0)")
@@ -227,6 +291,19 @@ def main():
         print(f"   Searching images in: {raw_images_path}")
         print(f"   Searching labels in: {raw_labels_path}")
         return
+
+    raw_seg_path = None
+    if args.segmentation:
+        inst_path = Path(args.source) / config.RAW_INSTANCE_SEG_SUBPATH
+        sem_path = Path(args.source) / config.RAW_SEMANTIC_SEG_SUBPATH
+        if inst_path.exists():
+            raw_seg_path = inst_path
+            print(f" (Segmentation) Instance segmentation masks found in: {raw_seg_path}")
+        elif sem_path.exists():
+            raw_seg_path = sem_path
+            print(f" (Segmentation) Semantic segmentation masks found in: {raw_seg_path}")
+        else:
+            print(f"[WARN] Flag '--segmentation' active, but no mask folder found. Fallback to bounding box polygons.")
 
     override_map = {}
     override_all = -1
@@ -281,6 +358,10 @@ def main():
 
     print(f"📊 New files found: {total_files}")
     print(f"   Train: {len(train_files)} | Val: {len(val_files)} | Test: {len(test_files)}")
+    if args.segmentation:
+        print("   Task: Segmentation (YOLO polygon labels)")
+    else:
+        print("   Task: Detection (YOLO bounding box labels)")
     
     if args.append:
         print("   -> New data will be added to the existing dataset.")
@@ -291,13 +372,13 @@ def main():
 
     # 5. Process passing the prefix
     print("🚀 Processing Train...")
-    train_stats = process_subset(train_files, 'train', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, override_all, override_map)
+    train_stats = process_subset(train_files, 'train', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, args.segmentation, raw_seg_path, override_all, override_map)
     
     print("🚀 Processing Val...")
-    val_stats = process_subset(val_files, 'val', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, override_all, override_map)
+    val_stats = process_subset(val_files, 'val', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, args.segmentation, raw_seg_path, override_all, override_map)
     
     print("🚀 Processing Test...")
-    test_stats = process_subset(test_files, 'test', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, override_all, override_map)
+    test_stats = process_subset(test_files, 'test', batch_prefix, raw_labels_path, raw_images_path, args.move, args.is_yolo, args.segmentation, raw_seg_path, override_all, override_map)
 
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
