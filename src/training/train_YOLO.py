@@ -211,7 +211,18 @@ def interactive_selection():
         size_suffix = 's'
         print("   -> Selected: Small")
 
-    model_to_use = f"{model_prefix}{size_suffix}.pt"
+    print("\nTask:")
+    print("  [d] Detection (Bounding Boxes)")
+    print("  [s] Segmentation (Polygons)")
+    task_input = input("Select task [d/s] (default d): ").strip().lower()
+    
+    task_suffix = "-seg" if task_input == 's' else ""
+    if task_input == 's':
+        print("   -> Selected: Segmentation")
+    else:
+        print("   -> Selected: Detection")
+
+    model_to_use = f"{model_prefix}{size_suffix}{task_suffix}.pt"
 
     # 3. Select experiment name
     prefix = get_next_experiment_prefix(name_prefix, size_suffix)
