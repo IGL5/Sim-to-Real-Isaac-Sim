@@ -38,7 +38,7 @@ SUN_PATH = "/World/Sun_Light"
 SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
-CAMERA_ELEVATION_DEG_RANGE = (25.0, 30.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
+CAMERA_ELEVATION_DEG_RANGE = (25.0, 35.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
 CAMERA_3D_DIST_RANGE = (15.0, 20.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
 LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
 FOCAL_LENGTH = 40.0 # 18.0
@@ -50,7 +50,7 @@ RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
 OBJECTS_BUDGET_RANGE = (5.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9), (10.0, 20.0)
-OBJECTS_MAX_RADIUS = 45.0 # 4.0
+OBJECTS_MAX_RADIUS = 40.0 # 4.0
 # DISTRACTOR BUDGET
 DISTRACTOR_BUDGET_RANGE = (500.0, 600.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
 DISTRACTOR_MAX_RADIUS = 50.0
@@ -143,7 +143,7 @@ OBJECTS_CONFIG = {
         "active": True,                     # Enable this object type
         "pool_size": 20,                    # Number of bicycles in the pool
         "radius": 1.5,                      # Radius of safety
-        "spawn_radius": (30.0, 50.0),
+        "spawn_radius": (10.0, 50.0),
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 50,             # Always want to appear if there's space
         "scale_range": (1.0, 1.2),          # Fixed scale for rigorous datasets
@@ -164,7 +164,7 @@ DISTRACTOR_CONFIG = {
         "spawn_radius": (0.0, 40.0),
         "radius": 0.4,
         "cost_units": 2.0,
-        "selection_weight": 150,
+        "selection_weight": 50,
         "scale_range": (0.7, 1.5),
         "randomize_materials": ["main"],
         "randomize_soft_colors": True
@@ -175,7 +175,7 @@ DISTRACTOR_CONFIG = {
         "spawn_radius": (5.0, 30.0),
         "radius": 1.0,
         "cost_units": 5.0,
-        "selection_weight": 30,
+        "selection_weight": 200,
         "scale_range": (0.6, 1.2),
         "randomize_materials": ["main"],
         "randomize_soft_colors": True
