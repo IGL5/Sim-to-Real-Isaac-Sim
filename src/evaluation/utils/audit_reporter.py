@@ -40,7 +40,7 @@ class ReportGenerator:
         self.plots_dir = Path(config.PLOTS_EVAL_DIR) / self.prefix
         self.plots_dir.mkdir(parents=True, exist_ok=True)
 
-    def update(self, pred_boxes, pred_classes, gt_boxes, confidences, img_shape, speed_dict=None):
+    def update(self, pred_boxes, pred_classes, gt_boxes, confidences, img_shape, speed_dict=None, pred_masks=None, gt_polygons=None):
         h, w = img_shape
         img_stats = {"TP": 0, "FP": 0, "FN": 0, "poor_bbox": 0}
 
@@ -51,15 +51,22 @@ class ReportGenerator:
 
         gt_classes = []
         gt_coords = []
-        for gt in gt_boxes:
+        gt_poly_list = []
+        for i_gt, gt in enumerate(gt_boxes):
             c_id = int(gt[0])
             if self.class_names and c_id not in self.class_names:
                 continue
             gt_classes.append(c_id)
             gt_coords.append(gt[1:])
+            if gt_polygons and i_gt < len(gt_polygons):
+                gt_poly_list.append(gt_polygons[i_gt][1] if isinstance(gt_polygons[i_gt], list) and len(gt_polygons[i_gt]) == 2 else gt_polygons[i_gt])
             self.class_stats[c_id]["total_gt"] += 1
             
-        iou_matrix = mu.calculate_iou_matrix(pred_boxes, gt_coords)
+        if pred_masks and len(pred_masks) > 0 and len(gt_poly_list) > 0:
+            iou_matrix = mu.calculate_mask_iou_matrix(pred_masks, gt_poly_list, w, h)
+        else:
+            iou_matrix = mu.calculate_iou_matrix(pred_boxes, gt_coords)
+
         
         matched_gt_all = set()   
         matched_gt_thresh = set() 

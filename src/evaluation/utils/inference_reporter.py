@@ -38,7 +38,7 @@ class InferenceReportGenerator:
             "bbox_centers": []
         })
  
-    def update(self, pred_boxes, pred_classes, confidences, img_shape, filename, speed_dict=None):
+    def update(self, pred_boxes, pred_classes, confidences, img_shape, filename, speed_dict=None, pred_masks=None):
         h, w = img_shape
         self.stats["total_images"] += 1
         
@@ -50,6 +50,7 @@ class InferenceReportGenerator:
         valid_boxes = []
         valid_classes = []
         valid_confs = []
+        valid_masks = []
         
         for i, box in enumerate(pred_boxes):
             c_id = pred_classes[i]
@@ -59,6 +60,8 @@ class InferenceReportGenerator:
                 valid_boxes.append(box)
                 valid_classes.append(c_id)
                 valid_confs.append(conf)
+                if pred_masks and i < len(pred_masks):
+                    valid_masks.append(pred_masks[i])
                 
                 cx_abs = (box[0] + box[2]) / 2
                 cy_abs = (box[1] + box[3]) / 2
@@ -84,11 +87,16 @@ class InferenceReportGenerator:
         for c_id in unique_classes:
             idx_list = [i for i, c in enumerate(valid_classes) if c == c_id]
             if len(idx_list) > 1:
-                class_boxes = [valid_boxes[i] for i in idx_list]
-                iou_matrix = mu.calculate_iou_matrix(class_boxes, class_boxes)
+                if len(valid_masks) == len(valid_boxes) and len(valid_masks) > 0:
+                    class_masks = [valid_masks[i] for i in idx_list]
+                    iou_matrix = mu.calculate_mask_iou_matrix(class_masks, class_masks, w, h)
+                else:
+                    class_boxes = [valid_boxes[i] for i in idx_list]
+                    iou_matrix = mu.calculate_iou_matrix(class_boxes, class_boxes)
                 pairs = np.argwhere(np.triu(iou_matrix, k=1) > self.overlap_threshold)
                 for p in pairs:
                     problematic_pairs_indices.append((idx_list[p[0]], idx_list[p[1]]))
+
         
         if len(problematic_pairs_indices) > 0:
             if len(self.stats["overlap_events"]) < self.MAX_OVERLAPS_HTML:

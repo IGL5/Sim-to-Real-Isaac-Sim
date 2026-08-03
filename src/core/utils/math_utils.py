@@ -152,4 +152,71 @@ def polygon_to_bbox(polygon_coords):
         "ar": aspect_ratio,
         "cx": cx,
         "cy": cy
-    }
+    }
+
+
+def polygon_to_mask(polygon_pts, img_w, img_h):
+    """
+    Renders polygon points (either normalized [0..1] or pixel coordinates) into a binary mask of shape (img_h, img_w).
+    polygon_pts: List or numpy array of floats [x1, y1, ...] or shape (N, 2)
+    """
+    mask = np.zeros((img_h, img_w), dtype=np.uint8)
+    if polygon_pts is None or len(polygon_pts) == 0:
+        return mask
+
+    pts = np.array(polygon_pts, dtype=np.float32)
+    if pts.ndim == 1:
+        if len(pts) < 6:
+            return mask
+        pts = pts.reshape(-1, 2)
+    elif pts.ndim == 2 and pts.shape[1] == 2:
+        if len(pts) < 3:
+            return mask
+    else:
+        return mask
+
+    # Check if normalized [0, 1]
+    if np.max(pts) <= 1.05:
+        pts = pts.copy()
+        pts[:, 0] *= img_w
+        pts[:, 1] *= img_h
+
+    pts_int = pts.astype(np.int32)
+    cv2.fillPoly(mask, [pts_int], 1)
+    return mask
+
+
+def calculate_mask_iou_matrix(masksA, masksB, img_w=640, img_h=640):
+    """
+    Calculates Intersection over Union matrix between two sets of masks or polygons.
+    masksA: List of masks (2D numpy arrays) or polygons [x1, y1, ...] or shape (N, 2)
+    masksB: List of masks (2D numpy arrays) or polygons [x1, y1, ...] or shape (N, 2)
+    Returns: Numpy matrix of shape (N, M) with the mask IoUs.
+    """
+    if len(masksA) == 0 or len(masksB) == 0:
+        return np.zeros((len(masksA), len(masksB)))
+
+    renderedA = []
+    for mA in masksA:
+        if isinstance(mA, np.ndarray) and mA.ndim == 2 and mA.shape[0] == img_h and mA.shape[1] == img_w:
+            renderedA.append((mA > 0).astype(np.uint8))
+        else:
+            renderedA.append(polygon_to_mask(mA, img_w, img_h))
+
+    renderedB = []
+    for mB in masksB:
+        if isinstance(mB, np.ndarray) and mB.ndim == 2 and mB.shape[0] == img_h and mB.shape[1] == img_w:
+            renderedB.append((mB > 0).astype(np.uint8))
+        else:
+            renderedB.append(polygon_to_mask(mB, img_w, img_h))
+
+    iou_mat = np.zeros((len(renderedA), len(renderedB)), dtype=np.float32)
+    for i, mA in enumerate(renderedA):
+        for j, mB in enumerate(renderedB):
+            intersection = np.logical_and(mA, mB).sum()
+            union = np.logical_or(mA, mB).sum()
+            iou_mat[i, j] = intersection / (union + 1e-6)
+
+    return iou_mat
+
+

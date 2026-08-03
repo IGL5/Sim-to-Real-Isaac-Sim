@@ -214,11 +214,13 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 
         h, w, _ = img.shape
         if txt_path.exists():
-            gt_boxes = du.parse_kitti_label(str(txt_path), w, h)
+            gt_boxes, gt_polygons = du.parse_kitti_label(str(txt_path), w, h, return_polygons=True)
             # Only keep ground truth boxes whose class ID is in our active dataset classes
             gt_boxes = [box for box in gt_boxes if box[0] in dataset_class_names]
+            gt_polygons = [poly for poly in gt_polygons if poly[0] in dataset_class_names]
         else:
             gt_boxes = []
+            gt_polygons = []
 
         # Inference (always get all detections for PR curve)
         results = model.predict(
@@ -234,8 +236,12 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         pred_boxes = []
         confidences = []
         pred_classes = []
+        pred_masks = []
         
-        for box in results.boxes:
+        has_masks = hasattr(results, 'masks') and results.masks is not None
+        masks_xy = results.masks.xy if has_masks else None
+
+        for idx_b, box in enumerate(results.boxes):
             mod_cls = int(box.cls[0])
             if mod_cls in model_to_dataset_map:
                 dataset_cls = model_to_dataset_map[mod_cls]
@@ -243,17 +249,26 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
                 pred_boxes.append(coords)
                 confidences.append(float(box.conf))
                 pred_classes.append(dataset_cls)
+                if has_masks and masks_xy is not None and idx_b < len(masks_xy):
+                    pred_masks.append([dataset_cls, masks_xy[idx_b]])
 
-        img_stats = reporter.update(pred_boxes, pred_classes, gt_boxes, confidences, (h, w), speed_dict)
+        img_stats = reporter.update(
+            pred_boxes, pred_classes, gt_boxes, confidences, (h, w), speed_dict,
+            pred_masks=[m[1] for m in pred_masks] if pred_masks else None,
+            gt_polygons=gt_polygons if gt_polygons else None
+        )
 
         valid_pred_boxes = []
         valid_confidences = []
         valid_classes = [] 
+        valid_pred_masks = []
         for j, c in enumerate(confidences):
             if c >= config.CONF_THRESHOLD:
                 valid_pred_boxes.append(pred_boxes[j])
                 valid_confidences.append(c)
                 valid_classes.append(pred_classes[j]) 
+                if pred_masks and j < len(pred_masks):
+                    valid_pred_masks.append(pred_masks[j])
 
         if i < config.LIMIT_IMAGES_PER_VIS:
             has_errors = img_stats["FN"] > 0 or img_stats["poor_bbox"] > 0 or img_stats["FP"] > 0
@@ -262,16 +277,28 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
                 if save_resized:
                     img_resized, scale = resize_image_to_imgsz(img, imgsz)
                     gt_boxes_drawn = [[box[0], box[1]*scale, box[2]*scale, box[3]*scale, box[4]*scale] for box in gt_boxes]
+                    gt_polygons_drawn = [[poly[0], [pt * scale for pt in poly[1]]] for poly in gt_polygons]
                     valid_pred_boxes_drawn = [box * scale for box in valid_pred_boxes]
+                    valid_pred_masks_drawn = [[m[0], m[1] * scale] for m in valid_pred_masks]
                     img_to_draw = img_resized.copy()
                 else:
                     gt_boxes_drawn = gt_boxes
+                    gt_polygons_drawn = gt_polygons
                     valid_pred_boxes_drawn = valid_pred_boxes
+                    valid_pred_masks_drawn = valid_pred_masks
                     img_to_draw = img.copy()
 
-                # Draw using translated class names from our dataset
-                img_drawn = vu.draw_boxes(img_to_draw, gt_boxes_drawn, color=(0, 255, 0), class_names=dataset_class_names)
-                img_drawn = vu.draw_boxes(img_drawn, valid_pred_boxes_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
+                # Draw Ground Truths
+                if gt_polygons_drawn:
+                    img_drawn = vu.draw_segmentation(img_to_draw, boxes=gt_boxes_drawn, polygons=gt_polygons_drawn, color=(0, 255, 0), class_names=dataset_class_names, alpha=0.3)
+                else:
+                    img_drawn = vu.draw_boxes(img_to_draw, gt_boxes_drawn, color=(0, 255, 0), class_names=dataset_class_names)
+
+                # Draw Predictions
+                if valid_pred_masks_drawn:
+                    img_drawn = vu.draw_segmentation(img_drawn, boxes=valid_pred_boxes_drawn, polygons=valid_pred_masks_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names, alpha=0.4)
+                else:
+                    img_drawn = vu.draw_boxes(img_drawn, valid_pred_boxes_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_classes, class_names=dataset_class_names)
                 
                 if draw_all:
                     status = "OK"
@@ -354,35 +381,48 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
             )[0]
             speed_dict = res.speed
             
-            pred_boxes, confidences, pred_classes = [], [], []
-            for box in res.boxes:
+            pred_boxes, confidences, pred_classes, pred_masks = [], [], [], []
+            has_masks = hasattr(res, 'masks') and res.masks is not None
+            masks_xy = res.masks.xy if has_masks else None
+
+            for idx_b, box in enumerate(res.boxes):
                 mod_cls = int(box.cls[0])
                 if mod_cls in model_to_dataset_map:
                     dataset_cls = model_to_dataset_map[mod_cls]
                     pred_boxes.append(box.xyxy[0].cpu().numpy())
                     confidences.append(float(box.conf))
                     pred_classes.append(dataset_cls)
+                    if has_masks and masks_xy is not None and idx_b < len(masks_xy):
+                        pred_masks.append([dataset_cls, masks_xy[idx_b]])
                 
             # Pass the classes to the reporter so it analyzes INTRA-CLASS overlaps
-            problematic_pairs = reporter.update(pred_boxes, pred_classes, confidences, (h, w), filename, speed_dict)
+            problematic_pairs = reporter.update(
+                pred_boxes, pred_classes, confidences, (h, w), filename, speed_dict,
+                pred_masks=[m[1] for m in pred_masks] if pred_masks else None
+            )
             
             if i < config.LIMIT_IMAGES_PER_VIS: 
                 # Filter valid predictions above threshold for drawing
                 valid_pred_boxes = []
                 valid_confidences = []
                 valid_pred_classes = []
+                valid_pred_masks = []
                 for idx, conf in enumerate(confidences):
                     if conf >= config.CONF_THRESHOLD:
                         valid_pred_boxes.append(pred_boxes[idx])
                         valid_confidences.append(conf)
                         valid_pred_classes.append(pred_classes[idx])
+                        if pred_masks and idx < len(pred_masks):
+                            valid_pred_masks.append(pred_masks[idx])
                 
                 if save_resized:
                     img_resized, scale = resize_image_to_imgsz(img_orig, imgsz)
                     valid_pred_boxes_drawn = [box * scale for box in valid_pred_boxes]
+                    valid_pred_masks_drawn = [[m[0], m[1] * scale] for m in valid_pred_masks]
                     img_to_draw = img_resized.copy()
                 else:
                     valid_pred_boxes_drawn = valid_pred_boxes
+                    valid_pred_masks_drawn = valid_pred_masks
                     img_to_draw = img_orig.copy()
 
                 if problematic_pairs:
@@ -390,8 +430,13 @@ def run_inference_mode(model_path, source_folder, save_persistently=False, keep=
                     cv2.imwrite(str(overlaps_dir_path / f"OVERLAP_{filename}"), img_overlap)
                 
                 # Draw with our own colors and translated labels
-                img_drawn = vu.draw_boxes(img_to_draw.copy(), valid_pred_boxes_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names)
+                if valid_pred_masks_drawn:
+                    img_drawn = vu.draw_segmentation(img_to_draw.copy(), boxes=valid_pred_boxes_drawn, polygons=valid_pred_masks_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names, alpha=0.4)
+                else:
+                    img_drawn = vu.draw_boxes(img_to_draw.copy(), valid_pred_boxes_drawn, color=(255, 0, 0), confidences=valid_confidences, classes=valid_pred_classes, class_names=dataset_class_names)
+
                 cv2.imwrite(str(images_output_dir / f"PRED_{filename}"), img_drawn)
+
             
         except Exception as e:
             print(f"Error processing {img_path}: {e}")
