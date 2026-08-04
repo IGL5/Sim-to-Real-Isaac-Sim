@@ -40,7 +40,7 @@ class ReportGenerator:
         self.plots_dir = Path(config.PLOTS_EVAL_DIR) / self.prefix
         self.plots_dir.mkdir(parents=True, exist_ok=True)
 
-    def update(self, pred_boxes, pred_classes, gt_boxes, confidences, img_shape, speed_dict=None, pred_masks=None, gt_polygons=None):
+    def update(self, pred_boxes, pred_classes, gt_boxes, confidences, img_shape, speed_dict=None, pred_masks=None, gt_polygons=None, gt_has_real_seg=False):
         h, w = img_shape
         img_stats = {"TP": 0, "FP": 0, "FN": 0, "poor_bbox": 0}
 
@@ -62,7 +62,7 @@ class ReportGenerator:
                 gt_poly_list.append(gt_polygons[i_gt][1] if isinstance(gt_polygons[i_gt], list) and len(gt_polygons[i_gt]) == 2 else gt_polygons[i_gt])
             self.class_stats[c_id]["total_gt"] += 1
             
-        if pred_masks and len(pred_masks) > 0 and len(gt_poly_list) > 0:
+        if pred_masks and len(pred_masks) > 0 and len(gt_poly_list) > 0 and gt_has_real_seg:
             iou_matrix = mu.calculate_mask_iou_matrix(pred_masks, gt_poly_list, w, h)
         else:
             iou_matrix = mu.calculate_iou_matrix(pred_boxes, gt_coords)

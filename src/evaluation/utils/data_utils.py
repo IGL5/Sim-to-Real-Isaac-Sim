@@ -6,12 +6,13 @@ def parse_kitti_label(label_path, width, height, return_polygons=False):
     Parses YOLO/KITTI label files supporting both detection (5 tokens: class_id xc yc w h)
     and segmentation (7+ tokens: class_id x1 y1 x2 y2 ...).
     Returns list of boxes [class_id, x1, y1, x2, y2].
-    If return_polygons=True, returns tuple (boxes, polygons).
+    If return_polygons=True, returns tuple (boxes, polygons, has_real_seg).
     """
     boxes = []
     polygons = []
+    has_real_seg = False
     if not Path(label_path).exists():
-        return (boxes, polygons) if return_polygons else boxes
+        return (boxes, polygons, False) if return_polygons else boxes
 
     try:
         with open(label_path, 'r') as f:
@@ -25,6 +26,7 @@ def parse_kitti_label(label_path, width, height, return_polygons=False):
 
                 # Segmentation polygon format (7+ elements and even number of coordinates)
                 if len(coords) >= 6 and len(coords) % 2 == 0:
+                    has_real_seg = True
                     xs_norm = coords[0::2]
                     ys_norm = coords[1::2]
 
@@ -56,4 +58,4 @@ def parse_kitti_label(label_path, width, height, return_polygons=False):
     except Exception as e:
         print(f"⚠️ Error reading label {label_path}: {e}")
 
-    return (boxes, polygons) if return_polygons else boxes
+    return (boxes, polygons, has_real_seg) if return_polygons else boxes

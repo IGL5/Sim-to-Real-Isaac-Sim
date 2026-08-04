@@ -214,13 +214,14 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 
         h, w, _ = img.shape
         if txt_path.exists():
-            gt_boxes, gt_polygons = du.parse_kitti_label(str(txt_path), w, h, return_polygons=True)
+            gt_boxes, gt_polygons, has_real_seg = du.parse_kitti_label(str(txt_path), w, h, return_polygons=True)
             # Only keep ground truth boxes whose class ID is in our active dataset classes
             gt_boxes = [box for box in gt_boxes if box[0] in dataset_class_names]
             gt_polygons = [poly for poly in gt_polygons if poly[0] in dataset_class_names]
         else:
             gt_boxes = []
             gt_polygons = []
+            has_real_seg = False
 
         # Inference (always get all detections for PR curve)
         results = model.predict(
@@ -255,7 +256,8 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
         img_stats = reporter.update(
             pred_boxes, pred_classes, gt_boxes, confidences, (h, w), speed_dict,
             pred_masks=[m[1] for m in pred_masks] if pred_masks else None,
-            gt_polygons=gt_polygons if gt_polygons else None
+            gt_polygons=gt_polygons if gt_polygons else None,
+            gt_has_real_seg=has_real_seg
         )
 
         valid_pred_boxes = []
