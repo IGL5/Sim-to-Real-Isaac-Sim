@@ -15,7 +15,7 @@ def parse_kitti_label(label_path, width, height, return_polygons=False):
         return (boxes, polygons, False) if return_polygons else boxes
 
     try:
-        with open(label_path, 'r') as f:
+        with open(label_path, 'r', encoding='utf-8', errors='ignore') as f:
             for line in f:
                 p = line.strip().split()
                 if len(p) < 5:
