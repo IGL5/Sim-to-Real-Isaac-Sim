@@ -143,7 +143,7 @@ OBJECTS_CONFIG = {
         "active": True,                     # Enable this object type
         "pool_size": 20,                    # Number of bicycles in the pool
         "radius": 1.5,                      # Radius of safety
-        "spawn_radius": (10.0, 50.0),
+        "spawn_radius": (5.0, 30.0),
         "cost_units": 4.0,                  # High cost (main character)
         "selection_weight": 50,             # Always want to appear if there's space
         "scale_range": (1.0, 1.2),          # Fixed scale for rigorous datasets
@@ -175,7 +175,7 @@ DISTRACTOR_CONFIG = {
         "spawn_radius": (5.0, 30.0),
         "radius": 1.0,
         "cost_units": 5.0,
-        "selection_weight": 200,
+        "selection_weight": 50,
         "scale_range": (0.6, 1.2),
         "randomize_materials": ["main"],
         "randomize_soft_colors": True
@@ -210,6 +210,17 @@ DISTRACTOR_CONFIG = {
         "cost_units": 5.0,
         "selection_weight": 1,
         "scale_range": (1.6, 2.0),
+        "randomize_materials": ["main", "sec"],
+        "randomize_soft_colors": True
+    },
+    "cables": {
+        "active": True,
+        "pool_size": 10,
+        "spawn_radius": (10.0, 50.0),
+        "radius": 0.5,
+        "cost_units": 5.0,
+        "selection_weight": 3,
+        "scale_range": (0.6, 0.8),
         "randomize_materials": ["main", "sec"],
         "randomize_soft_colors": True
     },
