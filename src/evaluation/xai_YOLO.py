@@ -88,12 +88,34 @@ def analyze_spatial(model_path, img_path):
     print("🎨 Generating comparison: Ground Truth vs Prediction...")
     img = cv2.imread(img_path)
     h, w = img.shape[:2]
-    results = model(img_path, verbose=False)[0]
+    results = model(img_path, conf=0.3, verbose=False)[0]
     img_plotted = results.plot()
     
-    lbl_path = Path(img_path.replace("images", "labels").replace(".jpg", ".txt").replace(".png", ".txt"))
-    if lbl_path.exists():
-        with open(lbl_path, 'r') as f:
+    # Search for Ground Truth label file
+    p_img = Path(img_path)
+    candidates = []
+    
+    # Candidate 1: Replace 'images' with 'labels' in path and change extension to .txt
+    if "images" in p_img.parts:
+        parts = list(p_img.parts)
+        idx = len(parts) - 1 - parts[::-1].index("images")
+        parts[idx] = "labels"
+        candidates.append(Path(*parts).with_suffix(".txt"))
+    
+    # Candidate 2: Same directory with .txt extension
+    candidates.append(p_img.with_suffix(".txt"))
+    
+    # Candidate 3: Standard replace fallback
+    candidates.append(Path(str(img_path).replace("images", "labels")).with_suffix(".txt"))
+
+    lbl_path = None
+    for cand in candidates:
+        if cand.exists() and cand.is_file() and cand.suffix.lower() == ".txt":
+            lbl_path = cand
+            break
+
+    if lbl_path:
+        with open(lbl_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
             for line in lines:
                 parts = line.strip().split()
@@ -102,6 +124,8 @@ def analyze_spatial(model_path, img_path):
                     x1, y1, x2, y2 = mu.yolo_to_corners(xc, yc, bw, bh, w, h)
                     cv2.rectangle(img_plotted, (x1, y1), (x2, y2), (0, 255, 0), 3)
                     cv2.putText(img_plotted, "GT Real", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    else:
+        print("  ℹ️ No matching Ground Truth (.txt) label file found for this image. Skipping GT overlay.")
     
     cv2.imwrite(config.PREDICTIONS_XAI_PATH, img_plotted)
 
