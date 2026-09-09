@@ -1,8 +1,8 @@
-# 🚴‍♂️ Sim-to-Real-Isaac-Sim Pipeline
+# 🎯 Sim-to-Real-Isaac-Sim Pipeline
 
-A complete, end-to-end synthetic data generation, training, and auditing pipeline leveraging **Nvidia Isaac Sim Replicator** and **YOLO architectures (v8, v9, v10, 11, 26)** to bridge the Sim-to-Real gap.
+A complete, end-to-end synthetic data generation, training, and auditing pipeline leveraging **Nvidia Isaac Sim Replicator** and **YOLO architectures (v8, v9, v10, 11, 26)** to bridge the Sim-to-Real gap for any custom target object.
 
-This project enables physics-aware domain randomized data generation, dataset cleaning, ETL processing, model training with MLOps metadata tracking, interactive HTML auditing reports, Explainable AI (XAI), and multi-model benchmarking dashboards.
+This project enables generalized, physics-aware domain randomized data generation, dataset cleaning, ETL processing, model training with MLOps metadata tracking, interactive HTML auditing reports, Explainable AI (XAI), and multi-model benchmarking dashboards.
 
 ---
 
