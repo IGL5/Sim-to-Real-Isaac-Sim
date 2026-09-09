@@ -111,7 +111,7 @@ def main():
             light_path = Path(sim_config.HDR_MAPS_DIR) / sim_config.AVAILABLE_HDRS[0]
             dome_light.CreateTextureFileAttr().Set(Sdf.AssetPath(str(light_path)))
             # High intensity to compete with the sun
-            dome_light.CreateIntensityAttr().Set(600.0)
+            dome_light.CreateIntensityAttr().Set(400.0)
     else:
         print("[WARN] SkyDome not found in USD. Background might be black.")
 
