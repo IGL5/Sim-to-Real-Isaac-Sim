@@ -330,7 +330,9 @@ def run_audit_mode(model_path, draw_all=False, save_persistently=False, custom_i
 def run_inference_mode(model_path, source_folder, save_persistently=False, keep=False, manual_class_map=None, save_resized=False, imgsz=640):
     """ Inference Mode (New images without labels) """
     if not check_system_integrity(model_path, check_dataset=False): return
-    if not Path(source_folder).exists(): return
+    if not Path(source_folder).exists(): 
+        print(f"❌ ERROR: Not finding the images folder: {source_folder}")
+        return
 
     print(f"--- 🌍 REAL INFERENCE MODE ---")
     if not keep:
