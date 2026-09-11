@@ -22,7 +22,9 @@ flowchart TD
     subgraph DataPrep [2. Data Cleaning & Preparation]
         C --> D["clean_dataset.py (Quality QC)"]
         D --> E["dataset_manager.py (ETL)"]
-        E --> F["data/02_processed/ (YOLO format + dataset_metadata.json)"]
+        E --> DEG["data/02_processed/ (YOLO format + dataset_metadata.json)"]
+        DEG --> F["degrade_dataset.py (Optional)"]
+        
     end
 
     subgraph Training [3. YOLO Training]
@@ -64,7 +66,8 @@ flowchart TD
 │   │
 │   ├── data_prep/                   # Dataset ETL and Quality Control
 │   │   ├── clean_dataset.py         # Filters corrupt, dark, or empty frames
-│   │   └── dataset_manager.py       # Converts KITTI to YOLO & splits dataset
+│   │   ├── dataset_manager.py       # Converts KITTI to YOLO & splits dataset
+│   │   └── degrade_dataset.py       # Photometric & sensor Sim-to-Real domain degradation
 │   │
 │   ├── training/                    # YOLO Training pipeline
 │   │   └── train_YOLO.py            # Train, fine-tune and export to ONNX
@@ -163,6 +166,20 @@ python -m src.data_prep.dataset_manager
 
 # Append new Isaac Sim frames to the existing dataset
 python -m src.data_prep.dataset_manager --append
+```
+
+#### 3. Sim-to-Real Photometric & Sensor Degradation
+Simulate realistic sensor noise, lens blur, and optical artifacts on the processed dataset images to narrow the Sim-to-Real domain gap before training.
+
+```bash
+# In-place degradation of 70% of training set with medium severity (replace mode)
+python -m src.data_prep.degrade_dataset --subset train --hardness medium --ratio 0.7
+
+# Augment mode: generate duplicated *_deg copies and labels without overwriting originals
+python -m src.data_prep.degrade_dataset --mode augment --hardness light --ratio 0.5
+
+# Apply specific optical effects in dry-run mode (in-memory test without modifying disk)
+python -m src.data_prep.degrade_dataset --effects noise motion_blur compression --dry
 ```
 
 ---
