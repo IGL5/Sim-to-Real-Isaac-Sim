@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from src.core.metadata.base_manager import BaseMetadataManager
 from src.core.metadata.sim_builder import SimulationMetadata
@@ -76,6 +77,50 @@ class DatasetMetadata(BaseMetadataManager):
         self.data["global_totals"]["size_mb"] = total_size_mb
         self.data["global_totals"]["avg_image_mb"] = avg_img_mb
 
+    def record_degradation(self, mode, subset, ratio, processed_count, total_subset_images,
+                           active_degradations, severity, new_added_images=0,
+                           new_added_objects=0, new_added_backgrounds=0):
+        """
+        Records details of a Sim-to-Real photometric degradation session.
+        Updates degradation history and global totals if dataset expansion occurred.
+        """
+        if "degradations" not in self.data:
+            self.data["degradations"] = []
+
+        degradation_record = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "mode": mode,
+            "subset": subset,
+            "ratio": ratio,
+            "severity": severity,
+            "processed_images": processed_count,
+            "total_subset_images": total_subset_images,
+            "active_degradations": active_degradations
+        }
+
+        self.data["degradations"].append(degradation_record)
+        self.data["latest_degradation"] = degradation_record
+
+        # En modo augment, se han creado nuevas imágenes y etiquetas
+        if mode == "augment" and new_added_images > 0:
+            if subset in self.data["global_totals"]:
+                self.data["global_totals"][subset]["images"] += new_added_images
+                self.data["global_totals"][subset]["objects"] += new_added_objects
+                self.data["global_totals"][subset]["backgrounds"] += new_added_backgrounds
+            
+            self.data["global_totals"]["total_images"] += new_added_images
+            self.data["global_totals"]["total_objects"] += new_added_objects
+            self.data["global_totals"]["total_backgrounds"] += new_added_backgrounds
+
+        # Recalcular peso en disco
+        total_size_bytes = self._get_dir_size(config.DATASET_IMAGES)
+        total_size_mb = round(total_size_bytes / (1024 * 1024), 2)
+        total_imgs = self.data["global_totals"]["total_images"]
+        avg_img_mb = round(total_size_mb / total_imgs, 2) if total_imgs > 0 else 0.0
+
+        self.data["global_totals"]["size_mb"] = total_size_mb
+        self.data["global_totals"]["avg_image_mb"] = avg_img_mb
+
     # --- THE GETTER FOR THE VIEW (HTML) ---
     def get_html_summary(self):
         """
@@ -88,6 +133,7 @@ class DatasetMetadata(BaseMetadataManager):
             "global_totals": self.data.get("global_totals", {}),
             "latest_session": None,
             "latest_eda": None,
+            "latest_degradation": self.data.get("latest_degradation"),
             "visuals": {}
         }
 
