@@ -169,17 +169,33 @@ python -m src.data_prep.dataset_manager --append
 ```
 
 #### 3. Sim-to-Real Photometric & Sensor Degradation
-Simulate realistic sensor noise, lens blur, and optical artifacts on the processed dataset images to narrow the Sim-to-Real domain gap before training.
+Simulate realistic sensor noise, lens blur, video transmission compression, and optical artifacts on processed dataset images to narrow the Sim-to-Real domain gap before training.
+
+**Available Presets & Effects:**
+* **Operational Presets (`--effects`)**:
+  * `transmission`: Downscale & JPEG compression (simulates digital video streaming, low bitrate, and sensor crop).
+  * `flight`: Motion blur, chromatic aberration, and lens vignette (simulates gimbal vibration, wind gusts, and wide-angle optics).
+  * `weather`: Contrast loss/washout, vignette, and noise (simulates distance atmospheric haze, Rayleigh scattering, and bright sunlight).
+  * `sensor`: CMOS sensor noise, chromatic aberration, and contrast (simulates hardware camera noise at medium ISO).
+  * `all`: Full balanced battery of all 7 effects.
+  * *Custom*: Any combination of individual effects (`downscale`, `contrast`, `noise`, `compression`, `motion_blur`, `chromatic`, `vignette`).
+* **Hardness Levels (`--hardness`)**:
+  * `light`: Subtle regularization for fine objects.
+  * `medium` *(default)*: Realistic operational drone inspection conditions.
+  * `hard`: Adverse conditions (high wind, severe compression, high ISO).
 
 ```bash
-# In-place degradation of 70% of training set with medium severity (replace mode)
-python -m src.data_prep.degrade_dataset --subset train --hardness medium --ratio 0.7
+# In-place degradation with transmission preset (streaming compression + zoom):
+python -m src.data_prep.degrade_dataset --effects transmission --hardness medium --ratio 0.7
+
+# Flight dynamics preset (vibrations and optical distortion):
+python -m src.data_prep.degrade_dataset --effects flight --hardness medium
 
 # Augment mode: generate duplicated *_deg copies and labels without overwriting originals
-python -m src.data_prep.degrade_dataset --mode augment --hardness light --ratio 0.5
+python -m src.data_prep.degrade_dataset --mode augment --effects transmission --hardness light
 
-# Apply specific optical effects in dry-run mode (in-memory test without modifying disk)
-python -m src.data_prep.degrade_dataset --effects noise motion_blur compression --dry
+# Dry-run mode: in-memory simulation test without modifying files on disk
+python -m src.data_prep.degrade_dataset --effects all --hardness medium --dry
 ```
 
 ---
