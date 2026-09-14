@@ -17,56 +17,85 @@ except Exception:
 from src.core import config
 from src.core.metadata.dataset_builder import DatasetMetadata
 
-# Available photometric and sensor degradation effects
+# Available individual photometric and sensor degradation effects
 AVAILABLE_EFFECTS = ["downscale", "contrast", "noise", "compression", "motion_blur", "chromatic", "vignette"]
 
-# Hardness level presets (light, medium, hard) mapped to internal parameters
+# Presets grouping effects by realistic operational drone causes
+EFFECT_GROUPS = {
+    "all": AVAILABLE_EFFECTS,
+    "transmission": ["downscale", "compression"],             # Video streaming bitrate, digital zoom & packet quantization
+    "flight":       ["motion_blur", "chromatic", "vignette"], # Gimbal micro-vibrations, wind gusts, wide-angle lens optics
+    "weather":      ["contrast", "vignette", "noise"],        # Atmospheric haze, Rayleigh contrast loss, harsh ambient sunlight
+    "sensor":       ["noise", "chromatic", "contrast"]        # CMOS small-sensor noise, color fringing, ISP tone curve
+}
+
+# Hardness level presets (light, medium, hard) calibrated for aerial drone inspection
 EFFECT_PRESETS = {
     "downscale": {
-        "light":  {"scale_range": (0.65, 0.85), "p": 0.4},
-        "medium": {"scale_range": (0.40, 0.65), "p": 0.6},
-        "hard":   {"scale_range": (0.20, 0.40), "p": 0.8}
+        "light":  {"scale_range": (0.75, 0.90), "p": 0.3},
+        "medium": {"scale_range": (0.60, 0.80), "p": 0.5},
+        "hard":   {"scale_range": (0.45, 0.65), "p": 0.7}
     },
     "contrast": {
-        "light":  {"brightness_limit": 0.05, "contrast_limit": (-0.15, 0.0), "p": 0.4},
-        "medium": {"brightness_limit": 0.08, "contrast_limit": (-0.25, -0.05), "p": 0.6},
-        "hard":   {"brightness_limit": 0.12, "contrast_limit": (-0.40, -0.15), "p": 0.8}
+        "light":  {"brightness_limit": 0.03, "contrast_limit": (-0.10, 0.0), "p": 0.3},
+        "medium": {"brightness_limit": 0.06, "contrast_limit": (-0.18, -0.02), "p": 0.5},
+        "hard":   {"brightness_limit": 0.10, "contrast_limit": (-0.28, -0.05), "p": 0.7}
     },
     "noise": {
-        "light":  {"std_range": (0.02, 0.05), "p": 0.4},
-        "medium": {"std_range": (0.05, 0.12), "p": 0.6},
-        "hard":   {"std_range": (0.10, 0.22), "p": 0.8}
+        "light":  {"std_range": (0.01, 0.03), "p": 0.3},
+        "medium": {"std_range": (0.02, 0.06), "p": 0.5},
+        "hard":   {"std_range": (0.05, 0.10), "p": 0.7}
     },
     "compression": {
-        "light":  {"quality_range": (60, 85), "p": 0.5},
-        "medium": {"quality_range": (30, 60), "p": 0.7},
-        "hard":   {"quality_range": (15, 35), "p": 0.9}
+        "light":  {"quality_range": (70, 90), "p": 0.4},
+        "medium": {"quality_range": (50, 75), "p": 0.6},
+        "hard":   {"quality_range": (30, 50), "p": 0.8}
     },
     "motion_blur": {
-        "light":  {"blur_limit": (3, 5), "p": 0.3},
-        "medium": {"blur_limit": (3, 7), "p": 0.5},
-        "hard":   {"blur_limit": (5, 11), "p": 0.7}
+        "light":  {"blur_limit": (3, 3), "p": 0.2},
+        "medium": {"blur_limit": (3, 5), "p": 0.4},
+        "hard":   {"blur_limit": (5, 7), "p": 0.6}
     },
     "chromatic": {
-        "light":  {"primary_distortion_limit": (-0.01, 0.01), "p": 0.3},
-        "medium": {"primary_distortion_limit": (-0.02, 0.02), "p": 0.5},
-        "hard":   {"primary_distortion_limit": (-0.04, 0.04), "p": 0.7}
+        "light":  {"primary_distortion_limit": (-0.008, 0.008), "p": 0.25},
+        "medium": {"primary_distortion_limit": (-0.015, 0.015), "p": 0.4},
+        "hard":   {"primary_distortion_limit": (-0.030, 0.030), "p": 0.6}
     },
     "vignette": {
-        "light":  {"intensity": 0.25, "p": 0.3},
-        "medium": {"intensity": 0.45, "p": 0.5},
-        "hard":   {"intensity": 0.65, "p": 0.7}
+        "light":  {"intensity": 0.20, "p": 0.25},
+        "medium": {"intensity": 0.35, "p": 0.4},
+        "hard":   {"intensity": 0.50, "p": 0.6}
     }
 }
 
 
-def _apply_vignette(img, intensity=0.45, **kwargs):
+def _apply_vignette(img, intensity=0.35, **kwargs):
     """Applies radial optical vignetting (peripheral lens illumination falloff)."""
     h, w = img.shape[:2]
     y, x = np.ogrid[:h, :w]
     dist = np.sqrt((x - w / 2.0)**2 + (y - h / 2.0)**2) / np.sqrt((w / 2.0)**2 + (h / 2.0)**2)
     mask = 1.0 - intensity * np.clip((dist - 0.5) / 0.5, 0.0, 1.0)
     return (img * mask[..., None]).clip(0, 255).astype(np.uint8)
+
+
+def resolve_effects(effects_arg):
+    """Expands group names (e.g. 'transmission', 'flight') and validates individual effects."""
+    if not effects_arg or "all" in effects_arg:
+        return EFFECT_GROUPS["all"]
+
+    resolved = []
+    for item in effects_arg:
+        key = item.lower()
+        if key in EFFECT_GROUPS:
+            resolved.extend(EFFECT_GROUPS[key])
+        elif key in AVAILABLE_EFFECTS:
+            resolved.append(key)
+        else:
+            print(f"⚠️ Unrecognized effect or preset group: '{item}'.")
+            print(f"   Available presets: {list(EFFECT_GROUPS.keys())} | Individual: {AVAILABLE_EFFECTS}")
+
+    unique_effects = list(dict.fromkeys(resolved))
+    return unique_effects if unique_effects else EFFECT_GROUPS["all"]
 
 
 def build_pipeline(effects, hardness):
@@ -82,7 +111,7 @@ def build_pipeline(effects, hardness):
         if eff == "downscale":
             transforms.append(A.Downscale(
                 scale_range=params["scale_range"],
-                interpolation_pair={'downscale': cv2.INTER_NEAREST, 'upscale': cv2.INTER_NEAREST},
+                interpolation_pair={'downscale': cv2.INTER_AREA, 'upscale': cv2.INTER_LINEAR},
                 p=p
             ))
         elif eff == "contrast":
@@ -117,13 +146,7 @@ def build_pipeline(effects, hardness):
 
 def degrade_dataset(mode="replace", hardness="medium", effects=None, ratio=0.7, dry=False, subset="train"):
     """Orchestrates the degradation process on dataset images and updates metadata."""
-    if not effects or "all" in effects:
-        selected_effects = AVAILABLE_EFFECTS
-    else:
-        selected_effects = [e.lower() for e in effects if e.lower() in AVAILABLE_EFFECTS]
-        if not selected_effects:
-            print(f"⚠️ No valid effects recognized in: {effects}. Options: {AVAILABLE_EFFECTS}")
-            return
+    selected_effects = resolve_effects(effects)
 
     images_dir = config.DATASET_IMAGES / subset
     labels_dir = config.DATASET_LABELS / subset
@@ -145,7 +168,7 @@ def degrade_dataset(mode="replace", hardness="medium", effects=None, ratio=0.7, 
     pipeline, summary = build_pipeline(selected_effects, hardness)
 
     print(f"\n🛠️  Sim-to-Real Degradation: {subset.upper()} | Mode: {mode.upper()} | Hardness: {hardness.upper()}")
-    print(f"   Effects ({len(selected_effects)}): {', '.join(selected_effects)} | Images: {count}/{len(all_images)} ({ratio*100:.0f}%)")
+    print(f"   Active Effects ({len(selected_effects)}): {', '.join(selected_effects)} | Images: {count}/{len(all_images)} ({ratio*100:.0f}%)")
     if dry:
         print("   ⚠️ DRY-RUN active: simulating in-memory transformations (no disk writes)...\n")
 
@@ -210,7 +233,7 @@ def main():
     parser.add_argument("--hardness", choices=["light", "medium", "hard"], default="medium",
                         help="Global degradation hardness level: light, medium, hard (default: medium)")
     parser.add_argument("--effects", nargs="+", default=["all"],
-                        help=f"Effects to apply (default: all). Options: all or combination of: {AVAILABLE_EFFECTS}")
+                        help=f"Effects or presets to apply. Presets: {list(EFFECT_GROUPS.keys())} | Individual: {AVAILABLE_EFFECTS} (default: all)")
     parser.add_argument("--ratio", type=float, default=0.7,
                         help="Proportion of subset images to degrade from 0.0 to 1.0 (default: 0.7)")
     parser.add_argument("--subset", choices=["train", "val", "test"], default="train",
