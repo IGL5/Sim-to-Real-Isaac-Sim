@@ -335,6 +335,23 @@ def main():
         print(f"❌ Error: Didn't find raw image data in: {raw_images_path}")
         return
 
+    # Auto-detect if raw labels are already in YOLO format if --is_yolo not explicitly set
+    if not args.is_yolo and raw_labels_path.exists():
+        sample_txts = [f for f in raw_labels_path.glob("*.txt") if f.stat().st_size > 0]
+        if sample_txts:
+            try:
+                with open(sample_txts[0], 'r', encoding='utf-8') as f:
+                    first_line = f.readline().strip()
+                if first_line:
+                    p = first_line.split()
+                    if len(p) >= 5 and p[0].isdigit():
+                        coords = [float(x) for x in p[1:5]]
+                        if all(0.0 <= c <= 1.0 for c in coords):
+                            print("💡 Auto-detected YOLO format labels in raw directory. Enabling YOLO mode.")
+                            args.is_yolo = True
+            except Exception:
+                pass
+
     override_map = {}
     override_all = -1
     
@@ -361,13 +378,8 @@ def main():
     if args.move:
         print(f"⚠️  WARNING: Flag '--move' active. Original files in {args.source} will be DELETED to save space.")
 
-    # 3. List files
-    if raw_labels_path.exists() and len(list(raw_labels_path.glob("*.txt"))) > 0:
-        all_files = [f.stem for f in raw_labels_path.glob("*.txt")]
-    elif raw_seg_path is not None and raw_seg_path.exists() and len(list(raw_seg_path.glob("*.png"))) > 0:
-        all_files = [f.stem for f in raw_seg_path.glob("*.png")]
-    else:
-        all_files = [f.stem for f in raw_images_path.glob("*.*") if f.suffix.lower() in config.VALID_IMAGE_EXTENSIONS]
+    # 3. List files (Images are always the primary ground truth)
+    all_files = sorted(list({f.stem for f in raw_images_path.glob("*.*") if f.suffix.lower() in config.VALID_IMAGE_EXTENSIONS}))
 
     total_files = len(all_files)
     
@@ -418,7 +430,9 @@ def main():
     print("-" * 40)
     print("✅ PROCESSING COMPLETED")
     total_added_imgs = train_stats["images"] + val_stats["images"] + test_stats["images"]
-    print(f"New files added: {total_added_imgs}")
+    total_added_objs = train_stats["objects"] + val_stats["objects"] + test_stats["objects"]
+    total_added_bgs = train_stats["backgrounds"] + val_stats["backgrounds"] + test_stats["backgrounds"]
+    print(f"New files added: {total_added_imgs} (Objects: {total_added_objs} | Backgrounds: {total_added_bgs})")
     print(f"Dataset located in: {config.PROCESSED_DATA_DIR}")
 
     # 6. Update Dataset Metadata
