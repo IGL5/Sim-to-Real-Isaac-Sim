@@ -112,8 +112,36 @@ class TiledReporter:
         # Pairwise dispersion for this specific image
         dispersion_info = mu.calculate_pairwise_dispersion(centers_norm)
         mean_conf = float(np.mean(scores)) if len(scores) > 0 else 0.0
+        std_conf = float(np.std(scores)) if len(scores) > 0 else 0.0
+
+        # Calculate per-image class breakdown
+        class_breakdown = []
+        if len(boxes) > 0:
+            u_classes = np.unique(classes)
+            for c_id in u_classes:
+                c_id_int = int(c_id)
+                idx = np.where(classes == c_id)[0]
+                c_name = self.class_names.get(c_id_int, f"Class_{c_id_int}")
+                c_scores = scores[idx]
+                c_boxes = boxes[idx]
+                c_areas = [((b[2] - b[0]) * (b[3] - b[1]) / image_area) * 100.0 for b in c_boxes] if image_area > 0 else []
+                class_breakdown.append({
+                    "class_id": c_id_int,
+                    "name": c_name,
+                    "count": int(len(idx)),
+                    "mean_conf": round(float(np.mean(c_scores)), 3),
+                    "std_conf": round(float(np.std(c_scores)), 3),
+                    "avg_area_pct": round(float(np.mean(c_areas)), 4) if c_areas else 0.0
+                })
+
+        img_areas_pct = [((b[2] - b[0]) * (b[3] - b[1]) / image_area) * 100.0 for b in boxes] if image_area > 0 and len(boxes) > 0 else []
+        avg_area_pct = float(np.mean(img_areas_pct)) if img_areas_pct else 0.0
+        classes_summary_str = ", ".join([f"{c['name']} ({c['count']})" for c in class_breakdown]) if class_breakdown else "None"
+        tot_time = timings.get("total", 0.0)
+        fps = round(1000.0 / tot_time, 1) if tot_time > 0 else 0.0
 
         image_info = {
+            "index": self.stats["total_images"],
             "filename": filename,
             "evidence_filename": evidence_filename or f"PRED_{filename}",
             "width": img_w,
@@ -121,8 +149,14 @@ class TiledReporter:
             "num_tiles": num_tiles,
             "detections": len(boxes),
             "mean_conf": round(mean_conf, 3),
+            "std_conf": round(std_conf, 3),
+            "avg_area_pct": round(avg_area_pct, 4),
             "dispersion": dispersion_info,
-            "time_ms": round(timings.get("total", 0.0), 1)
+            "class_breakdown": class_breakdown,
+            "classes_summary": classes_summary_str,
+            "time_ms": round(tot_time, 1),
+            "fps": fps,
+            "timings": {k: round(v, 1) for k, v in timings.items()}
         }
         self.stats["images"].append(image_info)
         return image_info
@@ -307,6 +341,78 @@ class TiledReporter:
             "total_ms": round(avg_tot, 1),
             "fps": fps
         })
+
+        # Condensed Dispersion Distribution across images
+        clustered = 0
+        moderate = 0
+        dispersed = 0
+        single_or_empty = 0
+        valid_pairwise = []
+
+        for img_data in self.stats["images"]:
+            disp = img_data.get("dispersion", {})
+            cat = disp.get("category", "")
+            p_dist = disp.get("mean_pairwise_dist", 0.0)
+            if p_dist > 0:
+                valid_pairwise.append(p_dist)
+
+            if "Muy Agrupado" in cat or "Cluster" in cat:
+                clustered += 1
+            elif "Modera" in cat or "Uniforme" in cat:
+                moderate += 1
+            elif "Disperso" in cat or "Distribuido" in cat:
+                dispersed += 1
+            else:
+                single_or_empty += 1
+
+        tot_imgs = max(1, len(self.stats["images"]))
+        dispersion_summary = {
+            "clustered_count": clustered,
+            "clustered_pct": round(clustered / tot_imgs * 100.0, 1),
+            "moderate_count": moderate,
+            "moderate_pct": round(moderate / tot_imgs * 100.0, 1),
+            "dispersed_count": dispersed,
+            "dispersed_pct": round(dispersed / tot_imgs * 100.0, 1),
+            "empty_count": single_or_empty,
+            "empty_pct": round(single_or_empty / tot_imgs * 100.0, 1),
+            "avg_pairwise_dist": round(float(np.mean(valid_pairwise)), 4) if valid_pairwise else 0.0
+        }
+        meta_manager.record_dispersion_summary(dispersion_summary)
+
+        # Condensed Scale & Area Distribution across all detections
+        all_areas = self.stats["bbox_areas_pct"]
+        if all_areas:
+            tot_boxes = max(1, len(all_areas))
+            small_count = sum(1 for a in all_areas if a < 0.1)
+            medium_count = sum(1 for a in all_areas if 0.1 <= a <= 1.0)
+            large_count = sum(1 for a in all_areas if a > 1.0)
+
+            area_summary = {
+                "avg_area_pct": round(float(np.mean(all_areas)), 4),
+                "median_area_pct": round(float(np.median(all_areas)), 4),
+                "min_area_pct": round(float(np.min(all_areas)), 4),
+                "max_area_pct": round(float(np.max(all_areas)), 4),
+                "small_pct": round(small_count / tot_boxes * 100.0, 1),
+                "medium_pct": round(medium_count / tot_boxes * 100.0, 1),
+                "large_pct": round(large_count / tot_boxes * 100.0, 1),
+                "small_count": small_count,
+                "medium_count": medium_count,
+                "large_count": large_count
+            }
+        else:
+            area_summary = {
+                "avg_area_pct": 0.0,
+                "median_area_pct": 0.0,
+                "min_area_pct": 0.0,
+                "max_area_pct": 0.0,
+                "small_pct": 0.0,
+                "medium_pct": 0.0,
+                "large_pct": 0.0,
+                "small_count": 0,
+                "medium_count": 0,
+                "large_count": 0
+            }
+        meta_manager.record_area_summary(area_summary)
 
         meta_manager.record_images_details(self.stats["images"])
         meta_manager.commit()

@@ -271,7 +271,7 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
         cv2.imwrite(str(reporter.images_dir / evidence_name), annotated_img)
 
 
-        # 5. Record Stats & Print Terminal Summary
+        # 5. Record Stats & Compact Progress Output
         reporter.record_image(
             filename=filename,
             img_w=img_w,
@@ -284,16 +284,7 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
             evidence_filename=evidence_name
         )
 
-        reporter.print_image_summary(
-            filename=filename,
-            img_w=img_w,
-            img_h=img_h,
-            num_tiles=num_tiles,
-            boxes=fused_boxes,
-            scores=fused_scores,
-            classes=fused_classes,
-            timings=timings
-        )
+        print(f"  [{img_idx}/{len(image_files)}] {filename} ({img_w}x{img_h}) -> {num_tiles} tiles, {len(fused_boxes)} det ({t_total_ms:.1f} ms)")
 
     # Final Global Summary in Terminal
     reporter.print_global_summary()
@@ -316,7 +307,7 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tiled Inference for High-Resolution Real Images")
-    parser.add_argument('--source', type=str, default="data/grapas/images", help="Folder or image path")
+    parser.add_argument('--source', type=str, default="data/03_real/images", help="Folder or image path")
     parser.add_argument('--model', type=str, default=None, help="Model name or weights path")
     parser.add_argument('--tile_size', type=int, default=640, help="Tile size in pixels (default: 640)")
     parser.add_argument('--overlap', type=float, default=0.2, help="Tile overlap ratio (default: 0.2)")

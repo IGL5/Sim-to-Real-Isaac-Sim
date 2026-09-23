@@ -46,6 +46,16 @@ class TiledInferenceMetadata(BaseMetadataManager):
             self.data["stats"] = {}
         self.data["stats"]["speed_stats"] = speed_stats
 
+    def record_dispersion_summary(self, dispersion_summary):
+        if "stats" not in self.data:
+            self.data["stats"] = {}
+        self.data["stats"]["dispersion_summary"] = dispersion_summary
+
+    def record_area_summary(self, area_summary):
+        if "stats" not in self.data:
+            self.data["stats"] = {}
+        self.data["stats"]["area_summary"] = area_summary
+
     def record_images_details(self, images_details):
         if "stats" not in self.data:
             self.data["stats"] = {}
@@ -93,5 +103,7 @@ class TiledInferenceMetadata(BaseMetadataManager):
             "iou_threshold": stats_sec.get("iou_threshold", 0.5),
             "classes": html_classes,
             "speed_stats": stats_sec.get("speed_stats", {}),
+            "dispersion_summary": stats_sec.get("dispersion_summary", {}),
+            "area_summary": stats_sec.get("area_summary", {}),
             "images": stats_sec.get("images", [])
         }
