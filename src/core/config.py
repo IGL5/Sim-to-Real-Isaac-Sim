@@ -15,6 +15,7 @@ TEMPLATES_DIR = Path("templates")
 XAI_OUTPUT_DIR = METRICS_DIR / "xai_report"
 COMPARISON_OUTPUT_DIR = METRICS_DIR / "comparison_report"
 EVALUATION_OUTPUT_DIR = METRICS_DIR / "temp_eval"
+TILED_OUTPUT_DIR = METRICS_DIR / "tiled_eval"
 PLOTS_EVAL_DIR = EVALUATION_OUTPUT_DIR / "plots"
 
 # Simulation Camera Name
@@ -56,6 +57,7 @@ FILE_TRAIN_META = "training_metadata.json"
 FILE_AUDIT_META = "audit_metadata.json"
 FILE_REAL_AUDIT_META = "real_audit_metadata.json"
 FILE_INFERENCE_META = "inference_metadata.json"
+FILE_TILED_META = "tiled_inference_metadata.json"
 
 # Metadata paths
 GENERATION_METADATA_PATH = RAW_DATA_DIR / FILE_GEN_META
