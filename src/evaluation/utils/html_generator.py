@@ -27,3 +27,10 @@ class HTMLReportGenerator:
         with open(file_output_path, "w", encoding='utf-8') as f:
             f.write(html_content)
         print(f"✅ Comparison HTML Report generated at: {file_output_path}")
+
+    def generate_tiled_inference_html(self, file_output_path, context):
+        template = self.env.get_template('tiled_inference_template.html')
+        html_content = template.render(context)
+        with open(file_output_path, "w", encoding='utf-8') as f:
+            f.write(html_content)
+        print(f"✅ Tiled Inference HTML Report generated at: {file_output_path}")
