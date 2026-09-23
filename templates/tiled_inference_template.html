@@ -1,0 +1,193 @@
+{% extends "base_template.html" %}
+
+{% block tab_buttons %}
+<button class="tablinks active" onclick="openTab(event, 'Overview')">🧩 Tiled Inference Overview</button>
+<button class="tablinks" onclick="openTab(event, 'Gallery')">🖼️ High-Res Detections Gallery</button>
+<button class="tablinks" onclick="openTab(event, 'Spatial')">📍 Spatial & Dispersion Analysis</button>
+{% endblock %}
+
+{% block tab_contents %}
+<!-- TAB 1: OVERVIEW -->
+<div id="Overview" class="tabcontent" style="display:block;">
+    <div style="background: #e8f4f8; padding: 12px 18px; border-radius: 6px; margin-bottom: 20px; border-left: 5px solid #2980b9;">
+        <strong>⚙️ Sliced Inference Configuration:</strong>
+        Tile Size: <b>{{ stats.tile_size }}x{{ stats.tile_size }}</b> | 
+        Overlap: <b>{{ (stats.overlap_ratio * 100)|int }}%</b> | 
+        Fusion Method: <b>{{ stats.fusion_method|upper }}</b> | 
+        Confidence Threshold: <b>{{ stats.conf_threshold }}</b> | 
+        IoU Threshold: <b>{{ stats.iou_threshold }}</b>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <div>Images Processed</div>
+            <div class="metric">{{ stats.total_images }}</div>
+        </div>
+        <div class="card">
+            <div>Total Detections</div>
+            <div class="metric" style="color: #27ae60;">{{ stats.total_detections }}</div>
+        </div>
+        <div class="card">
+            <div>Avg Detections / Image</div>
+            <div class="metric">{{ "%.2f"|format(stats.avg_detections) }}</div>
+        </div>
+        <div class="card" style="background-color: #fdfefe; border-left-color: #8e44ad;">
+            <div>Avg Tiles / Image</div>
+            <div class="metric" style="color: #8e44ad;">{{ stats.avg_tiles_per_img }}</div>
+            <small style="color: #7f8c8d;">Total: {{ stats.total_tiles }} tiles</small>
+        </div>
+        <div class="card" style="background-color: #ebf5fb; border-left-color: #2980b9;">
+            <div>Speed (Total per Image)</div>
+            <div class="metric" style="color: #2980b9;">
+                {{ "%.1f"|format(stats.speed_stats.fps) if stats.speed_stats.fps is defined else '0.0' }} 
+                <span style="font-size: 0.5em;">FPS</span>
+            </div>
+            <small style="color: #7f8c8d;">{{ stats.speed_stats.total_ms if stats.speed_stats.total_ms is defined else '0' }} ms/img</small>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top:20px; border-left-color: #3498db;">
+        <h3>📊 Detections per Class</h3>
+        <table class="class-table">
+            <thead>
+                <tr>
+                    <th>Class</th>
+                    <th>Total Detections</th>
+                    <th>Avg Confidence (±Std)</th>
+                    <th>Avg Relative Size (% Area)</th>
+                    <th>Center of Mass (X, Y)</th>
+                    <th>Spatial Dispersion (σX, σY)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for class in stats.classes %}
+                <tr>
+                    <td><strong>{{ class.name }}</strong></td>
+                    <td style="color: #2980b9; font-weight: bold;">{{ class.detections }}</td>
+                    <td>{{ "%.1f"|format(class.avg_confidence * 100) }}% <span style="color:#7f8c8d; font-size:0.85em;">(±{{ "%.2f"|format(class.conf_std) }})</span></td>
+                    <td>{{ "%.3f"|format(class.avg_area_pct) }}%</td>
+                    <td>({{ "%.2f"|format(class.com_x) }}, {{ "%.2f"|format(class.com_y) }})</td>
+                    <td>(±{{ "%.2f"|format(class.disp_x) }}, ±{{ "%.2f"|format(class.disp_y) }})</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Timing Breakdown Card -->
+    {% if stats.speed_stats %}
+    <div class="card" style="margin-top:20px; border-left-color: #f39c12;">
+        <h3>⏱️ Timing Breakdown (Average per Image)</h3>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 150px; background: #fafafa; padding: 10px 15px; border-radius: 6px; border: 1px solid #eee;">
+                <div style="font-size: 0.85em; color: #7f8c8d;">Slicing & Tiling</div>
+                <div style="font-size: 1.4em; font-weight: bold; color: #2c3e50;">{{ stats.speed_stats.slicing_ms }} ms</div>
+            </div>
+            <div style="flex: 1; min-width: 150px; background: #fafafa; padding: 10px 15px; border-radius: 6px; border: 1px solid #eee;">
+                <div style="font-size: 0.85em; color: #7f8c8d;">Tiles Inference (GPU/Batch)</div>
+                <div style="font-size: 1.4em; font-weight: bold; color: #e67e22;">{{ stats.speed_stats.inference_ms }} ms</div>
+            </div>
+            <div style="flex: 1; min-width: 150px; background: #fafafa; padding: 10px 15px; border-radius: 6px; border: 1px solid #eee;">
+                <div style="font-size: 0.85em; color: #7f8c8d;">Fusion / NMS Reconciliation</div>
+                <div style="font-size: 1.4em; font-weight: bold; color: #27ae60;">{{ stats.speed_stats.fusion_ms }} ms</div>
+            </div>
+            <div style="flex: 1; min-width: 150px; background: #fafafa; padding: 10px 15px; border-radius: 6px; border: 1px solid #eee;">
+                <div style="font-size: 0.85em; color: #7f8c8d;">Total Pipeline Time</div>
+                <div style="font-size: 1.4em; font-weight: bold; color: #2980b9;">{{ stats.speed_stats.total_ms }} ms</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- TAB 2: GALLERY -->
+<div id="Gallery" class="tabcontent">
+    <h2>🖼️ High-Resolution Detection Gallery</h2>
+    <p style="color: #7f8c8d; font-size: 0.9em;">Visual predictions merged across tiles with {{ stats.fusion_method|upper }}. Click any image to open it at full resolution.</p>
+
+    {% if not stats.images %}
+    <p>No images processed.</p>
+    {% else %}
+    <div style="margin-bottom: 20px;">
+        <label for="imageSelect" style="font-weight: bold;">Select Image to Inspect: </label>
+        <select id="imageSelect" onchange="showSelectedImage(this.value)" style="padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 1em;">
+            {% for img_info in stats.images %}
+            <option value="img-card-{{ loop.index0 }}">{{ img_info.filename }} ({{ img_info.detections }} det, {{ img_info.num_tiles }} tiles)</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    {% for img_info in stats.images %}
+    <div id="img-card-{{ loop.index0 }}" class="image-detail-card" style="{% if not loop.first %}display: none;{% endif %} border: 1px solid #ddd; border-radius: 8px; padding: 15px; background: #fafafa; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #2c3e50;">{{ img_info.filename }}</h3>
+            <span style="background: #3498db; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.85em;">{{ img_info.width }}x{{ img_info.height }} px</span>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 15px;">
+            <div style="background: white; padding: 10px; border-radius: 4px; border: 1px solid #eee;">
+                <div style="font-size: 0.8em; color: #7f8c8d;">Detections Found</div>
+                <div style="font-size: 1.3em; font-weight: bold; color: #27ae60;">{{ img_info.detections }}</div>
+            </div>
+            <div style="background: white; padding: 10px; border-radius: 4px; border: 1px solid #eee;">
+                <div style="font-size: 0.8em; color: #7f8c8d;">Tiles Evaluated</div>
+                <div style="font-size: 1.3em; font-weight: bold; color: #8e44ad;">{{ img_info.num_tiles }}</div>
+            </div>
+            <div style="background: white; padding: 10px; border-radius: 4px; border: 1px solid #eee;">
+                <div style="font-size: 0.8em; color: #7f8c8d;">Mean Confidence</div>
+                <div style="font-size: 1.3em; font-weight: bold; color: #2980b9;">{{ "%.1f"|format(img_info.mean_conf * 100) }}%</div>
+            </div>
+            <div style="background: white; padding: 10px; border-radius: 4px; border: 1px solid #eee;">
+                <div style="font-size: 0.8em; color: #7f8c8d;">Spatial Dispersion</div>
+                <div style="font-size: 1em; font-weight: bold; color: #e67e22;">{{ img_info.dispersion.category }}</div>
+                <small style="color: #7f8c8d;">Pairwise: {{ img_info.dispersion.mean_pairwise_dist }}</small>
+            </div>
+            <div style="background: white; padding: 10px; border-radius: 4px; border: 1px solid #eee;">
+                <div style="font-size: 0.8em; color: #7f8c8d;">Processing Time</div>
+                <div style="font-size: 1.3em; font-weight: bold; color: #34495e;">{{ img_info.time_ms }} ms</div>
+            </div>
+        </div>
+
+        <div style="text-align: center; background: #222; border-radius: 6px; padding: 10px; max-height: 700px; overflow: auto;">
+            <a href="images/{{ img_info.evidence_filename }}" target="_blank" title="Click to view full image in new tab">
+                <img src="images/{{ img_info.evidence_filename }}" style="max-width: 100%; height: auto; border-radius: 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.3);" loading="lazy">
+            </a>
+            <div style="color: #bbb; font-size: 0.85em; margin-top: 8px;">🔍 Click image to inspect at native resolution in new tab</div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+
+<!-- TAB 3: SPATIAL ANALYSIS -->
+<div id="Spatial" class="tabcontent">
+    <h2>📍 Spatial & Dispersion Analysis</h2>
+    <p style="color: #7f8c8d; font-size: 0.9em;">Analysis of how detected objects are distributed across high-resolution image space.</p>
+
+    <div class="plot-grid">
+        <div class="card">
+            <h3>Normalized Heatmap</h3>
+            <p style="font-size: 0.85em; color: #7f8c8d;">Detection density aggregated across all processed high-res frames.</p>
+            <img src="plots/tiled_heatmap.png" alt="Heatmap" style="width: 100%; border-radius: 4px;" onerror="this.parentElement.style.display='none'">
+        </div>
+        <div class="card">
+            <h3>Confidence Distribution</h3>
+            <p style="font-size: 0.85em; color: #7f8c8d;">Confidence score histogram of reconciled detections.</p>
+            <img src="plots/tiled_confidence_distribution.png" alt="Confidence Distribution" style="width: 100%; border-radius: 4px;" onerror="this.parentElement.style.display='none'">
+        </div>
+    </div>
+</div>
+
+<script>
+function showSelectedImage(selectedId) {
+    var cards = document.getElementsByClassName('image-detail-card');
+    for (var i = 0; i < cards.length; i++) {
+        cards[i].style.display = 'none';
+    }
+    var target = document.getElementById(selectedId);
+    if (target) {
+        target.style.display = 'block';
+    }
+}
+</script>
+{% endblock %}
