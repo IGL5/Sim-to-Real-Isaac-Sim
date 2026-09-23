@@ -237,17 +237,18 @@ python -m src.evaluation.visualize_results --source /path/to/real_photos
 ```
 
 #### 🧩 Tiled / Sliced Inference Mode (High-Resolution Real Images)
-Run tiled sliding-window inference with box fusion (WBF / NMS) over large images (e.g. 4K, drone photos, high-res captures) to detect small objects without downscaling loss:
+Run tiled sliding-window inference with Weighted Boxes Fusion (WBF) over large images (e.g. 4K, drone photos, high-res captures) to detect small objects without downscaling loss:
 ```bash
-# Run interactive model selection on real photos with default WBF fusion:
+# Run interactive model selection on real photos:
 python -m src.evaluation.tiled_inference --source /path/to/large_images
 
-# Custom tile size (e.g., 640), 20% overlap, confidence 0.25, and saving debug grid:
-python -m src.evaluation.tiled_inference --source data/grapas/images --tile_size 640 --overlap 0.2 --conf 0.25 --save_grid --save_crops
+# Custom tile size (e.g., 640), 20% overlap, and confidence threshold 0.25:
+python -m src.evaluation.tiled_inference --source data/grapas/images --tile_size 640 --overlap 0.2 --conf 0.25
 
-# Run with NMS instead of WBF and save permanently to model evaluations folder:
-python -m src.evaluation.tiled_inference --source /path/to/large_images --fusion nms --save
+# Save evaluation permanently to model folder:
+python -m src.evaluation.tiled_inference --source /path/to/large_images --save
 ```
+
 
 #### 💾 Save Audits and Inferences permanently
 ```bash
