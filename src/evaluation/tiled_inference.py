@@ -118,44 +118,10 @@ def draw_high_res_annotations(img, boxes, scores, classes, class_names):
     return annotated
 
 
-def draw_grid_preview(img, tile_coords):
-    """Draws the grid slicing lines over a thumbnail/copy of the image for visual verification."""
-    grid_img = img.copy()
-    h, w = img.shape[:2]
-    scale_factor = max(1.0, max(w, h) / 1000.0)
-    line_thick = max(1, int(scale_factor * 1.0))
-    font_scale = max(0.4, scale_factor * 0.35)
-
-    for idx, (x1, y1, x2, y2) in enumerate(tile_coords):
-        cv2.rectangle(grid_img, (x1, y1), (x2, y2), (0, 255, 0), line_thick)
-        cv2.putText(grid_img, f"#{idx+1}", (x1 + 10, y1 + 30), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), line_thick, cv2.LINE_AA)
-
-    return grid_img
-
-
-def save_crops(img, boxes, classes, class_names, filename, crops_dir):
-    """Saves individual crops of detected objects."""
-    crops_dir.mkdir(parents=True, exist_ok=True)
-    h, w = img.shape[:2]
-    stem = Path(filename).stem
-
-    for i, b in enumerate(boxes):
-        x1, y1, x2, y2 = map(int, b)
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w, x2), min(h, y2)
-        if x2 > x1 and y2 > y1:
-            crop = img[y1:y2, x1:x2]
-            c_name = class_names.get(int(classes[i]), f"class_{classes[i]}").replace(" ", "_")
-            crop_path = crops_dir / f"{stem}_{i:03d}_{c_name}.jpg"
-            cv2.imwrite(str(crop_path), crop)
-
-
 def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
-                        conf_thresh=0.4, iou_thresh=0.5, fusion_method='wbf',
-                        batch_size=8, class_map=None, save_crops_flag=False,
-                        save_grid_flag=False, save_persistently=False):
+                        conf_thresh=None, save_persistently=False):
     """
-    Main execution loop for Tiled / Sliced Inference.
+    Main execution loop for Tiled / Sliced Inference on high-resolution images.
     """
     source_path = Path(source)
     if not source_path.exists():
@@ -172,14 +138,15 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
         print(f"⚠️ No valid images found in {source_path}")
         return
 
-    print(f"\n🚀 STARTING TILED INFERENCE PIPELINE")
-    print(f" • Model:       {model_path}")
-    print(f" • Images:      {len(image_files)} from {source_path}")
-    print(f" • Tile Size:   {tile_size}x{tile_size}")
-    print(f" • Overlap:     {int(overlap * 100)}%")
-    print(f" • Fusion:      {fusion_method.upper()} (IoU: {iou_thresh})")
-    print(f" • Confidence:  {conf_thresh}")
-    print(f" • Batch Size:  {batch_size}")
+    conf = conf_thresh if conf_thresh is not None else config.CONF_THRESHOLD
+    iou_thresh = config.IOU_THRESHOLD
+    batch_size = 8
+
+    print(f"\n🚀 STARTING TILED INFERENCE")
+    print(f" • Model:      {model_path}")
+    print(f" • Images:     {len(image_files)} from {source_path}")
+    print(f" • Tile Size:  {tile_size}x{tile_size} (overlap {int(overlap * 100)}%)")
+    print(f" • Confidence: {conf}")
     print("=" * 79)
 
     # Clean temporary output directory
@@ -196,27 +163,24 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 
     model = YOLO(model_path)
 
-    if class_map:
-        model_to_dataset = class_map
-    else:
-        model_to_dataset = {}
-        for mod_idx, mod_name in model.names.items():
-            if mod_name.lower() in dataset_classes:
-                model_to_dataset[mod_idx] = dataset_classes.index(mod_name.lower())
-        
-        # If no classes matched classes.txt, fallback to the model's native classes
-        if not model_to_dataset:
-            print(f"ℹ️ Model classes {model.names} did not match classes.txt. Using model's own classes directly.")
-            model_to_dataset = {int(k): int(k) for k in model.names.keys()}
-            dataset_class_names = {int(k): str(v).capitalize() for k, v in model.names.items()}
+    model_to_dataset = {}
+    for mod_idx, mod_name in model.names.items():
+        if mod_name.lower() in dataset_classes:
+            model_to_dataset[mod_idx] = dataset_classes.index(mod_name.lower())
+    
+    # If no classes matched classes.txt, fallback to the model's native classes
+    if not model_to_dataset:
+        print(f"ℹ️ Model classes {model.names} did not match classes.txt. Using model's own classes directly.")
+        model_to_dataset = {int(k): int(k) for k in model.names.keys()}
+        dataset_class_names = {int(k): str(v).capitalize() for k, v in model.names.items()}
 
     reporter = TiledReporter(
         output_dir=config.TILED_OUTPUT_DIR,
-        conf_threshold=conf_thresh,
+        conf_threshold=conf,
         iou_threshold=iou_thresh,
         tile_size=tile_size,
         overlap_ratio=overlap,
-        fusion_method=fusion_method,
+        fusion_method='wbf',
         class_names=dataset_class_names
     )
 
@@ -236,12 +200,6 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
         num_tiles = len(tile_coords)
         t_slice_ms = (time.perf_counter() - t_slice_start) * 1000.0
 
-        # Save grid debug if requested
-        if save_grid_flag:
-            grid_img = draw_grid_preview(img, tile_coords)
-            reporter.grid_dir.mkdir(parents=True, exist_ok=True)
-            cv2.imwrite(str(reporter.grid_dir / f"GRID_{filename}"), grid_img)
-
         # 2. Batch Tile Inference
         t_inf_start = time.perf_counter()
         raw_boxes = []
@@ -255,12 +213,13 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 
             batch_results = model.predict(
                 source=b_slices,
-                conf=conf_thresh,
+                conf=conf,
                 verbose=False,
                 project=str(config.TILED_OUTPUT_DIR),
                 name="yolo_temp",
                 exist_ok=True
             )
+
 
             for tile_i, res in enumerate(batch_results):
                 off_x1, off_y1, _, _ = b_coords[tile_i]
@@ -284,21 +243,17 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 
         t_inf_ms = (time.perf_counter() - t_inf_start) * 1000.0
 
-        # 3. Fusion & Reconciliation of Overlaps
+        # 3. Fusion & Reconciliation of Overlaps (WBF)
         t_fus_start = time.perf_counter()
         if len(raw_boxes) > 0:
-            if fusion_method == 'nms':
-                fused_boxes, fused_scores, fused_classes = mu.nms_boxes(
-                    raw_boxes, raw_scores, raw_classes, iou_thresh=iou_thresh
-                )
-            else:
-                fused_boxes, fused_scores, fused_classes = mu.weighted_boxes_fusion(
-                    raw_boxes, raw_scores, raw_classes, iou_thresh=iou_thresh, conf_mode="mean"
-                )
+            fused_boxes, fused_scores, fused_classes = mu.weighted_boxes_fusion(
+                raw_boxes, raw_scores, raw_classes, iou_thresh=iou_thresh, conf_mode="mean"
+            )
         else:
             fused_boxes = np.empty((0, 4), dtype=np.float32)
             fused_scores = np.empty((0,), dtype=np.float32)
             fused_classes = np.empty((0,), dtype=int)
+
 
         t_fus_ms = (time.perf_counter() - t_fus_start) * 1000.0
         t_total_ms = (time.perf_counter() - t_start) * 1000.0
@@ -315,8 +270,6 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
         evidence_name = f"PRED_{filename}"
         cv2.imwrite(str(reporter.images_dir / evidence_name), annotated_img)
 
-        if save_crops_flag and len(fused_boxes) > 0:
-            save_crops(img, fused_boxes, fused_classes, dataset_class_names, filename, reporter.crops_dir)
 
         # 5. Record Stats & Print Terminal Summary
         reporter.record_image(
@@ -362,55 +315,25 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Tiled / Sliced Inference for High-Resolution Real Images")
-    parser.add_argument('--source', type=str, default="data/grapas/images",
-                        help="Path to image folder or single image file (default: data/grapas/images)")
-    parser.add_argument('--model', type=str, default=None,
-                        help="Model experiment name or path to .pt weights (if omitted, opens interactive menu)")
-    parser.add_argument('--tile_size', type=int, default=640,
-                        help="Size of square tiles in pixels (default: 640)")
-    parser.add_argument('--overlap', type=float, default=0.2,
-                        help="Overlap ratio between adjacent tiles [0.0 - 0.9] (default: 0.2 = 20%%)")
-    parser.add_argument('--conf', type=float, default=None,
-                        help=f"Confidence threshold (default: {config.CONF_THRESHOLD})")
-    parser.add_argument('--iou', type=float, default=None,
-                        help=f"IoU threshold for box fusion/NMS (default: {config.IOU_THRESHOLD})")
-    parser.add_argument('--fusion', type=str, choices=['wbf', 'nms'], default='wbf',
-                        help="Box reconciliation algorithm: 'wbf' (Weighted Boxes Fusion) or 'nms' (default: wbf)")
-    parser.add_argument('--batch_size', type=int, default=8,
-                        help="Batch size for concurrent tile inference on GPU (default: 8)")
-    parser.add_argument('--class_map', type=str, default=None,
-                        help="Manual class mapping string, e.g. '0:1,1:0'")
-    parser.add_argument('--save_grid', action='store_true',
-                        help="Save debug images showing the tile grid slicing lines")
-    parser.add_argument('--save_crops', action='store_true',
-                        help="Save cropped images of each detected object")
-    parser.add_argument('--save', action='store_true',
-                        help="Persistently save results into model's evaluations folder")
+    parser = argparse.ArgumentParser(description="Tiled Inference for High-Resolution Real Images")
+    parser.add_argument('--source', type=str, default="data/grapas/images", help="Folder or image path")
+    parser.add_argument('--model', type=str, default=None, help="Model name or weights path")
+    parser.add_argument('--tile_size', type=int, default=640, help="Tile size in pixels (default: 640)")
+    parser.add_argument('--overlap', type=float, default=0.2, help="Tile overlap ratio (default: 0.2)")
+    parser.add_argument('--conf', type=float, default=None, help=f"Confidence threshold (default: {config.CONF_THRESHOLD})")
+    parser.add_argument('--save', action='store_true', help="Save evaluation to model folder")
 
     args = parser.parse_args()
 
-    # Resolve model path
     selected_model = select_model_path(args.model)
-
-    # Resolve thresholds
-    conf_threshold = args.conf if args.conf is not None else config.CONF_THRESHOLD
-    iou_threshold = args.iou if args.iou is not None else config.IOU_THRESHOLD
-
-    parsed_class_map = pu.parse_class_map(args.class_map)
 
     run_tiled_inference(
         source=args.source,
         model_path=selected_model,
         tile_size=args.tile_size,
         overlap=args.overlap,
-        conf_thresh=conf_threshold,
-        iou_thresh=iou_threshold,
-        fusion_method=args.fusion,
-        batch_size=args.batch_size,
-        class_map=parsed_class_map,
-        save_crops_flag=args.save_crops,
-        save_grid_flag=args.save_grid,
+        conf_thresh=args.conf,
         save_persistently=args.save
     )
+
 
