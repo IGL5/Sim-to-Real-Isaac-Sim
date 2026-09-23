@@ -13,8 +13,6 @@ except Exception:
 from src.core import config
 from src.core.utils import math_utils as mu
 from src.core.metadata.tiled_builder import TiledInferenceMetadata
-from src.core.metadata.dataset_builder import DatasetMetadata
-from src.core.metadata.train_builder import TrainMetadata
 from src.evaluation.utils.html_generator import HTMLReportGenerator
 from src.evaluation.utils import plot_generator
 
@@ -417,29 +415,12 @@ class TiledReporter:
         meta_manager.record_images_details(self.stats["images"])
         meta_manager.commit()
 
-        if model_path:
-            exp_dir = Path(model_path).parent.parent
-        else:
-            exp_dir = Path(config.PROJECT_DIR) / experiment_name
-
-        dataset_meta_path = exp_dir / config.METADATA_FOLDER_NAME / config.FILE_DATASET_META
-        if not dataset_meta_path.exists():
-            dataset_meta_path = config.DATASET_METADATA_PATH
-
-        train_meta_path = exp_dir / config.METADATA_FOLDER_NAME / config.FILE_TRAIN_META
-
-        dataset_summary = DatasetMetadata(dataset_meta_path).get_html_summary() if dataset_meta_path.exists() else None
-        train_summary = TrainMetadata(train_meta_path).get_html_summary() if train_meta_path.exists() else None
-
         html_context = {
             "report_title": "Tiled High-Res Inference Report",
+            "experiment_name": experiment_name,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "stats": meta_manager.get_html_summary(),
-            "tiled": meta_manager.get_html_summary(),
-            "dataset": dataset_summary,
-            "train": train_summary
         }
-
 
         generator = HTMLReportGenerator()
         report_html_path = self.output_dir / "tiled_inference_report.html"
