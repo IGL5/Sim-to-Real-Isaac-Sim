@@ -119,7 +119,7 @@ def draw_high_res_annotations(img, boxes, scores, classes, class_names):
 
 
 def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
-                        conf_thresh=None, save_persistently=False):
+                        conf_thresh=None, save_persistently=False, in_place=False):
     """
     Main execution loop for Tiled / Sliced Inference on high-resolution images.
     """
@@ -138,6 +138,29 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
         print(f"⚠️ No valid images found in {source_path}")
         return
 
+    # Interactive safety confirmation for in-place destructive mode
+    if in_place:
+        print("\n" + "!" * 79)
+        print("⚠️  AVISO DE SEGURIDAD: Flag '--in_place' activado.")
+        print(f"   Las imágenes originales en '{source_path}' serán eliminadas tras guardar las detecciones.")
+        if not save_persistently:
+            print("   💡 Consejo: No has indicado '--save'. Las imágenes anotadas se guardarán en:")
+            print(f"      -> {config.TILED_OUTPUT_DIR}/images/")
+            print("      Usa '--save' si quieres archivarlas permanentemente en la carpeta del modelo.")
+        print("!" * 79)
+        try:
+            confirm = input("¿Estás seguro de que deseas eliminar las fotos originales? [s/N]: ").strip().lower()
+            if confirm in ['s', 'si', 'y', 'yes']:
+                print("✅ Confirmado: Se eliminarán las imágenes originales tras procesarlas.\n")
+                in_place = True
+            else:
+                print("ℹ️ Operación cancelada por el usuario. El flag '--in_place' se ha desactivado.")
+                print("   Se conservarán las imágenes originales intactas.\n")
+                in_place = False
+        except (KeyboardInterrupt, EOFError):
+            print("\n❌ Ejecución cancelada por el usuario.")
+            return
+
     conf = conf_thresh if conf_thresh is not None else config.CONF_THRESHOLD
     iou_thresh = config.IOU_THRESHOLD
     batch_size = 8
@@ -147,6 +170,7 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
     print(f" • Images:     {len(image_files)} from {source_path}")
     print(f" • Tile Size:  {tile_size}x{tile_size} (overlap {int(overlap * 100)}%)")
     print(f" • Confidence: {conf}")
+    print(f" • In-Place:   {'Activado (eliminará originales)' if in_place else 'Desactivado (conservará originales)'}")
     print("=" * 79)
 
     # Clean temporary output directory
@@ -268,7 +292,15 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
         # 4. Save High-Resolution Annotated Visual Output
         annotated_img = draw_high_res_annotations(img, fused_boxes, fused_scores, fused_classes, dataset_class_names)
         evidence_name = f"PRED_{filename}"
-        cv2.imwrite(str(reporter.images_dir / evidence_name), annotated_img)
+        out_path = reporter.images_dir / evidence_name
+        cv2.imwrite(str(out_path), annotated_img)
+
+        # In-place cleanup: delete original image after successfully writing the annotated one
+        if in_place and out_path.exists() and img_file.resolve() != out_path.resolve():
+            try:
+                img_file.unlink()
+            except Exception as e:
+                print(f"⚠️ No se pudo eliminar la imagen original {img_file}: {e}")
 
 
         # 5. Record Stats & Compact Progress Output
@@ -313,6 +345,7 @@ if __name__ == "__main__":
     parser.add_argument('--overlap', type=float, default=0.2, help="Tile overlap ratio (default: 0.2)")
     parser.add_argument('--conf', type=float, default=None, help=f"Confidence threshold (default: {config.CONF_THRESHOLD})")
     parser.add_argument('--save', action='store_true', help="Save evaluation to model folder")
+    parser.add_argument('--in_place', action='store_true', help="Elimina las fotos originales tras guardar las anotadas para ahorrar espacio")
 
     args = parser.parse_args()
 
@@ -324,7 +357,8 @@ if __name__ == "__main__":
         tile_size=args.tile_size,
         overlap=args.overlap,
         conf_thresh=args.conf,
-        save_persistently=args.save
+        save_persistently=args.save,
+        in_place=args.in_place
     )
 
 
