@@ -23,21 +23,8 @@ PALETTE = [
 ]
 
 
-def select_model_path(preselected_model=None):
+def select_model_path():
     """Interactively selects a trained model or validates the preselected one."""
-    if preselected_model:
-        # Check if direct file path or experiment name
-        if Path(preselected_model).exists():
-            print(f"🤖 Model loaded directly: {preselected_model}")
-            return str(Path(preselected_model))
-        
-        path = Path(config.PROJECT_DIR) / preselected_model / config.BEST_MODEL_SUBPATH
-        if path.exists():
-            print(f"🤖 Auto-selected model: {preselected_model}")
-            return str(path)
-        else:
-            print(f"❌ ERROR: Preselected model '{preselected_model}' not found in {config.PROJECT_DIR}.")
-            exit(1)
 
     print("\n--- 🤖 MODEL SELECTION FOR TILED INFERENCE ---")
     project_dir = Path(config.PROJECT_DIR)
@@ -140,25 +127,16 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 
     # Interactive safety confirmation for in-place destructive mode
     if in_place:
-        print("\n" + "!" * 79)
-        print("⚠️  AVISO DE SEGURIDAD: Flag '--in_place' activado.")
-        print(f"   Las imágenes originales en '{source_path}' serán eliminadas tras guardar las detecciones.")
-        if not save_persistently:
-            print("   💡 Consejo: No has indicado '--save'. Las imágenes anotadas se guardarán en:")
-            print(f"      -> {config.TILED_OUTPUT_DIR}/images/")
-            print("      Usa '--save' si quieres archivarlas permanentemente en la carpeta del modelo.")
-        print("!" * 79)
+        print("⚠️  Flag '--in_place' enabled.")
+        print(f"   Original images in '{source_path}' will be overwritten.")
         try:
-            confirm = input("¿Estás seguro de que deseas eliminar las fotos originales? [s/N]: ").strip().lower()
-            if confirm in ['s', 'si', 'y', 'yes']:
-                print("✅ Confirmado: Se eliminarán las imágenes originales tras procesarlas.\n")
+            confirm = input("Confirm use of '--in_place' flag? [y/N]: ").strip().lower()
+            if confirm in ['y', 'yes', 's', 'si']:
                 in_place = True
             else:
-                print("ℹ️ Operación cancelada por el usuario. El flag '--in_place' se ha desactivado.")
-                print("   Se conservarán las imágenes originales intactas.\n")
+                print("ℹ️ '--in_place' disabled.")
                 in_place = False
         except (KeyboardInterrupt, EOFError):
-            print("\n❌ Ejecución cancelada por el usuario.")
             return
 
     conf = conf_thresh if conf_thresh is not None else config.CONF_THRESHOLD
@@ -170,7 +148,7 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
     print(f" • Images:     {len(image_files)} from {source_path}")
     print(f" • Tile Size:  {tile_size}x{tile_size} (overlap {int(overlap * 100)}%)")
     print(f" • Confidence: {conf}")
-    print(f" • In-Place:   {'Activado (eliminará originales)' if in_place else 'Desactivado (conservará originales)'}")
+    print(f" • In-Place:   {'Enabled (will delete originals)' if in_place else 'Disabled (will preserve originals)'}")
     print("=" * 79)
 
     # Clean temporary output directory
@@ -300,7 +278,7 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
             try:
                 img_file.unlink()
             except Exception as e:
-                print(f"⚠️ No se pudo eliminar la imagen original {img_file}: {e}")
+                print(f"⚠️ Could not delete original image {img_file}: {e}")
 
 
         # 5. Record Stats & Compact Progress Output
@@ -340,16 +318,15 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tiled Inference for High-Resolution Real Images")
     parser.add_argument('--source', type=str, default="data/03_real/images", help="Folder or image path")
-    parser.add_argument('--model', type=str, default=None, help="Model name or weights path")
     parser.add_argument('--tile_size', type=int, default=640, help="Tile size in pixels (default: 640)")
     parser.add_argument('--overlap', type=float, default=0.2, help="Tile overlap ratio (default: 0.2)")
     parser.add_argument('--conf', type=float, default=None, help=f"Confidence threshold (default: {config.CONF_THRESHOLD})")
     parser.add_argument('--save', action='store_true', help="Save evaluation to model folder")
-    parser.add_argument('--in_place', action='store_true', help="Elimina las fotos originales tras guardar las anotadas para ahorrar espacio")
+    parser.add_argument('--in_place', action='store_true', help="Delete original images after saving annotated predictions to save disk space")
 
     args = parser.parse_args()
 
-    selected_model = select_model_path(args.model)
+    selected_model = select_model_path()
 
     run_tiled_inference(
         source=args.source,
