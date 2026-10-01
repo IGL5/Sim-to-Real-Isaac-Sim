@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 from src.core import config
@@ -105,6 +106,25 @@ def draw_high_res_annotations(img, boxes, scores, classes, class_names):
     return annotated
 
 
+def get_optimal_batch_size():
+    """
+    Dynamically determines optimal tile batch size based on available CUDA VRAM.
+    - VRAM >= 20 GB: batch_size = 32
+    - VRAM > 10 GB:  batch_size = 16
+    - Otherwise / No CUDA: batch_size = 8
+    """
+    if torch.cuda.is_available():
+        try:
+            total_vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+            if total_vram_gb >= 20.0:
+                return 32
+            elif total_vram_gb > 10.0:
+                return 16
+        except Exception:
+            return 8
+    return 8
+
+
 def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
                         conf_thresh=None, save_persistently=False, in_place=False):
     """
@@ -141,12 +161,13 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
 
     conf = conf_thresh if conf_thresh is not None else config.CONF_THRESHOLD
     iou_thresh = config.IOU_THRESHOLD
-    batch_size = 8
+    batch_size = get_optimal_batch_size()
 
     print(f"\n🚀 STARTING TILED INFERENCE")
     print(f" • Model:      {model_path}")
     print(f" • Images:     {len(image_files)} from {source_path}")
     print(f" • Tile Size:  {tile_size}x{tile_size} (overlap {int(overlap * 100)}%)")
+    print(f" • Batch Size: {batch_size}")
     print(f" • Confidence: {conf}")
     print(f" • In-Place:   {'Enabled (will delete originals)' if in_place else 'Disabled (will preserve originals)'}")
     print("=" * 79)
@@ -217,6 +238,8 @@ def run_tiled_inference(source, model_path, tile_size=640, overlap=0.2,
                 source=b_slices,
                 conf=conf,
                 verbose=False,
+                imgsz=tile_size,
+                save=False,
                 project=str(config.TILED_OUTPUT_DIR),
                 name="yolo_temp",
                 exist_ok=True
