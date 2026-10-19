@@ -1,6 +1,6 @@
 # 🎯 Sim-to-Real-Isaac-Sim Pipeline
 
-A complete, end-to-end synthetic data generation, training, and auditing pipeline leveraging **Nvidia Isaac Sim Replicator** and **YOLO architectures (v8, v9, v10, 11, 26)** to bridge the Sim-to-Real gap for any custom target object.
+A complete, end-to-end synthetic data generation, training, and auditing pipeline leveraging **Nvidia Isaac Sim Replicator** and **YOLO architectures (v8, v9, v10, 11, 26)** for both **Object Detection** and **Instance Segmentation** to bridge the Sim-to-Real gap for any custom target object.
 
 This project enables generalized, physics-aware domain randomized data generation, dataset cleaning, ETL processing, model training with MLOps metadata tracking, interactive HTML auditing reports, Explainable AI (XAI), and multi-model benchmarking dashboards.
 
@@ -16,27 +16,29 @@ flowchart TD
 
     subgraph Simulation [1. Simulation & Generation]
         A["Isaac Sim Replicator"] --> B["synthetic_data_randomizer.py"]
-        B --> C["data/01_raw/ (KITTI format)"]
+        B --> C["data/01_raw/ (KITTI + Masks)"]
     end
 
     subgraph DataPrep [2. Data Cleaning & Preparation]
         C --> D["clean_dataset.py (Quality QC)"]
         D --> E["dataset_manager.py (ETL)"]
-        E --> DEG["data/02_processed/ (YOLO format + dataset_metadata.json)"]
+        E --> DEG["data/02_processed/ (YOLO Bboxes/Polygons + metadata)"]
         DEG --> F["degrade_dataset.py (Optional)"]
         
     end
 
     subgraph Training [3. YOLO Training]
         F --> G["train_YOLO.py"]
-        G --> H["data/03_project_name/experiment_name/ (Weights & MLOps Vault)"]
+        G --> H["data/04_project_name/experiment_name/ (Weights & MLOps Vault)"]
     end
 
     subgraph Evaluation [4. Auditing & Benchmarking]
-        H --> I["visualize_results.py"]
+        H --> I["visualize_results.py & batch_auditor.py"]
+        H --> T["tiled_inference.py (Sliced Inference)"]
         H --> J["xai_YOLO.py (Grad-CAM & Weights)"]
         H --> K["compare_models.py (Benchmarking)"]
-        I --> L["report.html (Audit) / inference_report.html"]
+        I --> L["audit_report.html / inference_report.html"]
+        T --> LT["tiled_inference_report.html"]
         J --> M["XAI Heatmaps & Catastrophic Forgetting Analysis"]
         K --> N["comparison_report.html (Chart.js Dashboard)"]
     end
@@ -65,6 +67,7 @@ flowchart TD
 │   │   └── synthetic_data_randomizer.py # Main simulation entry point
 │   │
 │   ├── data_prep/                   # Dataset ETL and Quality Control
+│   │   ├── utils/                   # Mask analysis & filesystem utilities
 │   │   ├── clean_dataset.py         # Filters corrupt, dark, or empty frames
 │   │   ├── dataset_manager.py       # Converts KITTI to YOLO & splits dataset
 │   │   └── degrade_dataset.py       # Photometric & sensor Sim-to-Real domain degradation
@@ -76,6 +79,7 @@ flowchart TD
 │       ├── utils/                   # Report, HTML, and plot generators
 │       ├── visualize_results.py     # Audits test datasets & runs real-world inference
 │       ├── batch_auditor.py         # Automates evaluation of multiple models
+│       ├── tiled_inference.py       # Sliced/tiled inference for high-res images
 │       ├── xai_YOLO.py              # Explainable AI (Grad-CAM & structural weight drift)
 │       └── compare_models.py        # Multi-model Chart.js comparison tool
 │
@@ -84,9 +88,9 @@ flowchart TD
 │   ├── 01_raw/                      # Raw simulation output (KITTI format)
 │   ├── 02_processed/                # Cleaned and split YOLO dataset
 │   ├── 03_real/                     # Real world images and labels
-|   ├── 04_project_name/             # Project saved experiments
-|   │   ├── experiment_name/         # Experiment-specific data and models
-|   │   └── ...
+│   ├── 04_project_name/             # Project saved experiments
+│   │   ├── experiment_name/         # Experiment-specific data and models
+│   │   └── ...
 │   └── 05_metrics/                  # Evaluation metrics, reports and XAI outputs
 └── templates/                       # HTML/CSS Jinja2 templates for reports
 ```
@@ -148,7 +152,7 @@ C:\isaac-sim\python.bat .\src\simulation\synthetic_data_randomizer.py --headless
 ---
 
 ### Step 2: Data Cleaning & YOLO ETL
-Before training, filter out bad frames (e.g., excessively dark or empty frames) and compile the data into YOLO format.
+Before training, filter out bad frames (e.g., excessively dark or empty frames) and compile the data into YOLO format (bounding boxes or segmentation polygons).
 
 #### 1. Quality Control Cleaning
 ```bash
@@ -161,6 +165,9 @@ python -m src.data_prep.clean_dataset --dir data/01_raw
 # Review suspicious annotations visually (outputs to _review_occlusions/):
 python -m src.data_prep.clean_dataset --dir data/01_raw --review
 
+# Review with segmentation masks overlay & disable edge aspect-ratio filtering:
+python -m src.data_prep.clean_dataset --dir data/01_raw --review --seg --no_edge_filter
+
 # Execute annotation cleaning:
 # - Option A (Whitelist): Saves only annotations listed in whitelist.txt; deletes the rest of suspicious ones.
 # - Option B (Blacklist): Deletes ONLY annotations listed in blacklist.txt; keeps everything else. (Takes priority if both exist).
@@ -169,8 +176,11 @@ python -m src.data_prep.clean_dataset --dir data/01_raw --clean_labels
 
 #### 2. KITTI to YOLO Conversion & Splits
 ```bash
-# Rebuild the dataset from scratch
+# Rebuild the dataset from scratch (Detection: Bboxes)
 python -m src.data_prep.dataset_manager
+
+# Convert dataset for Instance Segmentation (Polygons) and move files to save disk
+python -m src.data_prep.dataset_manager --segmentation --move
 
 # Append new Isaac Sim frames to the existing dataset
 python -m src.data_prep.dataset_manager --append
@@ -209,10 +219,10 @@ python -m src.data_prep.degrade_dataset --effects all --hardness medium --dry
 ---
 
 ### Step 3: Model Training
-Train or fine-tune YOLO models (v8, v9, v10, 11, 26). The script reads `classes.txt` to dynamically name the project folder.
+Train or fine-tune YOLO models (v8, v9, v10, 11, 26) for Object Detection (`[d]`) or Instance Segmentation (`[s]`). The script reads `classes.txt` to dynamically name the project folder.
 
 ```bash
-# Interactive selection (YOLO version, size, experiment name)
+# Interactive selection (Task, YOLO version, size, experiment name)
 python -m src.training.train_YOLO
 
 # Custom duration & early stopping patience
@@ -303,4 +313,5 @@ python -m src.evaluation.xai_YOLO
 
 * **`audit_report.html`**: Details PR Curves, F1-scores, confidence distributions, and Sim-to-Real metadata.
 * **`inference_report.html`**: Analyzes real-world predictions, crowdness heatmaps, and overlaps (IoU overlap anomalies).
+* **`tiled_inference_report.html`**: Sliced/tiled inference metrics and detections for high-resolution images.
 * **`comparison_report.html`**: Grouped bar charts, trend lines, and training hyperparameter matrices comparing models.
