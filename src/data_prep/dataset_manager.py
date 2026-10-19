@@ -16,6 +16,7 @@ import src.core.config as config
 from src.core.utils import math_utils as mu
 from src.core.utils import project_utils as pu
 from src.core.metadata.dataset_builder import DatasetMetadata
+from src.data_prep.utils.clean_analyzer import extract_class_mask_from_crop
 
 
 # Classes to detect
@@ -164,16 +165,15 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
 
                             if seg_mask.ndim == 3:
                                 crop = seg_mask[y1_i:y2_i, x1_i:x2_i, :3]
-                                non_zero_mask = np.any(crop > 0, axis=2)
+                                class_name = CLASES[class_id] if 0 <= class_id < len(CLASES) else parts[0]
+                                obj_mask = extract_class_mask_from_crop(crop, class_name)
                             else:
                                 crop = seg_mask[y1_i:y2_i, x1_i:x2_i]
-                                non_zero_mask = crop > 0
+                                obj_mask = crop > 0
 
-                            if np.any(non_zero_mask):
-                                if seg_mask.ndim == 3:
-                                    binary_mask = np.any(seg_mask[:, :, :3] > 0, axis=2)
-                                else:
-                                    binary_mask = seg_mask > 0
+                            if np.any(obj_mask):
+                                binary_mask = np.zeros((height, width), dtype=bool)
+                                binary_mask[y1_i:y2_i, x1_i:x2_i] = obj_mask
                                 polygons_found = mu.mask_to_polygons(binary_mask, width, height)
 
                         if polygons_found:
