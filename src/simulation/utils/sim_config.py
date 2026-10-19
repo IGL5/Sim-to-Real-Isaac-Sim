@@ -39,7 +39,7 @@ SKY_PATH = "/World/SkyLight"
 
 # CAMERA CONSTANTS
 CAMERA_ELEVATION_DEG_RANGE = (25.0, 35.0) # Elevation angle of the camera relative to the target, in degrees (0 to 90)
-CAMERA_3D_DIST_RANGE = (15.0, 20.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
+CAMERA_3D_DIST_RANGE = (15.0, 25.0) # Straight-line 3D distance (hypotenuse) from the camera to the target in meters/units
 LOOKAT_JITTER_RADIUS = 1.0 # Radius of the jitter around the lookat point
 FOCAL_LENGTH = 40.0 # 18.0
 SENSOR_WIDTH = 36.0
@@ -49,10 +49,10 @@ RAYCAST_START_HEIGHT = 2000.0
 RAYCAST_DISTANCE = 4000.0
 
 # OBJECT BUDGET
-OBJECTS_BUDGET_RANGE = (5.0, 10.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9), (10.0, 20.0)
-OBJECTS_MAX_RADIUS = 40.0 # 4.0
+OBJECTS_BUDGET_RANGE = (8.0, 16.0) # (0.5, 7.0), (2.0, 10.0), (1.85, 3.9), (10.0, 20.0)
+OBJECTS_MAX_RADIUS = 30.0 # 4.0
 # DISTRACTOR BUDGET
-DISTRACTOR_BUDGET_RANGE = (500.0, 600.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
+DISTRACTOR_BUDGET_RANGE = (600.0, 700.0) # (15.0, 30.0), (30.0, 75.0) (3000.0, 4000.0)
 DISTRACTOR_MAX_RADIUS = 50.0
 
 # --- CONFIGURATION: ENVIRONMENT TARGETS ---
@@ -139,20 +139,77 @@ OBJECTS_CONFIG = {
         "randomize_materials": ["frame"],   # List of prim names to randomize materials
         # "randomize_soft_colors": True       # Randomize colors but keep the same material
     },
-    "electric_pole": {
-        "active": True,                     # Enable this object type
-        "pool_size": 20,                    # Number of bicycles in the pool
-        "radius": 1.5,                      # Radius of safety
-        "spawn_radius": (5.0, 30.0),
-        "cost_units": 4.0,                  # High cost (main character)
-        "selection_weight": 50,             # Always want to appear if there's space
-        "scale_range": (1.0, 1.2),          # Fixed scale for rigorous datasets
-        # "wheelbase": 0.8,
-        # "track_width": 0.8,
-        # "semantic_parts": {
-        #     "insulator": "insulator"
-        # }
+    # "electric_pole": {
+    #     "active": True,                     # Enable this object type
+    #     "pool_size": 20,                    # Number of bicycles in the pool
+    #     "radius": 1.5,                      # Radius of safety
+    #     "spawn_radius": (5.0, 30.0),
+    #     "cost_units": 4.0,                  # High cost (main character)
+    #     "selection_weight": 50,             # Always want to appear if there's space
+    #     "scale_range": (1.0, 1.2),          # Fixed scale for rigorous datasets
+    #     # "wheelbase": 0.8,
+    #     # "track_width": 0.8,
+    #     # "semantic_parts": {
+    #     #     "insulator": "insulator"
+    #     # }
+    # },
+    "electric_pole_wood": {
+        "active": True,
+        "pool_size": 28,
+        "radius": 1.5,
+        "spawn_radius": (2.0, 20.0),
+        "cost_units": 4.0,
+        "selection_weight": 50,
+        "scale_range": (1.0, 1.2),
+        # "randomize_materials": ["main"],
+        # "randomize_soft_colors": True
     },
+    "electric_pole_manesman": {
+        "active": True,
+        "pool_size": 12,
+        "radius": 1.5,
+        "spawn_radius": (2.0, 20.0),
+        "cost_units": 4.0,
+        "selection_weight": 50,
+        "scale_range": (1.0, 1.2),
+        # "randomize_materials": ["main"],
+        # "randomize_soft_colors": True
+    },
+    "electric_pole_synth": {
+        "active": True,
+        "pool_size": 6,
+        "radius": 1.5,
+        "spawn_radius": (2.0, 20.0),
+        "cost_units": 4.0,
+        "selection_weight": 50,
+        "scale_range": (1.0, 1.2),
+        # "randomize_materials": ["main"],
+        # "randomize_soft_colors": True
+    },
+    "electric_pole_concrete": {
+        "active": True,
+        "pool_size": 20,
+        "radius": 1.5,
+        "spawn_radius": (2.0, 20.0),
+        "cost_units": 4.0,
+        "selection_weight": 50,
+        "scale_range": (1.0, 1.2),
+        # "randomize_materials": ["main"],
+        # "randomize_soft_colors": True
+    },
+    "grapas": {
+        "active": False,
+        "pool_size": 5,
+        "radius": 0.75,
+        "spawn_radius": (5.0, 15.0),
+        "cost_units": 4.0,
+        "selection_weight": 50,
+        "scale_range": (1.0, 1.0),
+        # "wheelbase": 1.0,
+        # "track_width": 1.0,
+        # "randomize_materials": ["metal"],
+        # "randomize_soft_colors": True
+    }
 }
 
 # DISTRACTOR CONFIGURATION (Scatter)
@@ -160,11 +217,11 @@ OBJECTS_CONFIG = {
 DISTRACTOR_CONFIG = {
     "vegetation": {
         "active": True,
-        "pool_size": 500,
-        "spawn_radius": (0.0, 40.0),
+        "pool_size": 200,
+        "spawn_radius": (0.0, 30.0),
         "radius": 0.4,
         "cost_units": 2.0,
-        "selection_weight": 50,
+        "selection_weight": 100,
         "scale_range": (0.7, 1.5),
         "randomize_materials": ["main"],
         "randomize_soft_colors": True
@@ -172,7 +229,7 @@ DISTRACTOR_CONFIG = {
     "trees": {
         "active": True,
         "pool_size": 100,
-        "spawn_radius": (5.0, 30.0),
+        "spawn_radius": (5.0, 40.0),
         "radius": 1.0,
         "cost_units": 5.0,
         "selection_weight": 50,
@@ -185,7 +242,7 @@ DISTRACTOR_CONFIG = {
         "pool_size": 100,
         "spawn_radius": (0.0, 20.0),
         "radius": 0.3,
-        "cost_units": 0.5,
+        "cost_units": 1.0,
         "selection_weight": 70,
         "scale_range": (0.3, 1.0),
         "randomize_materials": ["main"],
@@ -203,8 +260,8 @@ DISTRACTOR_CONFIG = {
         "randomize_soft_colors": True
     },
     "complex": {
-        "active": True,
-        "pool_size": 100,
+        "active": False,
+        "pool_size": 20,
         "spawn_radius": (0.0, 50.0),
         "radius": 1.0,
         "cost_units": 5.0,
@@ -216,12 +273,26 @@ DISTRACTOR_CONFIG = {
     "cables": {
         "active": True,
         "pool_size": 10,
-        "spawn_radius": (10.0, 50.0),
+        "spawn_radius": (5.0, 30.0),
         "radius": 0.5,
         "cost_units": 5.0,
         "selection_weight": 3,
         "scale_range": (0.6, 0.8),
-        "randomize_materials": ["main", "sec"],
-        "randomize_soft_colors": True
+        # "randomize_materials": ["main", "sec"],
+        # "randomize_soft_colors": True
+    },
+    "electric_pole": {
+        "active": False,                     # Enable this object type
+        "pool_size": 10,                    # Number of bicycles in the pool
+        "radius": 1.5,                      # Radius of safety
+        "spawn_radius": (5.0, 30.0),
+        "cost_units": 10.0,                 # High cost (main character)
+        "selection_weight": 5,              # Always want to appear if there's space
+        "scale_range": (1.0, 1.2),          # Fixed scale for rigorous datasets
+        # "wheelbase": 0.8,
+        # "track_width": 0.8,
+        # "semantic_parts": {
+        #     "insulator": "insulator"
+        # }
     },
 }
