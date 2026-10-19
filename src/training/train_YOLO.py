@@ -7,7 +7,6 @@ import time
 import re
 import sys
 import platform
-from datetime import datetime
 import shutil
 import src.core.config as config
 from src.core.utils import project_utils as pu
@@ -319,7 +318,6 @@ def main():
     args = parser.parse_args()
 
     start_time = time.time()
-    start_date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     device, device_name = check_gpu()
 
