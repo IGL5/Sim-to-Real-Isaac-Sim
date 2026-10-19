@@ -179,6 +179,14 @@ def main():
             break
     
     cam_prim = stage.GetPrimAtPath(camera_path)
+    
+    # Clear any transform on the parent Xform prim created by Replicator
+    parent_prim = cam_prim.GetParent()
+    if parent_prim and parent_prim.GetPath() != Sdf.Path("/"):
+        parent_xform = UsdGeom.Xformable(parent_prim)
+        if parent_xform:
+            parent_xform.ClearXformOpOrder()
+
     cam_xform = UsdGeom.Xformable(cam_prim)
     cam_xform.ClearXformOpOrder()
     cam_xform.AddTransformOp().Set(Gf.Matrix4d(1.0))
@@ -357,6 +365,8 @@ def main():
                 track_empty_target_frames += 1
 
             # F. SHOOT
+            # Flush direct USD stage transforms to Fabric / Hydra before annotators capture
+            simulation_app.update()
             rep.orchestrator.step(delta_time=0.0, rt_subframes=sim_config.RT_SUBFRAMES)
             rep.BackendDispatch.wait_until_done()
 

@@ -526,6 +526,16 @@ def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visi
         else:
             imageable.MakeInvisible()
 
+    # Synchronize parent prim visibility (Replicator Xform container with semantics)
+    parent_prim = prim.GetParent()
+    if parent_prim and parent_prim.IsValid() and str(parent_prim.GetPath()) != "/":
+        parent_img = UsdGeom.Imageable(parent_prim)
+        if parent_img.GetVisibilityAttr().Get() != target_vis:
+            if visible:
+                parent_img.MakeVisible()
+            else:
+                parent_img.MakeInvisible()
+
     if visible:
         xform = UsdGeom.Xformable(prim)
         ops = xform.GetOrderedXformOps()

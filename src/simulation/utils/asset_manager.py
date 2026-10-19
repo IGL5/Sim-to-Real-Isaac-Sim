@@ -470,8 +470,11 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
                     # Mark as initialized for security
                     prim.SetCustomDataByKey("initialized_ops", True)
                 
-                # Hide
+                # Hide both child prim and parent Replicator Xform container
                 UsdGeom.Imageable(prim).MakeInvisible()
+                parent_prim = prim.GetParent()
+                if parent_prim and parent_prim.IsValid() and str(parent_prim.GetPath()) != "/":
+                    UsdGeom.Imageable(parent_prim).MakeInvisible()
 
                 # Apply subpart semantics if specified
                 if apply_semantics:
