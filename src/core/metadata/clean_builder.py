@@ -38,13 +38,17 @@ class CleaningMetadata(BaseMetadataManager):
                 "total_labels_found": real_total_labels,
                 "labels_removed": accumulated_removed,
                 "labels_saved_by_whitelist": stats["labels_saved"], # Labels saved in this pass
+                "labels_saved_by_policy": stats["labels_saved"],
+                "filtering_mode": stats.get("filtering_mode", "whitelist"),
                 "percentage_removed_percent": perc_removed,
                 "removal_reasons": {
                     "occlusion": prev_reasons.get("occlusion", 0) + stats["reason_occ"],
                     "truncation": prev_reasons.get("truncation", 0) + stats["reason_trunc"],
                     "small_area": prev_reasons.get("small_area", 0) + stats["reason_area"],
                     "edge_cut": prev_reasons.get("edge_cut", 0) + stats["reason_edge"],
-                    "giant_bbox": prev_reasons.get("giant_bbox", 0) + stats["reason_giant"]
+                    "giant_bbox": prev_reasons.get("giant_bbox", 0) + stats["reason_giant"],
+                    "degenerate": prev_reasons.get("degenerate", 0) + stats.get("reason_degen", 0),
+                    "manual_blacklist": prev_reasons.get("manual_blacklist", 0) + stats.get("reason_manual", 0)
                 }
             }
 
