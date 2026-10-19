@@ -155,8 +155,16 @@ Before training, filter out bad frames (e.g., excessively dark or empty frames) 
 # Preview files to delete
 python -m src.data_prep.clean_dataset --dir data/01_raw --dry
 
-# Execute cleaning
+# Execute basic cleaning (removes corrupted images)
 python -m src.data_prep.clean_dataset --dir data/01_raw
+
+# Review suspicious annotations visually (outputs to _review_occlusions/):
+python -m src.data_prep.clean_dataset --dir data/01_raw --review
+
+# Execute annotation cleaning:
+# - Option A (Whitelist): Saves only annotations listed in whitelist.txt; deletes the rest of suspicious ones.
+# - Option B (Blacklist): Deletes ONLY annotations listed in blacklist.txt; keeps everything else. (Takes priority if both exist).
+python -m src.data_prep.clean_dataset --dir data/01_raw --clean_labels
 ```
 
 #### 2. KITTI to YOLO Conversion & Splits
