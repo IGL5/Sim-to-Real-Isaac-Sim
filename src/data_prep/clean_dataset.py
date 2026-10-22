@@ -27,6 +27,7 @@ from src.data_prep.utils.clean_fs import (
     save_review_image
 )
 from src.data_prep.utils.clean_analyzer import (
+    ALL_LABEL_FILTERS,
     detect_dataset_format,
     load_filter_file,
     analyze_labels,
@@ -101,6 +102,29 @@ def clean_dataset(args):
 
     args.filtering_mode = filtering_mode
 
+    # Resolve active label filters
+    enable_f = getattr(args, 'enable_filters', None)
+    disable_f = getattr(args, 'disable_filters', None)
+
+    if enable_f and disable_f:
+        print("⚠️  Warning: Both --enable_filters and --disable_filters were provided.")
+        print(f"   Prioritizing --enable_filters ({', '.join(enable_f)}); --disable_filters will be IGNORED.")
+        active_filters = set(enable_f)
+    elif enable_f:
+        active_filters = set(enable_f)
+    elif disable_f:
+        active_filters = set(ALL_LABEL_FILTERS) - set(disable_f)
+    else:
+        active_filters = set(ALL_LABEL_FILTERS)
+
+    args.active_filters = active_filters
+
+    if active_filters != set(ALL_LABEL_FILTERS):
+        disabled = set(ALL_LABEL_FILTERS) - active_filters
+        print(f"🎯 Active Label Filters: {', '.join(sorted(active_filters)) if active_filters else 'NONE'}")
+        if disabled:
+            print(f"   Disabled Filters: {', '.join(sorted(disabled))}")
+
     if args.review:
         review_dir = dir_path / "_review_occlusions"
         if review_dir.exists():
@@ -146,7 +170,8 @@ def clean_dataset(args):
             process_frame(
                 img_path, camera_root, folder_display_name, args, stats,
                 remove_empty_logic, filter_data, dataset_format,
-                raw_mask_folder=raw_mask_folder, filtering_mode=filtering_mode
+                raw_mask_folder=raw_mask_folder, filtering_mode=filtering_mode,
+                active_filters=active_filters
             )
 
     print_summary(stats, args)
@@ -168,7 +193,8 @@ def clean_dataset(args):
 # 2. FRAME PROCESSING FLOW
 # ==========================================
 def process_frame(img_path, camera_root, folder_display_name, args, stats, remove_empty_logic, filter_data,
-                  dataset_format, raw_mask_folder=None, filtering_mode='whitelist'):
+                  dataset_format, raw_mask_folder=None, filtering_mode='whitelist',
+                  active_filters=None):
     """ Applies the pipeline of checks to a single frame. """
     frame_id = img_path.stem
     txt_path = resolve_label_path(img_path, camera_root)
@@ -197,7 +223,7 @@ def process_frame(img_path, camera_root, folder_display_name, args, stats, remov
             txt_path, frame_id, args.area_thresh, args.max_area_ratio,
             filter_data, args.dry, img_w, img_h, edge_ar_thresh,
             format_mode=dataset_format, area_metric=area_metric, seg_mask=seg_mask,
-            filtering_mode=filtering_mode
+            filtering_mode=filtering_mode, active_filters=active_filters
         )
         stats["labels_removed"] += res["removed"]
         stats["labels_saved"] += res["saved"]
@@ -226,7 +252,8 @@ def process_frame(img_path, camera_root, folder_display_name, args, stats, remov
             img, txt_path, args.area_thresh, args.max_area_ratio,
             filter_data, frame_id, edge_ar_thresh,
             format_mode=dataset_format, area_metric=area_metric, seg_mask=seg_mask,
-            return_reasons=True, filtering_mode=filtering_mode
+            return_reasons=True, filtering_mode=filtering_mode,
+            active_filters=active_filters
         )
         if is_suspicious:
             safe_cam_name = folder_display_name.replace("/", "_").replace("\\", "_")
@@ -306,8 +333,14 @@ def print_summary(stats, args):
             print("  3. Run the script again to apply your changes:")
             print(f"     python -m src.data_prep.clean_dataset --dir {args.dir} --clean_labels")
 
-    if getattr(args, 'edge_ar_thresh', 3.0) == 0.0 or getattr(args, 'no_edge_filter', False):
-        print("ℹ️  Edge aspect ratio filter was DISABLED (narrow elongated objects touching edge were preserved).")
+    active_filters = getattr(args, 'active_filters', set(ALL_LABEL_FILTERS))
+    if active_filters != set(ALL_LABEL_FILTERS):
+        disabled = set(ALL_LABEL_FILTERS) - active_filters
+        print(f"ℹ️  Active label filters: {', '.join(sorted(active_filters)) if active_filters else 'NONE'}")
+        if disabled:
+            print(f"   Disabled filters: {', '.join(sorted(disabled))}")
+    elif getattr(args, 'edge_ar_thresh', 3.0) == 0.0:
+        print("ℹ️  Edge aspect ratio filter was DISABLED via edge_ar_thresh=0.")
 
     if args.dry:
         print("⚠️  DRY-RUN: No files were actually modified.")
@@ -328,8 +361,13 @@ if __name__ == "__main__":
     parser.add_argument("--area_thresh", type=float, default=1000.0, help="Min area in pixels for annotations")
     parser.add_argument("--max_area_ratio", type=float, default=0.50, help="Max percentage of the image an annotation can occupy (0.0 to 1.0)")
     parser.add_argument("--edge_ar_thresh", type=float, default=3.0, help="Aspect ratio threshold for annotations touching the edge (0 to disable)")
-    parser.add_argument("--no_edge_filter", "--disable_edge_ar", action="store_true",
-                        help="Disable edge aspect-ratio filter (recommended for elongated objects like poles, towers, wires)")
+    
+    filter_choices = sorted(list(ALL_LABEL_FILTERS))
+    parser.add_argument("--disable_filters", nargs="+", choices=filter_choices, default=None,
+                        help=f"List of label filters to disable. Choices: {', '.join(filter_choices)}")
+    parser.add_argument("--enable_filters", nargs="+", choices=filter_choices, default=None,
+                        help=f"List of label filters to enable exclusively. Choices: {', '.join(filter_choices)}")
+    
     parser.add_argument("--format", type=str, choices=['auto', 'kitti', 'yolo_bbox', 'yolo_seg'], default='auto',
                         help="Label format: 'auto' (infers dataset format from sample files at startup), or force format")
     parser.add_argument("--segmentation", "--seg", "--draw_seg", action="store_true", dest="segmentation",
@@ -338,9 +376,6 @@ if __name__ == "__main__":
                         help="Metric for area thresholding in segmentation: 'polygon' (contourArea/mask pixels) or 'bbox' (bounding box area)")
 
     args = parser.parse_args()
-
-    if getattr(args, 'no_edge_filter', False):
-        args.edge_ar_thresh = 0.0
 
     if Path(args.dir).exists():
         clean_dataset(args)

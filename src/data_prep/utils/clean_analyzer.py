@@ -4,12 +4,23 @@ import numpy as np
 
 from src.core import config
 
+# Universal set of supported label filters
+ALL_LABEL_FILTERS = {"degen", "occ", "giant", "edge", "trunc", "area"}
+
 # Default semantic color palette for synthetic dataset classes (RGB in Isaac Sim masks)
 SEMANTIC_CLASS_COLORS = {
-    "electric_pole_concrete": (33, 243, 3),
-    "electric_pole_manesman": (240, 4, 111),
-    "electric_pole_synth": (27, 186, 239),
     "electric_pole_wood": (220, 179, 62),
+    "electric_pole_concrete": (27, 186, 239),
+    "electric_pole_synth": (239, 186, 27),
+    "electric_pole_manesman": (240, 4, 111),
+    "car": (142, 0, 0),
+    "bicycle": (32, 11, 119),
+    "bicycle_street": (45, 120, 200),
+    "bicycle_racing": (200, 45, 120),
+    "bicycle_mountain": (45, 200, 120),
+    "pedal": (255, 255, 0),
+    "grapas": (0, 255, 255),
+    "tornilleria": (255, 0, 255)
 }
 
 def extract_class_mask_from_crop(crop, class_name=None):
@@ -22,10 +33,13 @@ def extract_class_mask_from_crop(crop, class_name=None):
         return np.zeros((0, 0), dtype=bool)
 
     if class_name and class_name in SEMANTIC_CLASS_COLORS:
-        target_color = SEMANTIC_CLASS_COLORS[class_name]
-        matches = np.all(crop == target_color, axis=-1)
-        if np.any(matches):
-            return matches
+        r, g, b = SEMANTIC_CLASS_COLORS[class_name]
+        matches_rgb = np.all(crop == (r, g, b), axis=-1)
+        if np.any(matches_rgb):
+            return matches_rgb
+        matches_bgr = np.all(crop == (b, g, r), axis=-1)
+        if np.any(matches_bgr):
+            return matches_bgr
 
     # Fallback: find non-zero pixels and pick dominant non-zero color in this bounding box
     flat = crop.reshape(-1, 3)
@@ -36,6 +50,100 @@ def extract_class_mask_from_crop(crop, class_name=None):
     unq, counts = np.unique(non_black, axis=0, return_counts=True)
     dominant_color = unq[np.argmax(counts)]
     return np.all(crop == dominant_color, axis=-1)
+
+
+def bbox_iou(boxA, boxB):
+    """ Computes Intersection over Union between two (x1, y1, x2, y2) bounding boxes. """
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+    inter = max(0.0, xB - xA + 1.0) * max(0.0, yB - yA + 1.0)
+    areaA = max(0.0, boxA[2] - boxA[0] + 1.0) * max(0.0, boxA[3] - boxA[1] + 1.0)
+    areaB = max(0.0, boxB[2] - boxB[0] + 1.0) * max(0.0, boxB[3] - boxB[1] + 1.0)
+    denom = areaA + areaB - inter
+    return inter / denom if denom > 0 else 0.0
+
+
+def extract_instance_mask_from_crop(seg_mask, xmin, ymin, xmax, ymax, class_name=None, mask_cache=None):
+    """
+    Extracts the binary mask for an object inside its bounding box from a segmentation image.
+    Supports:
+    - 2D uint16/uint8 instance masks (e.g. Isaac Sim instance_segmentation).
+      When multiple instances overlap inside the crop, accurately identifies the target
+      instance by evaluating bounding box IoU and containment across the full frame,
+      avoiding foreground interloper mask corruption.
+    - 3D RGB/RGBA instance or semantic masks (e.g. instance_rgb or semantic_segmentation).
+    """
+    if seg_mask is None or seg_mask.size == 0:
+        return np.zeros((0, 0), dtype=bool)
+
+    h, w = seg_mask.shape[:2]
+    x1_i, y1_i = max(0, int(xmin)), max(0, int(ymin))
+    x2_i, y2_i = min(w, int(xmax)), min(h, int(ymax))
+
+    if x2_i <= x1_i or y2_i <= y1_i:
+        return np.zeros((0, 0), dtype=bool)
+
+    # 1. Handle 3D / RGB / RGBA masks
+    if seg_mask.ndim == 3:
+        crop_3d = seg_mask[y1_i:y2_i, x1_i:x2_i, :3]
+        if class_name and class_name in SEMANTIC_CLASS_COLORS:
+            r, g, b = SEMANTIC_CLASS_COLORS[class_name]
+            matches = np.all(crop_3d == (r, g, b), axis=-1) | np.all(crop_3d == (b, g, r), axis=-1)
+            if np.any(matches):
+                return matches
+
+        full_mask = (
+            seg_mask[:, :, 0].astype(np.int64) |
+            (seg_mask[:, :, 1].astype(np.int64) << 8) |
+            (seg_mask[:, :, 2].astype(np.int64) << 16)
+        )
+        crop = full_mask[y1_i:y2_i, x1_i:x2_i]
+    else:
+        crop = seg_mask[y1_i:y2_i, x1_i:x2_i]
+        full_mask = seg_mask
+
+    pos_pixels = crop[crop > 0]
+    if len(pos_pixels) == 0:
+        return np.zeros_like(crop, dtype=bool)
+
+    vals, counts = np.unique(pos_pixels, return_counts=True)
+    if len(vals) == 1:
+        return (crop == vals[0])
+
+    target_box = (float(x1_i), float(y1_i), float(x2_i), float(y2_i))
+    best_uid = None
+    best_score = -1.0
+
+    cache = mask_cache if mask_cache is not None else {}
+    for uid, cnt in zip(vals, counts):
+        if uid in cache:
+            cand_box, total_pixels = cache[uid]
+        else:
+            ys, xs = np.where(full_mask == uid)
+            if len(xs) == 0:
+                cand_box, total_pixels = None, 0
+            else:
+                cand_box = (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
+                total_pixels = len(xs)
+            cache[uid] = (cand_box, total_pixels)
+
+        if cand_box is None or total_pixels == 0:
+            continue
+
+        iou = bbox_iou(target_box, cand_box)
+        containment = cnt / float(total_pixels)
+        score = iou * 0.7 + containment * 0.3
+        if score > best_score:
+            best_score = score
+            best_uid = uid
+
+    if best_uid is not None:
+        return (crop == best_uid)
+
+    dom_id = vals[np.argmax(counts)]
+    return (crop == dom_id)
 
 
 def classify_single_line(parts):
@@ -103,7 +211,7 @@ def detect_dataset_format(image_folders, forced_format='auto', sample_size=15):
     return max(votes, key=votes.get)
 
 
-def parse_label_line(line, img_w, img_h, line_format='auto', area_metric='polygon', seg_mask=None):
+def parse_label_line(line, img_w, img_h, line_format='auto', area_metric='polygon', seg_mask=None, mask_cache=None):
     """
     Parses a single label line using line_format ('kitti', 'yolo_bbox', or 'yolo_seg').
     If line_format is 'auto', falls back to classifying this individual line.
@@ -156,13 +264,10 @@ def parse_label_line(line, img_w, img_h, line_format='auto', area_metric='polygo
                 x1_i, y1_i = max(0, int(xmin)), max(0, int(ymin))
                 x2_i, y2_i = min(img_w, int(xmax)), min(img_h, int(ymax))
                 if x2_i > x1_i and y2_i > y1_i:
-                    if seg_mask.ndim == 3:
-                        crop = seg_mask[y1_i:y2_i, x1_i:x2_i, :3]
-                        class_name = parts[0]
-                        non_zero = extract_class_mask_from_crop(crop, class_name)
-                    else:
-                        crop = seg_mask[y1_i:y2_i, x1_i:x2_i]
-                        non_zero = crop > 0
+                    class_name = parts[0]
+                    non_zero = extract_instance_mask_from_crop(
+                        seg_mask, x1_i, y1_i, x2_i, y2_i, class_name=class_name, mask_cache=mask_cache
+                    )
                     mask_pixels = int(np.count_nonzero(non_zero))
                     if mask_pixels == 0:
                         res["is_degenerate"] = True
@@ -266,37 +371,41 @@ def parse_label_line(line, img_w, img_h, line_format='auto', area_metric='polygo
     return res
 
 
-def evaluate_suspicious(obj, area_thresh, max_area_ratio, edge_ar_thresh, img_w, img_h):
+def evaluate_suspicious(obj, area_thresh, max_area_ratio, edge_ar_thresh, img_w, img_h, active_filters=None):
     """
-    Evaluates whether a parsed object is suspicious.
+    Evaluates whether a parsed object is suspicious based on active filters.
     Returns: (is_suspicious, reasons_list, primary_reason)
     """
+    if active_filters is None:
+        active_filters = ALL_LABEL_FILTERS
+
     img_area = img_w * img_h
 
     reasons = []
     primary_reason = None
 
     # Priority 1: Degenerate annotation (unusable for training)
-    if obj["is_degenerate"]:
+    if "degen" in active_filters and obj["is_degenerate"]:
         reasons.append(f"Degen:{obj['degen_reason']}")
         if not primary_reason:
             primary_reason = "degen"
 
     # Priority 2: Occlusion (KITTI)
-    if obj["occluded"] in [2, 3]:
+    if "occ" in active_filters and obj["occluded"] in [2, 3]:
         reasons.append(f"Occ:{obj['occluded']}")
         if not primary_reason:
             primary_reason = "occ"
 
     # Priority 3: Giant area (covers more than max_area_ratio)
-    area_ratio = obj["area"] / img_area if img_area > 0 else 0.0
-    if area_ratio > max_area_ratio:
-        reasons.append(f"Giant:{area_ratio * 100:.0f}%")
-        if not primary_reason:
-            primary_reason = "giant"
+    if "giant" in active_filters:
+        area_ratio = obj["area"] / img_area if img_area > 0 else 0.0
+        if area_ratio > max_area_ratio:
+            reasons.append(f"Giant:{area_ratio * 100:.0f}%")
+            if not primary_reason:
+                primary_reason = "giant"
 
     # Priority 4: Edge sliver (touches image edge and has extreme aspect ratio)
-    if edge_ar_thresh and edge_ar_thresh > 0:
+    if "edge" in active_filters and edge_ar_thresh and edge_ar_thresh > 0:
         upper_limit = max(edge_ar_thresh, 1.0 / edge_ar_thresh)
         lower_limit = 1.0 / upper_limit
         if obj["touches_edge"] and (obj["aspect_ratio"] > upper_limit or obj["aspect_ratio"] < lower_limit):
@@ -305,13 +414,13 @@ def evaluate_suspicious(obj, area_thresh, max_area_ratio, edge_ar_thresh, img_w,
                 primary_reason = "edge"
 
     # Priority 5: Truncation (KITTI)
-    if obj["truncated"] is not None and obj["truncated"] > 0.6:
+    if "trunc" in active_filters and obj["truncated"] is not None and obj["truncated"] > 0.6:
         reasons.append(f"Trunc:{obj['truncated']:.2f}")
         if not primary_reason:
             primary_reason = "trunc"
 
     # Priority 6: Small area (< area_thresh)
-    if obj["area"] < area_thresh:
+    if "area" in active_filters and obj["area"] < area_thresh:
         reasons.append(f"Area:{obj['area']:.0f}")
         if not primary_reason:
             primary_reason = "area"
@@ -371,7 +480,8 @@ load_blacklist = lambda p: load_filter_file(p, list_type='blacklist')
 
 def analyze_labels(img, txt_path, area_thresh, max_area_ratio, filter_data=None, frame_id=None,
                    edge_ar_thresh=3.0, format_mode='auto', area_metric='polygon', seg_mask=None,
-                   return_reasons=False, filtering_mode='whitelist', whitelist_data=None):
+                   return_reasons=False, filtering_mode='whitelist', whitelist_data=None,
+                   active_filters=None):
     """
     Parses annotations (KITTI or YOLO detection/segmentation). Flags suspicious entries and renders review visuals.
     - Whitelist Mode: Whitelisted annotations are ignored/skipped visually. Suspicious entries are drawn in red.
@@ -394,13 +504,16 @@ def analyze_labels(img, txt_path, area_thresh, max_area_ratio, filter_data=None,
     frame_reasons = []
     
     frame_rules = filter_data.get(frame_id, [])
+    mask_cache = {} if seg_mask is not None else None
     
     for idx, line in enumerate(lines):
-        obj = parse_label_line(line, img_w, img_h, line_format=format_mode, area_metric=area_metric, seg_mask=seg_mask)
+        obj = parse_label_line(line, img_w, img_h, line_format=format_mode, area_metric=area_metric, seg_mask=seg_mask, mask_cache=mask_cache)
         if not obj or not obj["is_valid"]:
             continue
 
-        is_suspicious, reasons, primary_reason = evaluate_suspicious(obj, area_thresh, max_area_ratio, edge_ar_thresh, img_w, img_h)
+        is_suspicious, reasons, primary_reason = evaluate_suspicious(
+            obj, area_thresh, max_area_ratio, edge_ar_thresh, img_w, img_h, active_filters=active_filters
+        )
 
         if filtering_mode == 'blacklist':
             is_blacklisted = (idx in frame_rules) or ("ALL" in frame_rules) or (("FLAGGED" in frame_rules) and is_suspicious)
@@ -516,7 +629,8 @@ analyze_kitti_labels = analyze_labels
 
 def apply_label_cleaning(txt_path, frame_id, area_thresh, max_area_ratio, filter_data=None, dry_run=False,
                          img_w=None, img_h=None, edge_ar_thresh=3.0, format_mode='auto', area_metric='polygon',
-                         seg_mask=None, filtering_mode='whitelist', whitelist_data=None):
+                         seg_mask=None, filtering_mode='whitelist', whitelist_data=None,
+                         active_filters=None):
     """ Reads the .txt and overwrites it omitting suspicious lines (unless whitelisted) or deleting blacklisted lines. """
     if filter_data is None:
         filter_data = whitelist_data if whitelist_data is not None else {}
@@ -529,16 +643,19 @@ def apply_label_cleaning(txt_path, frame_id, area_thresh, max_area_ratio, filter
     r_occ, r_trunc, r_area, r_edge, r_giant, r_degen, r_manual = 0, 0, 0, 0, 0, 0, 0
 
     frame_rules = filter_data.get(frame_id, [])
+    mask_cache = {} if seg_mask is not None else None
     
     for idx, line in enumerate(lines):
-        obj = parse_label_line(line, img_w, img_h, line_format=format_mode, area_metric=area_metric, seg_mask=seg_mask)
+        obj = parse_label_line(line, img_w, img_h, line_format=format_mode, area_metric=area_metric, seg_mask=seg_mask, mask_cache=mask_cache)
         if not obj or not obj["is_valid"]:
             # Preserve unparseable lines to avoid data corruption
             keep_lines.append(line)
             continue
             
         total_labels += 1
-        is_suspicious, _, primary_reason = evaluate_suspicious(obj, area_thresh, max_area_ratio, edge_ar_thresh, img_w, img_h)
+        is_suspicious, _, primary_reason = evaluate_suspicious(
+            obj, area_thresh, max_area_ratio, edge_ar_thresh, img_w, img_h, active_filters=active_filters
+        )
         
         remove_this_label = False
 
