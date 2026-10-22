@@ -165,8 +165,14 @@ python -m src.data_prep.clean_dataset --dir data/01_raw
 # Review suspicious annotations visually (outputs to _review_occlusions/):
 python -m src.data_prep.clean_dataset --dir data/01_raw --review
 
-# Review with segmentation masks overlay & disable edge aspect-ratio filtering:
-python -m src.data_prep.clean_dataset --dir data/01_raw --review --seg --no_edge_filter
+# Review with segmentation masks overlay & disable specific filters (e.g. edge slivers, occlusion):
+python -m src.data_prep.clean_dataset --dir data/01_raw --review --seg --disable_filters edge occ
+
+# Execute annotation cleaning without removing occluded objects:
+python -m src.data_prep.clean_dataset --dir data/01_raw --clean_labels --disable_filters occ
+
+# Review ONLY occluded annotations manually in a second pass:
+python -m src.data_prep.clean_dataset --dir data/01_raw --review --enable_filters occ
 
 # Execute annotation cleaning:
 # - Option A (Whitelist): Saves only annotations listed in whitelist.txt; deletes the rest of suspicious ones.
