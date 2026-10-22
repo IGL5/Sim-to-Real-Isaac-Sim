@@ -99,6 +99,7 @@ def resolve_valid_raw_mask_folder(camera_root, sample_limit=5):
     """
     candidates = [
         camera_root / "instance_segmentation",
+        camera_root / "instance_rgb",
         camera_root / "semantic_segmentation",
     ]
     for folder in candidates:

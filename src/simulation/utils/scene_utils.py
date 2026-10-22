@@ -509,37 +509,22 @@ def place_objects_from_config(stage, target_pos, config_map, pools_paths_map, bu
 def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visible=True):
     """
     Modifies the pose and visibility of a prim.
+    Keeps objects visible in the USD stage while parking inactive instances
+    underground (Z = -2000) to prevent Hydra Rprim buffer re-indexing collisions.
     """
     prim = stage.GetPrimAtPath(path)
     if not prim.IsValid():
         return
 
-    # Visibility
-    imageable = UsdGeom.Imageable(prim)
-
-    # Optimized visibility update
-    current_vis = imageable.GetVisibilityAttr().Get()
-    target_vis = UsdGeom.Tokens.inherited if visible else UsdGeom.Tokens.invisible
-    if current_vis != target_vis:
-        if visible:
-            imageable.MakeVisible()
-        else:
-            imageable.MakeInvisible()
-
-    # Synchronize parent prim visibility (Replicator Xform container with semantics)
-    parent_prim = prim.GetParent()
-    if parent_prim and parent_prim.IsValid() and str(parent_prim.GetPath()) != "/":
-        parent_img = UsdGeom.Imageable(parent_prim)
-        if parent_img.GetVisibilityAttr().Get() != target_vis:
-            if visible:
-                parent_img.MakeVisible()
-            else:
-                parent_img.MakeInvisible()
+    xform = UsdGeom.Xformable(prim)
+    ops = xform.GetOrderedXformOps()
 
     if visible:
-        xform = UsdGeom.Xformable(prim)
-        ops = xform.GetOrderedXformOps()
-        
+        # Ensure inherited visibility
+        imageable = UsdGeom.Imageable(prim)
+        if imageable.GetVisibilityAttr().Get() == UsdGeom.Tokens.invisible:
+            imageable.MakeVisible()
+
         # Add operations
         if len(ops) >= 3:
             # Op 0: Translate
@@ -554,6 +539,14 @@ def update_prim_pose_and_visibility(stage, path, position, rotation, scale, visi
             xform.AddTranslateOp().Set(Gf.Vec3d(float(position[0]), float(position[1]), float(position[2])))
             xform.AddRotateXYZOp().Set(Gf.Vec3f(float(rotation[0]), float(rotation[1]), float(rotation[2])))
             xform.AddScaleOp().Set(Gf.Vec3f(float(scale), float(scale), float(scale)))
+    else:
+        # Move underground (Z = -2000) without toggling MakeInvisible()
+        # to keep Hydra Rprim indices 100% stable
+        if len(ops) >= 1:
+            ops[0].Set(Gf.Vec3d(0.0, 0.0, -2000.0))
+        else:
+            xform.ClearXformOpOrder()
+            xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, -2000.0))
 
 
 def validate_placement_config(config_map, budget_max, container_radius, fov_factor=0.30, context_name="Config"):

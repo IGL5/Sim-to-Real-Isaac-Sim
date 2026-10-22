@@ -16,7 +16,7 @@ import src.core.config as config
 from src.core.utils import math_utils as mu
 from src.core.utils import project_utils as pu
 from src.core.metadata.dataset_builder import DatasetMetadata
-from src.data_prep.utils.clean_analyzer import extract_class_mask_from_crop
+from src.data_prep.utils.clean_analyzer import extract_class_mask_from_crop, extract_instance_mask_from_crop
 
 
 # Classes to detect
@@ -85,6 +85,7 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
         if temp_seg_file.exists():
             seg_img_file = temp_seg_file
             seg_mask = cv2.imread(str(seg_img_file), cv2.IMREAD_UNCHANGED)
+    mask_cache = {} if seg_mask is not None else None
 
     if kitti_path.exists():
         with open(kitti_path, 'r') as f:
@@ -163,13 +164,10 @@ def process_pair(filename_base, subset_name, unique_prefix, raw_labels_path, raw
                             x1_i, y1_i = max(0, int(xmin)), max(0, int(ymin))
                             x2_i, y2_i = min(width, int(xmax)), min(height, int(ymax))
 
-                            if seg_mask.ndim == 3:
-                                crop = seg_mask[y1_i:y2_i, x1_i:x2_i, :3]
-                                class_name = CLASES[class_id] if 0 <= class_id < len(CLASES) else parts[0]
-                                obj_mask = extract_class_mask_from_crop(crop, class_name)
-                            else:
-                                crop = seg_mask[y1_i:y2_i, x1_i:x2_i]
-                                obj_mask = crop > 0
+                            class_name = CLASES[class_id] if 0 <= class_id < len(CLASES) else parts[0]
+                            obj_mask = extract_instance_mask_from_crop(
+                                seg_mask, x1_i, y1_i, x2_i, y2_i, class_name=class_name, mask_cache=mask_cache
+                            )
 
                             if np.any(obj_mask):
                                 binary_mask = np.zeros((height, width), dtype=bool)
@@ -317,15 +315,21 @@ def main():
     raw_seg_path = None
     if args.segmentation:
         inst_path = Path(args.source) / config.RAW_INSTANCE_SEG_SUBPATH
+        inst_rgb_path = Path(args.source) / getattr(config, 'RAW_INSTANCE_RGB_SUBPATH', Path("DroneCamera/instance_rgb"))
         sem_path = Path(args.source) / config.RAW_SEMANTIC_SEG_SUBPATH
         if _has_valid_masks(inst_path):
             raw_seg_path = inst_path
             print(f" (Segmentation) Instance segmentation masks found in: {raw_seg_path}")
+        elif _has_valid_masks(inst_rgb_path):
+            raw_seg_path = inst_rgb_path
+            print(f" (Segmentation) Instance RGB masks found in: {raw_seg_path}")
         elif _has_valid_masks(sem_path):
             raw_seg_path = sem_path
             print(f" (Segmentation) Semantic segmentation masks found in: {raw_seg_path}")
         elif inst_path.exists():
             raw_seg_path = inst_path
+        elif inst_rgb_path.exists():
+            raw_seg_path = inst_rgb_path
         elif sem_path.exists():
             raw_seg_path = sem_path
         else:

@@ -68,6 +68,9 @@ from src.simulation.utils import asset_manager
 # Increase subframes if shadows/ghosting appears of moving objects
 rep.settings.carb_settings("/omni/replicator/RTSubframes", sim_config.RT_SUBFRAMES)
 
+# Enable stable instance IDs to prevent buffer index shifts in Hydra RTX
+carb.settings.get_settings().set_bool("/rtx-transient/stableIds/enabled", True)
+
 def main():
     data_dir_path = Path(sim_config.args.data_dir)
     if data_dir_path.exists():
@@ -200,7 +203,13 @@ def main():
     # Writer
     writer = rep.WriterRegistry.get("KittiWriter")
     absolute_output_dir = str(Path(sim_config.args.data_dir).resolve())
-    writer.initialize(output_dir=absolute_output_dir, omit_semantic_type=True)
+    kitti_mapping = asset_manager.get_kitti_mapping()
+    writer.initialize(
+        output_dir=absolute_output_dir,
+        omit_semantic_type=True,
+        mapping_dict=kitti_mapping,
+        colorize_instance_segmentation=True
+    )
     
     render_product = rep.create.render_product(cam_rep, (sim_config.CONFIG["width"], sim_config.CONFIG["height"]))
 
@@ -366,6 +375,8 @@ def main():
 
             # F. SHOOT
             # Flush direct USD stage transforms to Fabric / Hydra before annotators capture
+            simulation_app.update()
+            simulation_app.update()
             simulation_app.update()
             rep.orchestrator.step(delta_time=0.0, rt_subframes=sim_config.RT_SUBFRAMES)
             rep.BackendDispatch.wait_until_done()

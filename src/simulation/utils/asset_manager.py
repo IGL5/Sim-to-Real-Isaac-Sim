@@ -76,6 +76,44 @@ def update_yolo_classes_txt():
             f.write(f"{c}\n")
 
 
+def get_kitti_mapping():
+    """
+    Builds the label-to-color mapping dictionary for KittiWriter.
+    Ensures all custom target classes and parts are registered so that KittiWriter
+    outputs valid instance_segmentation and semantic_segmentation instead of treating them as unlabelled.
+    """
+    mapping = {"unlabelled": (0, 0, 0, 0)}
+    palette = {
+        "electric_pole_wood": (220, 179, 62, 255),
+        "electric_pole_concrete": (27, 186, 239, 255),
+        "electric_pole_synth": (239, 186, 27, 255),
+        "electric_pole_manesman": (240, 4, 111, 255),
+        "car": (142, 0, 0, 255),
+        "bicycle": (32, 11, 119, 255),
+        "bicycle_street": (45, 120, 200, 255),
+        "bicycle_racing": (200, 45, 120, 255),
+        "bicycle_mountain": (45, 200, 120, 255),
+        "pedal": (255, 255, 0, 255),
+        "grapas": (0, 255, 255, 255),
+        "tornilleria": (255, 0, 255, 255)
+    }
+    for main_class, cfg in sim_config.OBJECTS_CONFIG.items():
+        if main_class in palette:
+            mapping[main_class] = palette[main_class]
+        else:
+            h = abs(hash(main_class))
+            mapping[main_class] = ((h & 0xFF), ((h >> 8) & 0xFF), ((h >> 16) & 0xFF), 255)
+
+        if 'semantic_parts' in cfg:
+            for sub_class in cfg['semantic_parts'].values():
+                if sub_class in palette:
+                    mapping[sub_class] = palette[sub_class]
+                elif sub_class not in mapping:
+                    h = abs(hash(sub_class))
+                    mapping[sub_class] = ((h & 0xFF), ((h >> 8) & 0xFF), ((h >> 16) & 0xFF), 255)
+    return mapping
+
+
 def discover_objective_assets(base_dir, obj_dir):
     """
     Scans automatically the assets folder to find objective models.
@@ -450,35 +488,39 @@ def create_class_pool(stage, config_map, root_dir, apply_semantics=True):
             sem_data = [('class', category)] if apply_semantics else []
             rep.create.from_usd(usd_path, semantics=sem_data, name=prim_name)
             
-            # Find real path
-            found_path = None
-            for p in stage.Traverse():
-                if p.GetName() == prim_name:
-                    found_path = str(p.GetPath())
-                    break
+            # Find Replicator parent Xform container that carries semantics
+            xform_path = f"/Replicator/{prim_name}_Xform"
+            prim = stage.GetPrimAtPath(xform_path)
+            if not prim.IsValid():
+                for p in stage.Traverse():
+                    if p.GetName() == f"{prim_name}_Xform":
+                        prim = p
+                        xform_path = str(p.GetPath())
+                        break
             
-            if found_path:
-                prim = stage.GetPrimAtPath(found_path)
+            if prim and prim.IsValid():
+                found_path = xform_path
 
-                # Optimized transform creation
+                # Optimized transform creation on parent semantic Xform
                 xform = UsdGeom.Xformable(prim)
                 if not prim.GetCustomDataByKey("initialized_ops"):
                     xform.ClearXformOpOrder()
-                    xform.AddTranslateOp().Set(Gf.Vec3d(0, 0, 0))
+                    xform.AddTranslateOp().Set(Gf.Vec3d(0, 0, -2000.0))
                     xform.AddRotateXYZOp().Set(Gf.Vec3f(0, 0, 0))
                     xform.AddScaleOp().Set(Gf.Vec3f(1, 1, 1))
                     # Mark as initialized for security
                     prim.SetCustomDataByKey("initialized_ops", True)
                 
-                # Hide both child prim and parent Replicator Xform container
-                UsdGeom.Imageable(prim).MakeInvisible()
-                parent_prim = prim.GetParent()
-                if parent_prim and parent_prim.IsValid() and str(parent_prim.GetPath()) != "/":
-                    UsdGeom.Imageable(parent_prim).MakeInvisible()
+                # Keep visible in USD stage so Hydra does not dynamically re-index Rprims
+                UsdGeom.Imageable(prim).MakeVisible()
+                child_prim = stage.GetPrimAtPath(f"{xform_path}/{prim_name}")
+                if child_prim.IsValid():
+                    UsdGeom.Imageable(child_prim).MakeVisible()
 
                 # Apply subpart semantics if specified
                 if apply_semantics:
-                    apply_subpart_semantics(prim, cfg.get("semantic_parts", {}))
+                    target_subpart_prim = child_prim if child_prim.IsValid() else prim
+                    apply_subpart_semantics(target_subpart_prim, cfg.get("semantic_parts", {}))
 
                 shader_paths = []
                 if target_mat_names:
